@@ -1,0 +1,60 @@
+# test_dns.strada - Test DNS and hostname functions
+
+func main() int {
+    say("=== DNS Functions Test ===");
+    say("");
+
+    # Test gethostname
+    say("=== Local Hostname ===");
+    my scalar $hostname = sys::gethostname();
+    if (defined($hostname)) {
+        say("Local hostname: " . $hostname);
+    } else {
+        say("Could not get hostname");
+    }
+    say("");
+
+    # Test gethostbyname with localhost
+    say("=== gethostbyname ===");
+    my scalar $ip = sys::gethostbyname("localhost");
+    if (defined($ip)) {
+        say("localhost resolves to: " . $ip);
+    } else {
+        say("Could not resolve localhost");
+    }
+
+    # Try resolving google.com (may fail without network)
+    my scalar $google_ip = sys::gethostbyname("google.com");
+    if (defined($google_ip)) {
+        say("google.com resolves to: " . $google_ip);
+    } else {
+        say("Could not resolve google.com (no network?)");
+    }
+    say("");
+
+    # Test gethostbyname_all
+    say("=== gethostbyname_all ===");
+    my scalar $all_ips = sys::gethostbyname_all("localhost");
+    if (defined($all_ips)) {
+        say("All IPs for localhost:");
+        my int $i = 0;
+        while ($i < size($all_ips)) {
+            say("  " . $all_ips->[$i]);
+            $i = $i + 1;
+        }
+    }
+    say("");
+
+    # Test getaddrinfo
+    say("=== getaddrinfo ===");
+    my scalar $addr = sys::getaddrinfo("localhost", "");
+    if (defined($addr)) {
+        say("getaddrinfo(localhost): " . $addr);
+    } else {
+        say("getaddrinfo failed for localhost");
+    }
+    say("");
+
+    say("DNS tests completed!");
+    return 0;
+}

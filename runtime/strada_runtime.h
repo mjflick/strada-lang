@@ -1,0 +1,815 @@
+/* strada_runtime.h - Strada Runtime System */
+#ifndef STRADA_RUNTIME_H
+#define STRADA_RUNTIME_H
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <setjmp.h>
+#include <regex.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <dlfcn.h>
+#include <execinfo.h>
+#include <ctype.h>
+#include <pthread.h>
+
+/* Forward declarations */
+typedef struct StradaValue StradaValue;
+typedef struct StradaArray StradaArray;
+typedef struct StradaHash StradaHash;
+
+/* Type enumeration */
+typedef enum {
+    STRADA_UNDEF,
+    STRADA_INT,
+    STRADA_NUM,
+    STRADA_STR,
+    STRADA_ARRAY,
+    STRADA_HASH,
+    STRADA_REF,
+    STRADA_FILEHANDLE,
+    STRADA_REGEX,
+    STRADA_SOCKET,
+    STRADA_CSTRUCT,    /* C struct wrapper */
+    STRADA_CPOINTER,   /* Generic C pointer */
+    STRADA_CLOSURE     /* Anonymous function with captured environment */
+} StradaType;
+
+/* Closure structure */
+typedef struct StradaClosure {
+    void *func_ptr;           /* Pointer to generated C function */
+    int param_count;          /* Number of parameters */
+    int capture_count;        /* Number of captured variables */
+    StradaValue ***captures;  /* Array of pointers to pointers (capture-by-reference) */
+} StradaClosure;
+
+/* Thread types - store pthread handles as opaque pointers */
+typedef struct StradaThread {
+    pthread_t thread;
+    StradaValue *closure;     /* The closure to run */
+    StradaValue *result;      /* Return value from thread */
+} StradaThread;
+
+typedef struct StradaMutex {
+    pthread_mutex_t mutex;
+} StradaMutex;
+
+typedef struct StradaCond {
+    pthread_cond_t cond;
+} StradaCond;
+
+/* StringBuilder for efficient string building (O(1) amortized append) */
+typedef struct StradaStringBuilder {
+    char *buffer;       /* Pre-allocated buffer */
+    size_t length;      /* Current string length */
+    size_t capacity;    /* Total buffer capacity */
+} StradaStringBuilder;
+
+/* Main value structure - like Perl's SV */
+struct StradaValue {
+    StradaType type;
+    int refcount;
+    union {
+        int64_t iv;      /* Integer value */
+        double nv;       /* Numeric value */
+        char *pv;        /* String value */
+        StradaArray *av; /* Array reference */
+        StradaHash *hv;  /* Hash reference */
+        StradaValue *rv; /* Generic reference */
+        FILE *fh;        /* File handle */
+        regex_t *rx;     /* Compiled regex */
+        int sockfd;      /* Socket file descriptor */
+        void *ptr;       /* Generic C pointer */
+    } value;
+
+    /* C struct metadata (when type == STRADA_CSTRUCT) */
+    char *struct_name;   /* Name of C struct type */
+    size_t struct_size;  /* Size of struct in bytes */
+
+    /* Blessed package (for OOP - like Perl's bless) */
+    char *blessed_package;  /* Package name this ref is blessed into, or NULL */
+};
+
+/* Array structure - like Perl's AV */
+struct StradaArray {
+    StradaValue **elements;
+    size_t size;
+    size_t capacity;
+    int refcount;
+};
+
+/* Hash entry */
+typedef struct StradaHashEntry {
+    char *key;
+    StradaValue *value;
+    struct StradaHashEntry *next;
+} StradaHashEntry;
+
+/* Hash structure - like Perl's HV */
+struct StradaHash {
+    StradaHashEntry **buckets;
+    size_t num_buckets;
+    size_t num_entries;
+    int refcount;
+};
+
+/* Value creation functions */
+StradaValue* strada_new_undef(void);
+StradaValue* strada_new_int(int64_t i);
+StradaValue* strada_new_num(double n);
+StradaValue* strada_new_str(const char *s);
+StradaValue* strada_new_str_take(char *s);  /* Take ownership of string */
+StradaValue* strada_new_str_len(const char *s, size_t len);  /* Binary-safe string */
+size_t strada_str_len(StradaValue *sv);  /* Get string length (binary-safe) */
+StradaValue* strada_new_array(void);
+StradaValue* strada_new_hash(void);
+StradaValue* strada_new_filehandle(FILE *fh);
+
+/* Reference counting */
+void strada_incref(StradaValue *sv);
+void strada_decref(StradaValue *sv);
+
+/* Type conversion */
+int64_t strada_to_int(StradaValue *sv);
+double strada_to_num(StradaValue *sv);
+char* strada_to_str(StradaValue *sv);
+int strada_to_bool(StradaValue *sv);
+
+/* Increment/decrement operations */
+StradaValue* strada_postincr(StradaValue **pv);  /* $i++ */
+StradaValue* strada_postdecr(StradaValue **pv);  /* $i-- */
+StradaValue* strada_preincr(StradaValue **pv);   /* ++$i */
+StradaValue* strada_predecr(StradaValue **pv);   /* --$i */
+
+/* Array operations */
+StradaArray* strada_array_new(void);
+void strada_array_push(StradaArray *av, StradaValue *sv);
+StradaValue* strada_array_pop(StradaArray *av);
+StradaValue* strada_array_shift(StradaArray *av);
+void strada_array_unshift(StradaArray *av, StradaValue *sv);
+StradaValue* strada_array_get(StradaArray *av, int64_t idx);
+void strada_array_set(StradaArray *av, int64_t idx, StradaValue *sv);
+size_t strada_array_length(StradaArray *av);
+void strada_array_reverse(StradaArray *av);
+int64_t strada_get_array_default_capacity(void);
+void strada_set_array_default_capacity(int64_t capacity);
+void strada_array_reserve(StradaArray *av, size_t capacity);
+void strada_reserve_sv(StradaValue *sv, int64_t capacity);
+int64_t strada_size(StradaValue *sv);
+StradaValue* strada_new_array_from_av(StradaArray *av);
+StradaValue* strada_sort(StradaValue *arr);   /* Sort array alphabetically */
+StradaValue* strada_nsort(StradaValue *arr);  /* Sort array numerically */
+StradaValue* strada_range(StradaValue *start, StradaValue *end);  /* Create array from range */
+
+/* Hash operations */
+StradaHash* strada_hash_new(void);
+int64_t strada_get_hash_default_capacity(void);
+void strada_set_hash_default_capacity(int64_t capacity);
+void strada_hash_set(StradaHash *hv, const char *key, StradaValue *sv);
+StradaValue* strada_hash_get(StradaHash *hv, const char *key);
+int strada_hash_exists(StradaHash *hv, const char *key);
+void strada_hash_delete(StradaHash *hv, const char *key);
+StradaArray* strada_hash_keys(StradaHash *hv);
+StradaArray* strada_hash_values(StradaHash *hv);
+void strada_hash_reserve(StradaHash *hv, size_t num_buckets);
+void strada_hash_reserve_sv(StradaValue *sv, int64_t capacity);
+
+/* String operations (UTF-8 aware) */
+char* strada_concat(const char *a, const char *b);
+char* strada_concat_free(char *a, char *b);  /* Concat and free inputs (avoids leaks) */
+StradaValue* strada_concat_sv(StradaValue *a, StradaValue *b);  /* Fast concat on StradaValues */
+size_t strada_length(const char *s);      /* Returns character count (UTF-8 codepoints) */
+size_t strada_length_sv(StradaValue *sv); /* Binary-safe length using struct_size */
+size_t strada_bytes(const char *s);       /* Returns byte count */
+StradaValue* strada_char_at(StradaValue *str, StradaValue *index);  /* Fast char code by index */
+StradaValue* strada_substr(StradaValue *str, int64_t offset, int64_t length);
+StradaValue* strada_substr_bytes(StradaValue *str, int64_t offset, int64_t length);
+int strada_index(const char *haystack, const char *needle);
+int strada_index_offset(const char *haystack, const char *needle, int offset);
+int strada_rindex(const char *haystack, const char *needle);
+char* strada_upper(const char *str);
+char* strada_lower(const char *str);
+char* strada_uc(const char *str);  /* Alias for upper */
+char* strada_lc(const char *str);  /* Alias for lower */
+char* strada_ucfirst(const char *str);
+char* strada_lcfirst(const char *str);
+char* strada_trim(const char *str);
+char* strada_ltrim(const char *str);
+char* strada_rtrim(const char *str);
+char* strada_reverse(const char *str);
+StradaValue* strada_reverse_sv(StradaValue *sv);  /* Generic reverse for strings and arrays */
+char* strada_repeat(const char *str, int count);
+char* strada_chr(int code);
+StradaValue* strada_chr_sv(int code);  /* Binary-safe version that handles NUL bytes */
+int strada_ord(const char *str);
+char* strada_chomp(const char *str);
+char* strada_chop(const char *str);
+int strada_strcmp(const char *s1, const char *s2);
+int strada_strncmp(const char *s1, const char *s2, int n);
+char* strada_join(const char *sep, StradaArray *arr);
+
+/* StringBuilder functions for efficient string building */
+StradaValue* strada_sb_new(void);                              /* Create new StringBuilder */
+StradaValue* strada_sb_new_cap(StradaValue *capacity);         /* Create with initial capacity */
+void strada_sb_append(StradaValue *sb, StradaValue *str);      /* Append string */
+void strada_sb_append_str(StradaValue *sb, const char *str);   /* Append C string */
+StradaValue* strada_sb_to_string(StradaValue *sb);             /* Get final string */
+StradaValue* strada_sb_length(StradaValue *sb);                /* Get current length */
+void strada_sb_clear(StradaValue *sb);                         /* Clear buffer */
+void strada_sb_free(StradaValue *sb);                          /* Free StringBuilder */
+
+/* I/O functions */
+void strada_print(StradaValue *sv);
+void strada_say(StradaValue *sv);
+StradaValue* strada_readline(void);
+void strada_printf(const char *format, ...);
+StradaValue* strada_sprintf(const char *format, ...);
+void strada_warn(const char *format, ...);
+
+/* File I/O functions */
+StradaValue* strada_open(const char *filename, const char *mode);
+void strada_close(StradaValue *fh);
+StradaValue* strada_read_file(StradaValue *fh);
+StradaValue* strada_read_line(StradaValue *fh);
+void strada_write_file(StradaValue *fh, const char *content);
+int strada_file_exists(const char *filename);
+StradaValue* strada_slurp(const char *filename);  /* Read entire file */
+StradaValue* strada_slurp_fh(StradaValue *fh_sv);  /* Read from FILE handle to end */
+StradaValue* strada_slurp_fd(StradaValue *fd_sv);  /* Read from file descriptor to end */
+void strada_spew(const char *filename, const char *content);  /* Write entire file */
+void strada_spew_fh(StradaValue *fh_sv, StradaValue *content_sv);  /* Write to FILE handle */
+void strada_spew_fd(StradaValue *fd_sv, StradaValue *content_sv);  /* Write to file descriptor */
+
+/* Built-in functions */
+void strada_dump(StradaValue *sv, int indent);
+void strada_dumper(StradaValue *sv);
+StradaValue* strada_dumper_str(StradaValue *sv);  /* Returns dump as string */
+StradaValue* strada_defined(StradaValue *sv);
+StradaValue* strada_ref(StradaValue *sv);
+
+/* Utility functions */
+void strada_die(const char *format, ...);
+void strada_exit(int code);
+void strada_stacktrace(void);
+void strada_backtrace(void);
+const char* strada_caller(int level);
+
+/* Exception handling (try/catch/throw) */
+#define STRADA_MAX_TRY_DEPTH 64
+typedef struct {
+    jmp_buf buf;
+    int active;
+} StradaTryContext;
+
+extern StradaTryContext strada_try_stack[STRADA_MAX_TRY_DEPTH];
+extern int strada_try_depth;
+extern char *strada_exception_msg;
+
+void strada_throw(const char *msg);
+void strada_throw_value(StradaValue *sv);
+StradaValue* strada_get_exception(void);
+void strada_clear_exception(void);
+int strada_in_try_block(void);
+
+/* Macros for try/catch - used by generated code */
+#define STRADA_TRY_PUSH() (strada_try_depth < STRADA_MAX_TRY_DEPTH ? \
+    (strada_try_stack[strada_try_depth].active = 1, &strada_try_stack[strada_try_depth++].buf) : NULL)
+#define STRADA_TRY_POP() (strada_try_depth > 0 ? (strada_try_stack[--strada_try_depth].active = 0, 1) : 0)
+
+/* Type introspection and casting */
+const char* strada_typeof(StradaValue *sv);
+int strada_is_int(StradaValue *sv);
+int strada_is_num(StradaValue *sv);
+int strada_is_str(StradaValue *sv);
+int strada_is_array(StradaValue *sv);
+int strada_is_hash(StradaValue *sv);
+StradaValue* strada_int(StradaValue *sv);    /* Cast to int */
+StradaValue* strada_num(StradaValue *sv);    /* Cast to num */
+StradaValue* strada_str(StradaValue *sv);    /* Cast to str */
+StradaValue* strada_bool(StradaValue *sv);   /* Convert to boolean */
+int strada_scalar(StradaValue *sv);          /* Scalar context evaluation */
+
+/* Reference system */
+StradaValue* strada_ref_create(StradaValue *sv);      /* Create reference */
+StradaValue* strada_ref_deref(StradaValue *ref);      /* Dereference */
+int strada_is_ref(StradaValue *sv);                   /* Check if reference */
+const char* strada_reftype(StradaValue *ref);         /* Get type of referent */
+StradaValue* strada_ref_scalar(StradaValue **ptr);    /* Reference to scalar variable */
+StradaValue* strada_ref_array(StradaArray **ptr);     /* Reference to array */
+StradaValue* strada_ref_hash(StradaHash **ptr);       /* Reference to hash */
+
+/* New Perl-style reference functions */
+StradaValue* strada_new_ref(StradaValue *target, char ref_type);  /* \$var, \@arr, \%hash */
+StradaValue* strada_deref(StradaValue *ref);          /* $$ref - deref scalar ref */
+StradaValue* strada_deref_set(StradaValue *ref, StradaValue *new_value); /* deref_set($ref, $val) */
+StradaHash* strada_deref_hash(StradaValue *ref);      /* For $ref->{key} */
+StradaArray* strada_deref_array(StradaValue *ref);    /* For $ref->[index] */
+StradaValue* strada_deref_hash_value(StradaValue *ref);  /* deref_hash() builtin */
+StradaValue* strada_deref_array_value(StradaValue *ref); /* deref_array() builtin */
+StradaValue* strada_anon_hash(int count, ...);        /* { key => val, ... } */
+StradaValue* strada_anon_array(int count, ...);       /* [ elem, ... ] */
+StradaValue* strada_array_from_ref(StradaValue *ref); /* Copy array from ref */
+StradaValue* strada_hash_from_ref(StradaValue *ref);  /* Copy hash from ref */
+
+/* OOP - Blessed references (like Perl's bless) */
+typedef StradaValue* (*StradaMethod)(StradaValue *self, StradaValue *args);
+StradaValue* strada_bless(StradaValue *ref, const char *package); /* Bless ref into package, returns ref */
+StradaValue* strada_blessed(StradaValue *ref);                  /* Get package name or undef */
+void strada_set_package(const char *package);                   /* Set current package context */
+const char* strada_current_package(void);                       /* Get current package */
+void strada_inherit(const char *child, const char *parent);     /* Set up inheritance (2 args) */
+void strada_inherit_from(const char *parent);                   /* Inherit from parent (1 arg, uses current package) */
+void strada_method_register(const char *package, const char *name, StradaMethod func);
+StradaValue* strada_method_call(StradaValue *obj, const char *method, StradaValue *args);
+const char* strada_method_lookup_package(const char *package, const char *method);
+const char* strada_get_parent_package(const char *package);     /* Get parent package */
+int strada_isa(StradaValue *obj, const char *package);          /* Check inheritance */
+int strada_can(StradaValue *obj, const char *method);           /* Check method exists */
+void strada_oop_init(void);  /* Initialize OOP system */
+
+/* SUPER:: and DESTROY support */
+StradaValue* strada_super_call(StradaValue *obj, const char *from_package,
+                               const char *method, StradaValue *args);
+void strada_call_destroy(StradaValue *obj);  /* Call DESTROY method */
+void strada_set_method_package(const char *pkg);  /* Set current method's package */
+const char* strada_get_method_package(void);      /* Get current method's package */
+
+/* Variadic function support */
+StradaValue* strada_pack_args(int count, ...);        /* Pack args into array */
+
+/* Memory management */
+void strada_free(StradaValue *sv);  /* Explicitly free (decref) a value */
+StradaValue* strada_release(StradaValue *ref);  /* Free via ref and set to undef */
+StradaValue* strada_undef(StradaValue *sv);  /* Set to undef and return it */
+int strada_refcount(StradaValue *sv);  /* Get reference count */
+
+/* FFI - Foreign Function Interface */
+typedef void* (*StradaCFunc)(void*, void*, void*, void*, void*);
+
+/* C struct support */
+StradaValue* strada_cstruct_new(const char *struct_name, size_t size);
+void* strada_cstruct_ptr(StradaValue *sv);
+void strada_cstruct_set_field(StradaValue *sv, const char *field, size_t offset, void *value, size_t size);
+void* strada_cstruct_get_field(StradaValue *sv, const char *field, size_t offset, size_t size);
+
+/* Inline struct definition support */
+typedef struct StradaStructDef {
+    char *name;
+    size_t total_size;
+    int field_count;
+    char **field_names;
+    char **field_types;
+    size_t *field_offsets;
+    size_t *field_sizes;
+} StradaStructDef;
+
+StradaStructDef* strada_struct_define(const char *name);
+void strada_struct_add_field(StradaStructDef *def, const char *field_name, const char *type);
+void strada_struct_finalize(StradaStructDef *def);
+StradaValue* strada_struct_create(StradaStructDef *def);
+void strada_struct_set(StradaValue *sv, StradaStructDef *def, const char *field, StradaValue *value);
+StradaValue* strada_struct_get(StradaValue *sv, StradaStructDef *def, const char *field);
+
+/* C pointer support */
+StradaValue* strada_cpointer_new(void *ptr);
+void* strada_cpointer_get(StradaValue *sv);
+
+/* Closure support (uses triple pointers for capture-by-reference) */
+StradaValue* strada_closure_new(void *func, int params, int captures, StradaValue ***cap_array);
+StradaValue* strada_closure_call(StradaValue *closure, int argc, ...);
+StradaValue*** strada_closure_get_captures(StradaValue *closure);
+
+/* Enhanced FFI */
+StradaValue* strada_c_call(const char *func_name, StradaValue **args, int arg_count);
+void* strada_dlopen(const char *library);
+void* strada_dlsym(void *handle, const char *symbol);
+void strada_dlclose(void *handle);
+
+/* Dynamic loading - StradaValue wrappers */
+StradaValue* strada_dl_open(StradaValue *library);
+StradaValue* strada_dl_sym(StradaValue *handle, StradaValue *symbol);
+StradaValue* strada_dl_close(StradaValue *handle);
+StradaValue* strada_dl_error(void);
+StradaValue* strada_dl_call_int(StradaValue *func_ptr, StradaValue *args);
+StradaValue* strada_dl_call_num(StradaValue *func_ptr, StradaValue *args);
+StradaValue* strada_dl_call_str(StradaValue *func_ptr, StradaValue *arg);
+StradaValue* strada_dl_call_void(StradaValue *func_ptr, StradaValue *args);
+StradaValue* strada_dl_call_int_sv(StradaValue *func_ptr, StradaValue *args);
+StradaValue* strada_dl_call_str_sv(StradaValue *func_ptr, StradaValue *args);
+StradaValue* strada_dl_call_void_sv(StradaValue *func_ptr, StradaValue *args);
+StradaValue* strada_dl_call_sv(StradaValue *func_ptr, StradaValue *args);
+
+/* Raw dlopen/dlsym for import_lib compile-time metadata extraction */
+StradaValue* strada_dl_open_raw(StradaValue *path);
+StradaValue* strada_dl_sym_raw(StradaValue *handle_sv, StradaValue *symbol);
+StradaValue* strada_dl_close_raw(StradaValue *handle_sv);
+StradaValue* strada_dl_call_export_info(StradaValue *fn_ptr_sv);
+StradaValue* strada_dl_call_version(StradaValue *fn_ptr_sv);
+
+/* Pointer access for FFI */
+StradaValue* strada_int_ptr(StradaValue *ref);       /* Get pointer to int variable */
+StradaValue* strada_num_ptr(StradaValue *ref);       /* Get pointer to num variable */
+StradaValue* strada_str_ptr(StradaValue *ref);       /* Get pointer to string data */
+StradaValue* strada_ptr_deref_int(StradaValue *ptr); /* Read int from pointer */
+StradaValue* strada_ptr_deref_num(StradaValue *ptr); /* Read num from pointer */
+StradaValue* strada_ptr_deref_str(StradaValue *ptr); /* Read string from pointer */
+StradaValue* strada_ptr_set_int(StradaValue *ptr, StradaValue *val);  /* Write int to pointer */
+StradaValue* strada_ptr_set_num(StradaValue *ptr, StradaValue *val);  /* Write num to pointer */
+
+/* C type conversions */
+int8_t strada_to_int8(StradaValue *sv);
+int16_t strada_to_int16(StradaValue *sv);
+int32_t strada_to_int32(StradaValue *sv);
+uint8_t strada_to_uint8(StradaValue *sv);
+uint16_t strada_to_uint16(StradaValue *sv);
+uint32_t strada_to_uint32(StradaValue *sv);
+uint64_t strada_to_uint64(StradaValue *sv);
+float strada_to_float(StradaValue *sv);
+void* strada_to_pointer(StradaValue *sv);
+
+/* Create from C types */
+StradaValue* strada_from_int8(int8_t val);
+StradaValue* strada_from_int16(int16_t val);
+StradaValue* strada_from_int32(int32_t val);
+StradaValue* strada_from_uint8(uint8_t val);
+StradaValue* strada_from_uint16(uint16_t val);
+StradaValue* strada_from_uint32(uint32_t val);
+StradaValue* strada_from_uint64(uint64_t val);
+StradaValue* strada_from_float(float val);
+StradaValue* strada_from_pointer(void *ptr);
+
+/* Regex functions */
+StradaValue* strada_regex_compile(const char *pattern, const char *flags);
+int strada_regex_match(const char *str, const char *pattern);
+int strada_regex_match_with_capture(const char *str, const char *pattern, const char *flags);
+StradaValue* strada_captures(void);
+StradaValue* strada_regex_match_all(const char *str, const char *pattern);
+char* strada_regex_replace(const char *str, const char *pattern, const char *replacement, const char *flags);
+char* strada_regex_replace_all(const char *str, const char *pattern, const char *replacement, const char *flags);
+StradaArray* strada_string_split(const char *str, const char *delim);
+StradaArray* strada_regex_split(const char *str, const char *pattern);
+StradaArray* strada_regex_capture(const char *str, const char *pattern);
+
+/* Socket functions */
+StradaValue* strada_socket_create(void);
+int strada_socket_connect(StradaValue *sock, const char *host, int port);
+int strada_socket_bind(StradaValue *sock, int port);
+int strada_socket_listen(StradaValue *sock, int backlog);
+StradaValue* strada_socket_accept(StradaValue *sock);
+int strada_socket_send(StradaValue *sock, const char *data);
+int strada_socket_send_sv(StradaValue *sock, StradaValue *data);  /* Binary-safe version */
+StradaValue* strada_socket_recv(StradaValue *sock, int max_len);
+void strada_socket_close(StradaValue *sock);
+StradaValue* strada_socket_server(int port);
+StradaValue* strada_socket_client(const char *host, int port);
+StradaValue* strada_socket_select(StradaValue *sockets, int timeout_ms);
+int strada_socket_fd(StradaValue *sock);
+StradaValue* strada_select_fds(StradaValue *fds, int timeout_ms);
+
+/* Memory management */
+void strada_free_value(StradaValue *sv);
+void strada_free_array(StradaArray *av);
+void strada_free_hash(StradaHash *hv);
+
+/* Additional utility functions */
+StradaValue* strada_clone(StradaValue *sv);            /* Deep copy */
+StradaValue* strada_abs(StradaValue *sv);              /* Absolute value */
+StradaValue* strada_sqrt(StradaValue *sv);             /* Square root */
+StradaValue* strada_rand(void);                        /* Random 0-1 */
+StradaValue* strada_time(void);                        /* Current timestamp */
+StradaValue* strada_localtime(StradaValue *timestamp); /* Local time hash */
+StradaValue* strada_gmtime(StradaValue *timestamp);    /* UTC time hash */
+StradaValue* strada_mktime(StradaValue *time_hash);    /* Hash to timestamp */
+StradaValue* strada_strftime(StradaValue *format, StradaValue *time_hash); /* Format time */
+StradaValue* strada_ctime(StradaValue *timestamp);     /* Timestamp to string */
+StradaValue* strada_sleep(StradaValue *seconds);       /* Sleep seconds */
+StradaValue* strada_usleep(StradaValue *usecs);        /* Sleep microseconds */
+
+/* High-resolution time functions */
+StradaValue* strada_gettimeofday(void);                /* Get time with usec precision */
+StradaValue* strada_hires_time(void);                  /* Get time as float seconds */
+StradaValue* strada_tv_interval(StradaValue *start, StradaValue *end); /* Time interval */
+StradaValue* strada_nanosleep_ns(StradaValue *nanosecs); /* Sleep nanoseconds */
+StradaValue* strada_clock_gettime(StradaValue *clock_id); /* Get clock time */
+StradaValue* strada_clock_getres(StradaValue *clock_id);  /* Get clock resolution */
+
+/* CStruct helper functions */
+void strada_cstruct_set_int(StradaValue *sv, const char *field, size_t offset, int64_t value);
+int64_t strada_cstruct_get_int(StradaValue *sv, const char *field, size_t offset);
+
+/* String helper functions */
+char* strada_reverse(const char *str);
+char* strada_repeat(const char *str, int count);
+char* strada_replace_all(const char *str, const char *find, const char *replace);
+
+/* Additional CStruct helper functions */
+void strada_cstruct_set_int(StradaValue *sv, const char *field, size_t offset, int64_t value);
+int64_t strada_cstruct_get_int(StradaValue *sv, const char *field, size_t offset);
+char* strada_replace_all(const char *str, const char *find, const char *replace);
+char* strada_chomp(const char *str);
+char* strada_chop(const char *str);
+void strada_cstruct_set_string(StradaValue *sv, const char *field, size_t offset, const char *value);
+void strada_cstruct_set_double(StradaValue *sv, const char *field, size_t offset, double value);
+char* strada_cstruct_get_string(StradaValue *sv, const char *field, size_t offset);
+double strada_cstruct_get_double(StradaValue *sv, const char *field, size_t offset);
+char* strada_cstruct_get_string(StradaValue *sv, const char *field, size_t offset);
+double strada_cstruct_get_double(StradaValue *sv, const char *field, size_t offset);
+
+/* Process control functions */
+StradaValue* strada_sleep(StradaValue *seconds);
+StradaValue* strada_usleep(StradaValue *microseconds);
+StradaValue* strada_fork(void);
+StradaValue* strada_wait(void);
+StradaValue* strada_waitpid(StradaValue *pid, StradaValue *options);
+StradaValue* strada_getpid(void);
+StradaValue* strada_getppid(void);
+StradaValue* strada_exit_status(StradaValue *status);
+
+/* POSIX functions */
+StradaValue* strada_getenv(StradaValue *name);
+StradaValue* strada_setenv(StradaValue *name, StradaValue *value);
+StradaValue* strada_unsetenv(StradaValue *name);
+StradaValue* strada_getcwd(void);
+StradaValue* strada_chdir(StradaValue *path);
+StradaValue* strada_mkdir(StradaValue *path, StradaValue *mode);
+StradaValue* strada_rmdir(StradaValue *path);
+StradaValue* strada_unlink(StradaValue *path);
+StradaValue* strada_link(StradaValue *oldpath, StradaValue *newpath);
+StradaValue* strada_symlink(StradaValue *target, StradaValue *linkpath);
+StradaValue* strada_readlink(StradaValue *path);
+StradaValue* strada_rename(StradaValue *oldpath, StradaValue *newpath);
+StradaValue* strada_chmod(StradaValue *path, StradaValue *mode);
+StradaValue* strada_access(StradaValue *path, StradaValue *mode);
+StradaValue* strada_umask(StradaValue *mask);
+StradaValue* strada_getuid(void);
+StradaValue* strada_geteuid(void);
+StradaValue* strada_getgid(void);
+StradaValue* strada_getegid(void);
+StradaValue* strada_kill(StradaValue *pid, StradaValue *sig);
+StradaValue* strada_alarm(StradaValue *seconds);
+StradaValue* strada_signal(StradaValue *sig_name, StradaValue *handler);
+StradaValue* strada_stat(StradaValue *path);
+StradaValue* strada_lstat(StradaValue *path);
+StradaValue* strada_isatty(StradaValue *fd);
+StradaValue* strada_strerror(StradaValue *errnum);
+StradaValue* strada_errno(void);
+
+/* Pipe and IPC functions */
+StradaValue* strada_pipe(void);
+StradaValue* strada_dup2(StradaValue *oldfd, StradaValue *newfd);
+StradaValue* strada_close_fd(StradaValue *fd);
+StradaValue* strada_exec(StradaValue *cmd);
+StradaValue* strada_exec_argv(StradaValue *program, StradaValue *args);
+StradaValue* strada_system(StradaValue *cmd);
+StradaValue* strada_system_argv(StradaValue *program, StradaValue *args);
+StradaValue* strada_read_fd(StradaValue *fd, StradaValue *size);
+StradaValue* strada_open_fd(StradaValue *filename, StradaValue *mode);
+StradaValue* strada_write_fd(StradaValue *fd, StradaValue *data);
+StradaValue* strada_read_all_fd(StradaValue *fd);
+StradaValue* strada_fdopen_read(StradaValue *fd);
+StradaValue* strada_fdopen_write(StradaValue *fd);
+
+/* Process name functions */
+StradaValue* strada_setprocname(StradaValue *name);
+StradaValue* strada_getprocname(void);
+void strada_init_proctitle(int argc, char **argv);
+StradaValue* strada_setproctitle(StradaValue *title);
+StradaValue* strada_getproctitle(void);
+
+/* Directory functions */
+StradaValue* strada_readdir(StradaValue *path);
+StradaValue* strada_readdir_full(StradaValue *path);
+StradaValue* strada_is_dir(StradaValue *path);
+StradaValue* strada_is_file(StradaValue *path);
+StradaValue* strada_file_size(StradaValue *path);
+
+/* Math functions */
+StradaValue* strada_sin(StradaValue *x);
+StradaValue* strada_cos(StradaValue *x);
+StradaValue* strada_tan(StradaValue *x);
+StradaValue* strada_asin(StradaValue *x);
+StradaValue* strada_acos(StradaValue *x);
+StradaValue* strada_atan(StradaValue *x);
+StradaValue* strada_atan2(StradaValue *y, StradaValue *x);
+StradaValue* strada_log(StradaValue *x);
+StradaValue* strada_log10(StradaValue *x);
+StradaValue* strada_exp(StradaValue *x);
+StradaValue* strada_pow(StradaValue *base, StradaValue *exponent);
+StradaValue* strada_floor(StradaValue *x);
+StradaValue* strada_ceil(StradaValue *x);
+StradaValue* strada_round(StradaValue *x);
+StradaValue* strada_fabs(StradaValue *x);
+StradaValue* strada_fmod(StradaValue *x, StradaValue *y);
+StradaValue* strada_sinh(StradaValue *x);
+StradaValue* strada_cosh(StradaValue *x);
+StradaValue* strada_tanh(StradaValue *x);
+
+/* File seek functions */
+StradaValue* strada_seek(StradaValue *fh, StradaValue *offset, StradaValue *whence);
+StradaValue* strada_tell(StradaValue *fh);
+StradaValue* strada_rewind(StradaValue *fh);
+StradaValue* strada_eof(StradaValue *fh);
+StradaValue* strada_flush(StradaValue *fh);
+
+/* DNS/Hostname functions */
+StradaValue* strada_gethostbyname(StradaValue *hostname);
+StradaValue* strada_gethostbyname_all(StradaValue *hostname);
+StradaValue* strada_gethostname(void);
+StradaValue* strada_getaddrinfo_first(StradaValue *hostname, StradaValue *service);
+
+/* Path functions */
+StradaValue* strada_realpath(StradaValue *path);
+StradaValue* strada_dirname(StradaValue *path);
+StradaValue* strada_basename(StradaValue *path);
+StradaValue* strada_glob(StradaValue *pattern);
+StradaValue* strada_fnmatch(StradaValue *pattern, StradaValue *string);
+StradaValue* strada_file_ext(StradaValue *path);
+StradaValue* strada_path_join(StradaValue *parts);
+
+/* ============================================================ */
+/* NEW LIBC FUNCTIONS                                           */
+/* ============================================================ */
+
+/* Additional File I/O */
+StradaValue* strada_fgetc(StradaValue *fh);
+StradaValue* strada_fputc(StradaValue *ch, StradaValue *fh);
+StradaValue* strada_fgets(StradaValue *fh, StradaValue *size);
+StradaValue* strada_fputs(StradaValue *str, StradaValue *fh);
+StradaValue* strada_ferror(StradaValue *fh);
+StradaValue* strada_fileno(StradaValue *fh);
+StradaValue* strada_clearerr(StradaValue *fh);
+
+/* Temporary files */
+StradaValue* strada_tmpfile(void);
+StradaValue* strada_mkstemp(StradaValue *template);
+StradaValue* strada_mkdtemp(StradaValue *template);
+
+/* Command execution (popen) */
+StradaValue* strada_popen(StradaValue *cmd, StradaValue *mode);
+StradaValue* strada_pclose(StradaValue *fh);
+
+/* Additional file system */
+StradaValue* strada_truncate(StradaValue *path, StradaValue *length);
+StradaValue* strada_ftruncate(StradaValue *fd, StradaValue *length);
+StradaValue* strada_chown(StradaValue *path, StradaValue *uid, StradaValue *gid);
+StradaValue* strada_lchown(StradaValue *path, StradaValue *uid, StradaValue *gid);
+StradaValue* strada_fchmod(StradaValue *fd, StradaValue *mode);
+StradaValue* strada_fchown(StradaValue *fd, StradaValue *uid, StradaValue *gid);
+StradaValue* strada_utime(StradaValue *path, StradaValue *atime, StradaValue *mtime);
+StradaValue* strada_utimes(StradaValue *path, StradaValue *atime, StradaValue *mtime);
+
+/* Session/process group control */
+StradaValue* strada_setsid(void);
+StradaValue* strada_getsid(StradaValue *pid);
+StradaValue* strada_setpgid(StradaValue *pid, StradaValue *pgid);
+StradaValue* strada_getpgid(StradaValue *pid);
+StradaValue* strada_getpgrp(void);
+StradaValue* strada_setpgrp(void);
+
+/* User/group ID control */
+StradaValue* strada_setuid(StradaValue *uid);
+StradaValue* strada_setgid(StradaValue *gid);
+StradaValue* strada_seteuid(StradaValue *uid);
+StradaValue* strada_setegid(StradaValue *gid);
+StradaValue* strada_setreuid(StradaValue *ruid, StradaValue *euid);
+StradaValue* strada_setregid(StradaValue *rgid, StradaValue *egid);
+
+/* Additional socket operations */
+StradaValue* strada_setsockopt(StradaValue *sock, StradaValue *level, StradaValue *optname, StradaValue *optval);
+StradaValue* strada_getsockopt(StradaValue *sock, StradaValue *level, StradaValue *optname);
+StradaValue* strada_shutdown(StradaValue *sock, StradaValue *how);
+StradaValue* strada_getpeername(StradaValue *sock);
+StradaValue* strada_getsockname(StradaValue *sock);
+StradaValue* strada_inet_pton(StradaValue *af, StradaValue *src);
+StradaValue* strada_inet_ntop(StradaValue *af, StradaValue *src);
+StradaValue* strada_inet_addr(StradaValue *cp);
+StradaValue* strada_inet_ntoa(StradaValue *in);
+StradaValue* strada_htons(StradaValue *hostshort);
+StradaValue* strada_htonl(StradaValue *hostlong);
+StradaValue* strada_ntohs(StradaValue *netshort);
+StradaValue* strada_ntohl(StradaValue *netlong);
+StradaValue* strada_poll(StradaValue *fds, StradaValue *timeout);
+
+/* Random */
+StradaValue* strada_srand(StradaValue *seed);
+StradaValue* strada_srandom(StradaValue *seed);
+StradaValue* strada_libc_rand(void);
+StradaValue* strada_libc_random(void);
+
+/* Advanced signals */
+StradaValue* strada_sigprocmask(StradaValue *how, StradaValue *set);
+StradaValue* strada_raise(StradaValue *sig);
+StradaValue* strada_killpg(StradaValue *pgrp, StradaValue *sig);
+StradaValue* strada_pause(void);
+
+/* User/Group database */
+StradaValue* strada_getpwnam(StradaValue *name);
+StradaValue* strada_getpwuid(StradaValue *uid);
+StradaValue* strada_getgrnam(StradaValue *name);
+StradaValue* strada_getgrgid(StradaValue *gid);
+StradaValue* strada_getlogin(void);
+StradaValue* strada_getgroups(void);
+
+/* Resource/Priority */
+StradaValue* strada_nice(StradaValue *inc);
+StradaValue* strada_getpriority(StradaValue *which, StradaValue *who);
+StradaValue* strada_setpriority(StradaValue *which, StradaValue *who, StradaValue *prio);
+StradaValue* strada_getrusage(StradaValue *who);
+StradaValue* strada_getrlimit(StradaValue *resource);
+StradaValue* strada_setrlimit(StradaValue *resource, StradaValue *rlim);
+
+/* Additional time functions */
+StradaValue* strada_difftime(StradaValue *t1, StradaValue *t0);
+StradaValue* strada_clock(void);
+StradaValue* strada_times(void);
+
+/* Additional memory functions */
+StradaValue* strada_calloc(StradaValue *nmemb, StradaValue *size);
+StradaValue* strada_realloc(StradaValue *ptr, StradaValue *size);
+StradaValue* strada_mmap(StradaValue *addr, StradaValue *length, StradaValue *prot, StradaValue *flags, StradaValue *fd, StradaValue *offset);
+StradaValue* strada_munmap(StradaValue *addr, StradaValue *length);
+StradaValue* strada_mlock(StradaValue *addr, StradaValue *len);
+StradaValue* strada_munlock(StradaValue *addr, StradaValue *len);
+
+/* String conversion */
+StradaValue* strada_strtol(StradaValue *str, StradaValue *base);
+StradaValue* strada_strtod(StradaValue *str);
+StradaValue* strada_atoi(StradaValue *str);
+StradaValue* strada_atof(StradaValue *str);
+
+/* Terminal/TTY */
+StradaValue* strada_ttyname(StradaValue *fd);
+StradaValue* strada_tcgetattr(StradaValue *fd);
+StradaValue* strada_tcsetattr(StradaValue *fd, StradaValue *when, StradaValue *attrs);
+StradaValue* strada_cfgetospeed(StradaValue *termios);
+StradaValue* strada_cfsetospeed(StradaValue *termios, StradaValue *speed);
+StradaValue* strada_cfgetispeed(StradaValue *termios);
+StradaValue* strada_cfsetispeed(StradaValue *termios, StradaValue *speed);
+
+/* Advanced file operations */
+StradaValue* strada_fcntl(StradaValue *fd, StradaValue *cmd, StradaValue *arg);
+StradaValue* strada_flock(StradaValue *fd, StradaValue *operation);
+StradaValue* strada_ioctl(StradaValue *fd, StradaValue *request, StradaValue *arg);
+StradaValue* strada_statvfs(StradaValue *path);
+StradaValue* strada_fstatvfs(StradaValue *fd);
+StradaValue* strada_dup(StradaValue *oldfd);
+
+/* Additional math functions */
+StradaValue* strada_hypot(StradaValue *x, StradaValue *y);
+StradaValue* strada_cbrt(StradaValue *x);
+StradaValue* strada_isnan(StradaValue *x);
+StradaValue* strada_isinf(StradaValue *x);
+StradaValue* strada_isfinite(StradaValue *x);
+StradaValue* strada_fmax(StradaValue *x, StradaValue *y);
+StradaValue* strada_fmin(StradaValue *x, StradaValue *y);
+StradaValue* strada_copysign(StradaValue *x, StradaValue *y);
+StradaValue* strada_remainder(StradaValue *x, StradaValue *y);
+StradaValue* strada_trunc(StradaValue *x);
+StradaValue* strada_ldexp(StradaValue *x, StradaValue *exp);
+StradaValue* strada_frexp(StradaValue *x);
+StradaValue* strada_modf(StradaValue *x);
+StradaValue* strada_scalbn(StradaValue *x, StradaValue *n);
+
+/* Thread functions */
+StradaValue* strada_thread_create(StradaValue *closure);
+StradaValue* strada_thread_join(StradaValue *thread_val);
+StradaValue* strada_thread_detach(StradaValue *thread_val);
+StradaValue* strada_thread_self(void);
+
+/* Mutex functions */
+StradaValue* strada_mutex_new(void);
+StradaValue* strada_mutex_lock(StradaValue *mutex);
+StradaValue* strada_mutex_trylock(StradaValue *mutex);
+StradaValue* strada_mutex_unlock(StradaValue *mutex);
+StradaValue* strada_mutex_destroy(StradaValue *mutex);
+
+/* Condition variable functions */
+StradaValue* strada_cond_new(void);
+StradaValue* strada_cond_wait(StradaValue *cond, StradaValue *mutex);
+StradaValue* strada_cond_signal(StradaValue *cond);
+StradaValue* strada_cond_broadcast(StradaValue *cond);
+StradaValue* strada_cond_destroy(StradaValue *cond);
+
+/* ============================================================
+ * Profiling - Function timing and call counts
+ * ============================================================ */
+void strada_profile_init(void);
+void strada_profile_enter(const char *func_name);
+void strada_profile_exit(const char *func_name);
+void strada_profile_report(void);
+
+/* ============================================================
+ * Memory Profiler - Track allocations by type
+ * ============================================================ */
+void strada_memprof_enable(void);
+void strada_memprof_disable(void);
+void strada_memprof_report(void);
+void strada_memprof_reset(void);
+
+#endif /* STRADA_RUNTIME_H */

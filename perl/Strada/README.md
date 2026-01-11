@@ -1,0 +1,204 @@
+# Strada - Perl XS Module
+
+This Perl XS module allows Perl programs to load and call functions from compiled Strada shared libraries.
+
+## Overview
+
+The `Strada` module provides a bridge from Perl to Strada, enabling you to:
+- Load Strada shared libraries (.so files)
+- Call Strada functions with automatic type conversion
+- Pass Perl scalars, arrays, and hashes to Strada
+- Receive Strada return values as Perl types
+
+## Installation
+
+### Prerequisites
+
+- Perl 5.10 or later
+- Strada compiler and runtime (from parent directory)
+- C compiler (gcc)
+
+### Build Steps
+
+```bash
+cd perl/Strada
+perl Makefile.PL
+make
+make test
+make install  # optional, installs system-wide
+```
+
+## Usage
+
+### High-Level API (Recommended)
+
+```perl
+use Strada;
+
+# Load a Strada shared library
+my $lib = Strada::Library->new('./libmath.so');
+
+# Call functions by name
+my $sum = $lib->call('math_lib__add', 10, 20);      # 30
+my $greeting = $lib->call('math_lib__greet', 'Perl'); # "Hello, Perl!"
+
+# Pass arrays
+my $total = $lib->call('math_lib__sum_array', [1, 2, 3, 4, 5]);
+
+# Pass hashes
+my $desc = $lib->call('math_lib__describe_person', { name => 'Alice', age => 30 });
+
+# Receive arrays
+my $nums = $lib->call('math_lib__get_numbers');  # Returns arrayref
+
+# Receive hashes
+my $person = $lib->call('math_lib__get_person'); # Returns hashref
+
+# Unload when done
+$lib->unload();
+```
+
+### Low-Level API
+
+```perl
+use Strada;
+
+# Load library, get handle
+my $handle = Strada::load('./libmath.so');
+die "Failed to load" unless $handle;
+
+# Get function pointer
+my $func = Strada::get_func($handle, 'math_lib__add');
+die "Function not found" unless $func;
+
+# Call function
+my $result = Strada::call($func, 2, 3);
+print "2 + 3 = $result\n";
+
+# Unload
+Strada::unload($handle);
+```
+
+## Creating Strada Shared Libraries
+
+### 1. Write a Strada Library
+
+```strada
+# math_lib.strada
+package math_lib;
+
+func add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func greet(str $name) str {
+    return "Hello, " . $name . "!";
+}
+
+func sum_array(scalar $arr) int {
+    my int $total = 0;
+    my int $len = length($arr);
+    my int $i = 0;
+    while ($i < $len) {
+        $total = $total + $arr->[$i];
+        $i = $i + 1;
+    }
+    return $total;
+}
+```
+
+### 2. Compile as Shared Library
+
+```bash
+# Compile Strada to C
+./stradac math_lib.strada math_lib.c
+
+# Compile C to shared library
+gcc -shared -fPIC -rdynamic \
+    -o libmath.so \
+    math_lib.c \
+    runtime/strada_runtime.c \
+    -Iruntime -ldl -lm
+```
+
+### 3. Use from Perl
+
+```perl
+use Strada;
+
+my $lib = Strada::Library->new('./libmath.so');
+print $lib->call('math_lib__add', 1, 2), "\n";
+$lib->unload();
+```
+
+## Function Naming Convention
+
+Strada functions are exported with the naming pattern:
+```
+<package>__<function>
+```
+
+For example:
+- `package math_lib` + `func add()` = `math_lib__add`
+- `package utils` + `func format_date()` = `utils__format_date`
+
+## Type Conversion
+
+| Strada Type | Perl Type |
+|-------------|-----------|
+| int | IV (integer) |
+| num | NV (floating point) |
+| str | PV (string) |
+| array | Array reference |
+| hash | Hash reference |
+| undef | undef |
+| ref | Dereferenced value |
+
+## Limitations
+
+- Maximum of 4 arguments per function call
+- Complex nested references may not convert perfectly
+- Strada objects/classes are not directly supported
+
+## Example Directory
+
+The `example/` subdirectory contains:
+- `math_lib.strada` - Example Strada library source
+- `build.sh` - Script to compile the example library
+- The compiled `libmath.so` after running build.sh
+
+## API Reference
+
+### Strada::load($path)
+
+Load a Strada shared library. Returns a handle (integer) on success, 0 on failure.
+
+### Strada::unload($handle)
+
+Unload a previously loaded library.
+
+### Strada::get_func($handle, $name)
+
+Get a function pointer by name. Returns the pointer on success, 0 if not found.
+
+### Strada::call($func, @args)
+
+Call a Strada function with 0-4 arguments. Returns the result converted to Perl.
+
+### Strada::Library->new($path)
+
+Create a Library object, loading the specified shared library. Dies on failure.
+
+### $lib->call($func_name, @args)
+
+Call a function by name with arguments. Caches function pointers for efficiency.
+
+### $lib->unload()
+
+Unload the library and clear cached function pointers.
+
+## See Also
+
+- `lib/perl5/` - The reverse integration (calling Perl from Strada)
+- `docs/LANGUAGE_GUIDE.md` - Strada language documentation
+- `docs/RUNTIME_API.md` - Strada runtime API reference

@@ -1,0 +1,43 @@
+# test_modules.strada - Test module-style organization (self-contained)
+# Note: Full multi-file module compilation requires linking .c files together.
+# This example demonstrates the module pattern with inline definitions.
+
+package Math::Utils;
+
+# Module functions
+func add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func multiply(int $a, int $b) int {
+    return $a * $b;
+}
+
+func square(int $x) int {
+    return $x * $x;
+}
+
+# Main program
+func main() int {
+    say("Cross-Module Function Calls Test");
+    say("=================================");
+    say("");
+
+    my int $x = 5;
+    my int $y = 3;
+
+    say("Variables:");
+    say("  x = " . $x);
+    say("  y = " . $y);
+
+    say("");
+    say("Function calls:");
+    say("  add(x, y) = " . add($x, $y));
+    say("  multiply(x, y) = " . multiply($x, $y));
+    say("  square(x) = " . square($x));
+
+    say("");
+    say("Module test complete!");
+
+    return 0;
+}

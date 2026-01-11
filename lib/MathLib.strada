@@ -1,0 +1,22 @@
+# MathLib.strada - Example library for import_lib testing
+package MathLib;
+
+func add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func subtract(int $a, int $b) int {
+    return $a - $b;
+}
+
+func multiply(int $a, int $b) int {
+    return $a * $b;
+}
+
+func double_val(int $x) int {
+    return $x * 2;
+}
+
+func greet(str $name) str {
+    return "Hello, " . $name . "!";
+}

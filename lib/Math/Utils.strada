@@ -1,0 +1,27 @@
+# Math::Utils - Mathematical utility functions
+package Math::Utils;
+
+# Add two numbers
+func add(int $a, int $b) int {
+    return $a + $b;
+}
+
+# Multiply two numbers
+func multiply(int $a, int $b) int {
+    return $a * $b;
+}
+
+# Square a number
+func square(int $x) int {
+    return $x * $x;
+}
+
+# Subtract two numbers
+func subtract(int $a, int $b) int {
+    return $a - $b;
+}
+
+# Divide two numbers
+func divide(int $a, int $b) int {
+    return $a / $b;
+}

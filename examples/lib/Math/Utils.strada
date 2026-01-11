@@ -1,0 +1,30 @@
+# Math/Utils.strada - Math utility functions module
+
+package Math::Utils;
+
+func add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func subtract(int $a, int $b) int {
+    return $a - $b;
+}
+
+func multiply(int $a, int $b) int {
+    return $a * $b;
+}
+
+func divide(int $a, int $b) int {
+    if ($b == 0) {
+        return 0;
+    }
+    return $a / $b;
+}
+
+func square(int $x) int {
+    return $x * $x;
+}
+
+func cube(int $x) int {
+    return $x * $x * $x;
+}

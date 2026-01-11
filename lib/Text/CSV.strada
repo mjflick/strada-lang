@@ -1,0 +1,294 @@
+# Text::CSV - Simple CSV parser/combiner for Strada
+#
+# Usage:
+#   use lib "lib";
+#   use Text::CSV;
+#
+#   my scalar $csv = Text::CSV::new({ sep_char => "," });
+#   if (Text::CSV::parse($csv, "a,\"b\"")) {
+#       my scalar $fields = Text::CSV::fields($csv);
+#       say($fields->[0]);
+#   }
+#
+# This is a minimal Text::CSV-style API with parse/combine support.
+# It assumes one record per input line (no multi-line fields).
+
+package Text::CSV;
+
+# ------------------------------------------------------------
+# Constructor and options
+# ------------------------------------------------------------
+
+func _opt_str(scalar $opts, str $key, str $fallback) str {
+    if (defined($opts) && defined($opts->{$key})) {
+        return "" . $opts->{$key};
+    }
+    return $fallback;
+}
+
+func _opt_int(scalar $opts, str $key, int $fallback) int {
+    if (defined($opts) && defined($opts->{$key})) {
+        return $opts->{$key};
+    }
+    return $fallback;
+}
+
+func new(scalar $opts) scalar {
+    my hash %self = ();
+
+    $self{"sep_char"} = Text::CSV::_opt_str($opts, "sep_char", ",");
+    $self{"quote_char"} = Text::CSV::_opt_str($opts, "quote_char", "\"");
+    $self{"escape_char"} = Text::CSV::_opt_str($opts, "escape_char", "\"");
+    $self{"always_quote"} = Text::CSV::_opt_int($opts, "always_quote", 0);
+    $self{"binary"} = Text::CSV::_opt_int($opts, "binary", 0);
+
+    $self{"error"} = "";
+    $self{"fields"} = [];
+    $self{"string"} = "";
+    $self{"buffer"} = "";
+
+    return bless(\%self, "Text::CSV");
+}
+
+# ------------------------------------------------------------
+# State accessors
+# ------------------------------------------------------------
+
+func error_diag(scalar $self) str {
+    if (!defined($self)) {
+        return "No CSV object";
+    }
+    return $self->{"error"};
+}
+
+func fields(scalar $self) scalar {
+    if (!defined($self)) {
+        return [];
+    }
+    return $self->{"fields"};
+}
+
+func string(scalar $self) str {
+    if (!defined($self)) {
+        return "";
+    }
+    return $self->{"string"};
+}
+
+# ------------------------------------------------------------
+# Parsing
+# ------------------------------------------------------------
+
+func _strip_eol(str $line) str {
+    my int $len = length($line);
+    if ($len == 0) {
+        return $line;
+    }
+    if (substr($line, $len - 1, 1) eq "\n") {
+        $line = substr($line, 0, $len - 1);
+        $len = $len - 1;
+    }
+    if ($len > 0 && substr($line, $len - 1, 1) eq "\r") {
+        $line = substr($line, 0, $len - 1);
+    }
+    return $line;
+}
+
+func _set_error(scalar $self, str $msg) void {
+    if (defined($self)) {
+        $self->{"error"} = $msg;
+        $self->{"fields"} = [];
+    }
+}
+
+func _clear_buffer(scalar $self) void {
+    if (defined($self)) {
+        $self->{"buffer"} = "";
+    }
+}
+
+func parse(scalar $self, str $line) int {
+    if (!defined($self)) {
+        return 0;
+    }
+
+    $self->{"error"} = "";
+    $self->{"fields"} = [];
+
+    my str $sep = $self->{"sep_char"};
+    my str $quote = $self->{"quote_char"};
+    my str $escape = $self->{"escape_char"};
+
+    $line = Text::CSV::_strip_eol($line);
+
+    my scalar $fields = [];
+    my str $current = "";
+    my int $in_quotes = 0;
+    my int $i = 0;
+    my int $len = length($line);
+
+    while ($i < $len) {
+        my str $ch = substr($line, $i, 1);
+
+        if ($in_quotes) {
+            if ($ch eq $quote) {
+                if ($i + 1 < $len && substr($line, $i + 1, 1) eq $quote && $escape eq $quote) {
+                    $current = $current . $quote;
+                    $i = $i + 1;
+                } else {
+                    $in_quotes = 0;
+                }
+            } elsif ($escape ne "" && $escape ne $quote && $ch eq $escape) {
+                if ($i + 1 < $len) {
+                    $current = $current . substr($line, $i + 1, 1);
+                    $i = $i + 1;
+                } else {
+                    $current = $current . $ch;
+                }
+            } else {
+                $current = $current . $ch;
+            }
+        } else {
+            if ($ch eq $sep) {
+                push($fields, $current);
+                $current = "";
+            } elsif ($ch eq $quote) {
+                if ($current ne "") {
+                    Text::CSV::_set_error($self, "Unexpected quote in field");
+                    return 0;
+                }
+                $in_quotes = 1;
+            } else {
+                $current = $current . $ch;
+            }
+        }
+
+        $i = $i + 1;
+    }
+
+    if ($in_quotes) {
+        Text::CSV::_set_error($self, "Unmatched quote");
+        return 0;
+    }
+
+    push($fields, $current);
+    $self->{"fields"} = $fields;
+    return 1;
+}
+
+func getline(scalar $self, scalar $fh) scalar {
+    if (!defined($self)) {
+        return undef;
+    }
+    my str $buf = $self->{"buffer"};
+    my int $appended = 0;
+
+    while (1) {
+        my str $line = sys::readline($fh);
+        if (!defined($line) || $line eq "") {
+            if ($buf ne "") {
+                # EOF with partial record
+                Text::CSV::_set_error($self, "Unmatched quote");
+            }
+            Text::CSV::_clear_buffer($self);
+            return undef;
+        }
+
+        if ($buf eq "") {
+            $buf = $line;
+        } else {
+            $buf = $buf . $line;
+        }
+        $appended = 1;
+
+        if (Text::CSV::parse($self, $buf)) {
+            Text::CSV::_clear_buffer($self);
+            return $self->{"fields"};
+        }
+
+        if ($self->{"error"} ne "Unmatched quote") {
+            Text::CSV::_clear_buffer($self);
+            return undef;
+        }
+
+        # Continue reading for multi-line field
+    }
+}
+
+# ------------------------------------------------------------
+# Combining
+# ------------------------------------------------------------
+
+func _escape_field(str $field, str $quote, str $escape) str {
+    my str $out = "";
+    my int $i = 0;
+    my int $len = length($field);
+
+    while ($i < $len) {
+        my str $ch = substr($field, $i, 1);
+        if ($ch eq $quote) {
+            if ($escape eq "" || $escape eq $quote) {
+                $out = $out . $quote . $quote;
+            } else {
+                $out = $out . $escape . $quote;
+            }
+        } elsif ($escape ne "" && $escape ne $quote && $ch eq $escape) {
+            $out = $out . $escape . $escape;
+        } else {
+            $out = $out . $ch;
+        }
+        $i = $i + 1;
+    }
+
+    return $out;
+}
+
+func combine(scalar $self, scalar $fields) int {
+    if (!defined($self)) {
+        return 0;
+    }
+    if (!defined($fields) || ref($fields) ne "array") {
+        Text::CSV::_set_error($self, "combine expects array reference");
+        return 0;
+    }
+
+    my str $sep = $self->{"sep_char"};
+    my str $quote = $self->{"quote_char"};
+    my str $escape = $self->{"escape_char"};
+    my int $always_quote = $self->{"always_quote"};
+
+    my str $out = "";
+    my int $i = 0;
+    my int $count = size($fields);
+
+    while ($i < $count) {
+        if ($i > 0) {
+            $out = $out . $sep;
+        }
+
+        my str $field = "" . $fields->[$i];
+        my int $need_quote = $always_quote;
+
+        if (index($field, $sep) >= 0) {
+            $need_quote = 1;
+        }
+        if ($quote ne "" && index($field, $quote) >= 0) {
+            $need_quote = 1;
+        }
+        if (index($field, "\n") >= 0 || index($field, "\r") >= 0) {
+            $need_quote = 1;
+        }
+
+        my str $escaped = Text::CSV::_escape_field($field, $quote, $escape);
+        if ($need_quote) {
+            $out = $out . $quote . $escaped . $quote;
+        } else {
+            $out = $out . $escaped;
+        }
+
+        $i = $i + 1;
+    }
+
+    $self->{"string"} = $out;
+    return 1;
+}

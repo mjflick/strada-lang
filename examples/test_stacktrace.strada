@@ -1,0 +1,38 @@
+# test_stacktrace.strada - Test stack trace functionality
+
+func level3() void {
+    say("Level 3: About to dump stack trace");
+    stacktrace();
+}
+
+func level2() void {
+    say("Level 2: Calling level3");
+    level3();
+}
+
+func level1() void {
+    say("Level 1: Calling level2");
+    level2();
+}
+
+func test_caller() void {
+    say("");
+    say("Testing caller():");
+    my str $info = caller(1);
+    say("Caller info: " . $info);
+}
+
+func main() int {
+    say("=== Stack Trace Test ===");
+    say("");
+    
+    say("Calling nested functions...");
+    level1();
+    
+    test_caller();
+    
+    say("");
+    say("Done!");
+    
+    return 0;
+}

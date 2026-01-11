@@ -1,0 +1,55 @@
+# spread_operator.strada - Test spread operator for variadic functions
+
+func sum(...scalar $numbers) int {
+    say("Sum function called with variadic parameter");
+    my int $count = size($numbers);
+    say("  Received " . $count . " arguments");
+    
+    # Would sum all numbers here
+    return $count;
+}
+
+func join_strings(...scalar $strings) str {
+    my int $count = size($strings);
+    say("Join called with " . $count . " strings");
+    
+    # Would join all strings here
+    return "joined";
+}
+
+func log_all(str $level, ...scalar $messages) void {
+    say("[" . upper($level) . "] Logging:");
+    
+    my int $count = size($messages);
+    my int $i = 0;
+    
+    say("  " . $count . " messages to log");
+}
+
+func main() int {
+    say("=== Spread Operator Test ===");
+    say("");
+    
+    say("--- Variable Arguments ---");
+    my scalar $nums1 = split("1,2,3", ",");
+    my scalar $nums2 = split("10,20,30,40,50", ",");
+    
+    my int $result1 = sum($nums1);
+    my int $result2 = sum($nums2);
+    
+    say("");
+    say("--- String Join ---");
+    my scalar $words = split("hello,world,from,strada", ",");
+    my str $joined = join_strings($words);
+    
+    say("");
+    say("--- Mixed Parameters ---");
+    my scalar $msgs = split("msg1,msg2,msg3", ",");
+    log_all("INFO", $msgs);
+    
+    say("");
+    say("✓ Spread operator working!");
+    say("✓ Functions can accept unlimited arguments");
+    
+    return 0;
+}

@@ -1,0 +1,74 @@
+# test_namespaces.strada - Demonstrate magic namespace system
+#
+# Strada uses magic namespaces to organize built-in functions:
+#   - math:: for math functions (sin, cos, sqrt, etc.)
+#   - sys::  for system/libc functions (open, fork, socket, etc.)
+#
+# Core language functions remain unqualified (say, print, push, etc.)
+
+func main() int {
+    say("=== Magic Namespaces Demo ===");
+    say("");
+
+    # =============================================
+    # math:: namespace - mathematical functions
+    # =============================================
+    say("--- math:: namespace ---");
+
+    my num $pi = 3.14159265358979;
+    say("math::sin(pi/2) = " . math::sin($pi / 2));
+    say("math::cos(0) = " . math::cos(0));
+    say("math::sqrt(16) = " . math::sqrt(16));
+    say("math::pow(2, 10) = " . math::pow(2, 10));
+    say("math::log(10) = " . math::log(10));
+    say("math::floor(3.7) = " . math::floor(3.7));
+    say("math::ceil(3.2) = " . math::ceil(3.2));
+    say("math::abs(-42) = " . math::abs(-42));
+    say("");
+
+    # =============================================
+    # sys:: namespace - system/libc functions
+    # =============================================
+    say("--- sys:: namespace ---");
+
+    # File operations
+    my str $testfile = "/tmp/namespace_test.txt";
+    sys::spew($testfile, "Hello from Strada namespaces!\n");
+    my str $content = sys::slurp($testfile);
+    say("File content: " . chomp($content));
+    sys::unlink($testfile);
+
+    # Environment
+    my str $home = sys::getenv("HOME");
+    say("HOME = " . $home);
+
+    # Process info
+    say("PID = " . sys::getpid());
+
+    # Current directory
+    say("CWD = " . sys::getcwd());
+
+    # Time
+    say("Time = " . sys::time());
+    say("");
+
+    # =============================================
+    # Core functions remain unqualified
+    # =============================================
+    say("--- Core functions (no namespace) ---");
+
+    my array @arr;
+    push(\@arr, "apple");
+    push(\@arr, "banana");
+    push(\@arr, "cherry");
+    say("Array size: " . size(\@arr));
+    say("Joined: " . join(", ", \@arr));
+
+    my str $s = "HELLO";
+    say("lc('" . $s . "') = " . lc($s));
+    say("length('test') = " . length("test"));
+    say("");
+
+    say("=== Namespace Demo Complete ===");
+    return 0;
+}

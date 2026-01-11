@@ -1,0 +1,34 @@
+# optional_simple.strada - Simple optional parameter test
+
+func greet(str $name, str $greeting = "Hello") void {
+    say($greeting . ", " . $name . "!");
+}
+
+func add_numbers(int $a, int $b = 10) int {
+    return $a + $b;
+}
+
+func main() int {
+    say("=== Optional Parameters - Manual Testing ===");
+    say("");
+    
+    say("--- Full Parameters (both provided) ---");
+    greet("Alice", "Hi");
+    greet("Bob", "Welcome");
+    
+    say("");
+    say("--- Using Default (passing undef) ---");
+    # When we pass strada_new_undef(), the default kicks in
+    greet("Carol", strada_new_undef());
+    
+    say("");
+    say("--- Number Addition ---");
+    say("5 + 20 = " . add_numbers(5, 20));
+    say("5 + 10 (default) = " . add_numbers(5, strada_new_undef()));
+    
+    say("");
+    say("✓ Optional parameters working with explicit undef!");
+    say("✓ Defaults: greeting='Hello', b=10");
+    
+    return 0;
+}

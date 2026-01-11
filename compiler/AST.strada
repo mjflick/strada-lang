@@ -1,0 +1,785 @@
+# AST.strada - Abstract Syntax Tree for self-hosting Strada compiler
+# Defines node types and constructors for the parse tree
+
+# Node type constants
+func NODE_PROGRAM() int { return 1; }
+func NODE_FUNC() int { return 2; }
+func NODE_PARAM() int { return 3; }
+func NODE_BLOCK() int { return 4; }
+func NODE_VAR_DECL() int { return 5; }
+func NODE_IF_STMT() int { return 6; }
+func NODE_WHILE_STMT() int { return 7; }
+func NODE_FOR_STMT() int { return 8; }
+func NODE_RETURN_STMT() int { return 9; }
+func NODE_EXPR_STMT() int { return 10; }
+func NODE_BINARY_OP() int { return 11; }
+func NODE_UNARY_OP() int { return 12; }
+func NODE_CALL() int { return 13; }
+func NODE_VARIABLE() int { return 14; }
+func NODE_INT_LITERAL() int { return 15; }
+func NODE_NUM_LITERAL() int { return 16; }
+func NODE_STR_LITERAL() int { return 17; }
+func NODE_ASSIGN() int { return 18; }
+func NODE_SUBSCRIPT() int { return 19; }
+func NODE_HASH_ACCESS() int { return 20; }
+func NODE_REF() int { return 21; }
+func NODE_DEREF_HASH() int { return 22; }
+func NODE_DEREF_ARRAY() int { return 23; }
+func NODE_DEREF_SCALAR() int { return 24; }
+func NODE_ANON_HASH() int { return 25; }
+func NODE_ANON_ARRAY() int { return 26; }
+func NODE_EXTERN_FUNC() int { return 27; }
+func NODE_STRUCT() int { return 28; }
+func NODE_USE() int { return 29; }
+func NODE_FIELD_ACCESS() int { return 30; }
+func NODE_FUNC_REF() int { return 31; }
+func NODE_METHOD_CALL() int { return 32; }
+func NODE_DUNDER_PACKAGE() int { return 33; }
+func NODE_DUNDER_FILE() int { return 36; }
+func NODE_DUNDER_LINE() int { return 37; }
+func NODE_REGEX_MATCH() int { return 34; }
+func NODE_REGEX_SUBST() int { return 35; }
+func NODE_LAST() int { return 100; }
+func NODE_NEXT() int { return 101; }
+func NODE_UNDEF() int { return 102; }
+func NODE_MAP() int { return 103; }
+func NODE_SORT() int { return 104; }
+func NODE_GREP() int { return 105; }
+func NODE_TRY_CATCH() int { return 106; }
+func NODE_THROW() int { return 107; }
+func NODE_LABEL() int { return 108; }
+func NODE_GOTO() int { return 109; }
+func NODE_FOREACH_STMT() int { return 110; }
+func NODE_ANON_FUNC() int { return 111; }
+func NODE_CLOSURE_CALL() int { return 112; }
+func NODE_TERNARY() int { return 113; }
+func NODE_SWITCH() int { return 114; }
+func NODE_RANGE() int { return 115; }
+func NODE_SUPER_CALL() int { return 116; }
+func NODE_INCREMENT() int { return 117; }
+
+# Type constants
+func TYPE_INT() int { return 1; }
+func TYPE_NUM() int { return 2; }
+func TYPE_STR() int { return 3; }
+func TYPE_ARRAY() int { return 4; }
+func TYPE_HASH() int { return 5; }
+func TYPE_SCALAR() int { return 6; }
+func TYPE_VOID() int { return 7; }
+func TYPE_STRUCT() int { return 8; }
+func TYPE_FUNCPTR() int { return 9; }
+
+# ============================================================
+# Node Constructors
+# ============================================================
+
+# Create a new AST node of given type
+func ast_new_node(int $type) scalar {
+    my hash %node = ();
+    $node{"type"} = $type;
+    $node{"line"} = 0;
+    return \%node;
+}
+
+# Set line number on a node
+func ast_set_line(scalar $node, int $line) void {
+    $node->{"line"} = $line;
+}
+
+# Get line number from a node (returns 0 if not set)
+func ast_get_line(scalar $node) int {
+    return $node->{"line"};
+}
+
+# Create program node
+func ast_new_program() scalar {
+    my scalar $node = ast_new_node(NODE_PROGRAM());
+    my array @funcs = ();
+    my array @structs = ();
+    my array @uses = ();
+    my array @imports = ();
+    my array @inherits = ();
+    my array @lib_paths = ();
+    my hash %loaded_modules = ();
+    $node->{"functions"} = \@funcs;
+    $node->{"structs"} = \@structs;
+    $node->{"uses"} = \@uses;
+    $node->{"imports"} = \@imports;
+    $node->{"inherits"} = \@inherits;
+    $node->{"lib_paths"} = \@lib_paths;
+    $node->{"lib_path_count"} = 0;
+    $node->{"loaded_modules"} = \%loaded_modules;
+    $node->{"function_count"} = 0;
+    $node->{"struct_count"} = 0;
+    $node->{"use_count"} = 0;
+    $node->{"import_count"} = 0;
+    $node->{"inherit_count"} = 0;
+    $node->{"package"} = "";
+    my array @globals = ();
+    $node->{"globals"} = \@globals;
+    $node->{"global_count"} = 0;
+    # import_lib support - array of {lib_name, so_path, functions: [{name, param_count, return_type, params}]}
+    my array @import_libs = ();
+    $node->{"import_libs"} = \@import_libs;
+    $node->{"import_lib_count"} = 0;
+    return $node;
+}
+
+# Add function to program
+func ast_add_function(scalar $program, scalar $fn) void {
+    my scalar $funcs = $program->{"functions"};
+    push($funcs, $fn);
+    $program->{"function_count"} = $program->{"function_count"} + 1;
+}
+
+# Add global variable to program
+func ast_add_global(scalar $program, scalar $var_decl) void {
+    my scalar $globals = $program->{"globals"};
+    push($globals, $var_decl);
+    $program->{"global_count"} = $program->{"global_count"} + 1;
+}
+
+# Add struct to program
+func ast_add_struct(scalar $program, scalar $st) void {
+    my scalar $structs = $program->{"structs"};
+    push($structs, $st);
+    $program->{"struct_count"} = $program->{"struct_count"} + 1;
+}
+
+# Add use to program
+func ast_add_use(scalar $program, str $module) void {
+    my scalar $uses = $program->{"uses"};
+    push($uses, $module);
+    $program->{"use_count"} = $program->{"use_count"} + 1;
+}
+
+# Add inherit to program (parent package name)
+func ast_add_inherit(scalar $program, str $parent) void {
+    my scalar $inherits = $program->{"inherits"};
+    push($inherits, $parent);
+    $program->{"inherit_count"} = $program->{"inherit_count"} + 1;
+}
+
+# Add imported function name to program
+func ast_add_import(scalar $program, str $func_name) void {
+    my scalar $imports = $program->{"imports"};
+    push($imports, $func_name);
+    $program->{"import_count"} = $program->{"import_count"} + 1;
+}
+
+# Add lib path to program
+func ast_add_lib_path(scalar $program, str $path) void {
+    my scalar $paths = $program->{"lib_paths"};
+    push($paths, $path);
+    $program->{"lib_path_count"} = $program->{"lib_path_count"} + 1;
+}
+
+# Check if module is already loaded
+func ast_is_module_loaded(scalar $program, str $module) int {
+    my scalar $loaded = $program->{"loaded_modules"};
+    my int $val = $loaded->{$module};
+    if ($val == 1) {
+        return 1;
+    }
+    return 0;
+}
+
+# Mark module as loaded
+func ast_mark_module_loaded(scalar $program, str $module) void {
+    my scalar $loaded = $program->{"loaded_modules"};
+    $loaded->{$module} = 1;
+}
+
+# Add an imported library with its function info
+# $lib_info is a hash with: lib_name, so_path, functions (array of function info)
+func ast_add_import_lib(scalar $program, scalar $lib_info) void {
+    my scalar $libs = $program->{"import_libs"};
+    push($libs, $lib_info);
+    $program->{"import_lib_count"} = $program->{"import_lib_count"} + 1;
+}
+
+# Create extern function node
+func ast_new_extern_func(str $name) scalar {
+    my scalar $node = ast_new_node(NODE_EXTERN_FUNC());
+    my array @params = ();
+    $node->{"name"} = $name;
+    $node->{"return_type"} = TYPE_VOID();
+    $node->{"params"} = \@params;
+    $node->{"param_count"} = 0;
+    $node->{"is_extern"} = 1;
+    return $node;
+}
+
+# Create struct node
+func ast_new_struct(str $name) scalar {
+    my scalar $node = ast_new_node(NODE_STRUCT());
+    my array @fields = ();
+    $node->{"name"} = $name;
+    $node->{"fields"} = \@fields;
+    $node->{"field_count"} = 0;
+    return $node;
+}
+
+# Add field to struct
+func ast_add_field(scalar $st, str $name, int $field_type, str $sigil) void {
+    my hash %field = ();
+    $field{"name"} = $name;
+    $field{"field_type"} = $field_type;
+    $field{"sigil"} = $sigil;
+    my scalar $fields = $st->{"fields"};
+    push($fields, \%field);
+    $st->{"field_count"} = $st->{"field_count"} + 1;
+}
+
+# Create function node
+func ast_new_function(str $name, int $return_type) scalar {
+    my scalar $node = ast_new_node(NODE_FUNC());
+    my array @params = ();
+    $node->{"name"} = $name;
+    $node->{"return_type"} = $return_type;
+    $node->{"params"} = \@params;
+    $node->{"param_count"} = 0;
+    $node->{"body"} = 0;  # Will be set later
+    $node->{"is_extern"} = 0;
+    return $node;
+}
+
+# Add parameter to function
+func ast_add_param(scalar $fn, scalar $param) void {
+    my scalar $params = $fn->{"params"};
+    push($params, $param);
+    $fn->{"param_count"} = $fn->{"param_count"} + 1;
+}
+
+# Create parameter node
+func ast_new_param(str $name, int $param_type, str $sigil) scalar {
+    my scalar $node = ast_new_node(NODE_PARAM());
+    $node->{"name"} = $name;
+    $node->{"param_type"} = $param_type;
+    $node->{"sigil"} = $sigil;
+    $node->{"is_optional"} = 0;
+    $node->{"default_value"} = 0;
+    return $node;
+}
+
+# Create block node
+func ast_new_block() scalar {
+    my scalar $node = ast_new_node(NODE_BLOCK());
+    my array @stmts = ();
+    $node->{"statements"} = \@stmts;
+    $node->{"statement_count"} = 0;
+    return $node;
+}
+
+# Add statement to block
+func ast_add_statement(scalar $block, scalar $stmt) void {
+    my scalar $stmts = $block->{"statements"};
+    push($stmts, $stmt);
+    $block->{"statement_count"} = $block->{"statement_count"} + 1;
+}
+
+# Create variable declaration
+func ast_new_var_decl(str $name, int $var_type, str $sigil) scalar {
+    my scalar $node = ast_new_node(NODE_VAR_DECL());
+    $node->{"name"} = $name;
+    $node->{"var_type"} = $var_type;
+    $node->{"sigil"} = $sigil;
+    $node->{"init"} = 0;
+    return $node;
+}
+
+# Create if statement
+func ast_new_if_stmt(scalar $condition, scalar $then_block) scalar {
+    my scalar $node = ast_new_node(NODE_IF_STMT());
+    my array @elsif_conds = ();
+    my array @elsif_blocks = ();
+    $node->{"condition"} = $condition;
+    $node->{"then_block"} = $then_block;
+    $node->{"elsif_conditions"} = \@elsif_conds;
+    $node->{"elsif_blocks"} = \@elsif_blocks;
+    $node->{"elsif_count"} = 0;
+    $node->{"else_block"} = 0;
+    return $node;
+}
+
+# Add elsif clause to if statement
+func ast_add_elsif(scalar $if_stmt, scalar $condition, scalar $block) void {
+    my scalar $conds = $if_stmt->{"elsif_conditions"};
+    my scalar $blocks = $if_stmt->{"elsif_blocks"};
+    push($conds, $condition);
+    push($blocks, $block);
+    $if_stmt->{"elsif_count"} = $if_stmt->{"elsif_count"} + 1;
+}
+
+# Create while statement
+func ast_new_while_stmt(scalar $condition, scalar $body, str $label) scalar {
+    my scalar $node = ast_new_node(NODE_WHILE_STMT());
+    $node->{"condition"} = $condition;
+    $node->{"body"} = $body;
+    $node->{"label"} = $label;
+    return $node;
+}
+
+# Create for statement
+func ast_new_for_stmt(scalar $init, scalar $cond, scalar $update, scalar $body, str $label) scalar {
+    my scalar $node = ast_new_node(NODE_FOR_STMT());
+    $node->{"init"} = $init;
+    $node->{"condition"} = $cond;
+    $node->{"update"} = $update;
+    $node->{"body"} = $body;
+    $node->{"label"} = $label;
+    return $node;
+}
+
+# Create foreach statement (foreach my type $var (@array) or foreach $var (@array))
+func ast_new_foreach_stmt(scalar $var_decl, str $var_name, scalar $array_expr, scalar $body, str $label) scalar {
+    my scalar $node = ast_new_node(NODE_FOREACH_STMT());
+    $node->{"var_decl"} = $var_decl;      # Variable declaration node (or undef if using existing var)
+    $node->{"var_name"} = $var_name;      # Variable name (for existing var case)
+    $node->{"array"} = $array_expr;       # Array expression to iterate
+    $node->{"body"} = $body;              # Loop body
+    $node->{"label"} = $label;            # Optional label for last/next
+    return $node;
+}
+
+# Create return statement
+func ast_new_return_stmt(scalar $value) scalar {
+    my scalar $node = ast_new_node(NODE_RETURN_STMT());
+    $node->{"value"} = $value;
+    return $node;
+}
+
+# Create last statement (break from loop)
+func ast_new_last(str $label) scalar {
+    my scalar $node = ast_new_node(NODE_LAST());
+    $node->{"label"} = $label;
+    return $node;
+}
+
+# Create next statement (continue loop)
+func ast_new_next(str $label) scalar {
+    my scalar $node = ast_new_node(NODE_NEXT());
+    $node->{"label"} = $label;
+    return $node;
+}
+
+# Create expression statement
+func ast_new_expr_stmt(scalar $expr) scalar {
+    my scalar $node = ast_new_node(NODE_EXPR_STMT());
+    $node->{"expr"} = $expr;
+    return $node;
+}
+
+# Create binary operation
+func ast_new_binary_op(str $op, scalar $left, scalar $right) scalar {
+    my scalar $node = ast_new_node(NODE_BINARY_OP());
+    $node->{"op"} = $op;
+    $node->{"left"} = $left;
+    $node->{"right"} = $right;
+    return $node;
+}
+
+# Create unary operation
+func ast_new_unary_op(str $op, scalar $operand) scalar {
+    my scalar $node = ast_new_node(NODE_UNARY_OP());
+    $node->{"op"} = $op;
+    $node->{"operand"} = $operand;
+    return $node;
+}
+
+# Create increment/decrement operation (++ or --)
+# $op is "++" or "--", $is_prefix is 1 for prefix, 0 for postfix
+func ast_new_increment(str $op, scalar $operand, int $is_prefix) scalar {
+    my scalar $node = ast_new_node(NODE_INCREMENT());
+    $node->{"op"} = $op;
+    $node->{"operand"} = $operand;
+    $node->{"is_prefix"} = $is_prefix;
+    return $node;
+}
+
+# Create function call
+func ast_new_call(str $name) scalar {
+    my scalar $node = ast_new_node(NODE_CALL());
+    my array @args = ();
+    $node->{"name"} = $name;
+    $node->{"args"} = \@args;
+    $node->{"arg_count"} = 0;
+    return $node;
+}
+
+# Add argument to call
+func ast_add_arg(scalar $call, scalar $arg) void {
+    my scalar $args = $call->{"args"};
+    push($args, $arg);
+    $call->{"arg_count"} = $call->{"arg_count"} + 1;
+}
+
+# Create variable reference
+func ast_new_variable(str $name, str $sigil) scalar {
+    my scalar $node = ast_new_node(NODE_VARIABLE());
+    $node->{"name"} = $name;
+    $node->{"sigil"} = $sigil;
+    return $node;
+}
+
+# Create integer literal
+func ast_new_int_literal(int $value) scalar {
+    my scalar $node = ast_new_node(NODE_INT_LITERAL());
+    $node->{"value"} = $value;
+    return $node;
+}
+
+# Create number literal
+func ast_new_num_literal(num $value) scalar {
+    my scalar $node = ast_new_node(NODE_NUM_LITERAL());
+    $node->{"value"} = $value;
+    return $node;
+}
+
+# Create string literal
+func ast_new_str_literal(str $value) scalar {
+    my scalar $node = ast_new_node(NODE_STR_LITERAL());
+    $node->{"value"} = $value;
+    return $node;
+}
+
+# Create undef literal
+func ast_new_undef() scalar {
+    my scalar $node = ast_new_node(NODE_UNDEF());
+    return $node;
+}
+
+# Create map expression: map { block } @array
+func ast_new_map(scalar $block, scalar $array_expr) scalar {
+    my scalar $node = ast_new_node(NODE_MAP());
+    $node->{"block"} = $block;
+    $node->{"array"} = $array_expr;
+    return $node;
+}
+
+# Create sort expression: sort { $a <=> $b } @array
+func ast_new_sort(scalar $block, scalar $array_expr) scalar {
+    my scalar $node = ast_new_node(NODE_SORT());
+    $node->{"block"} = $block;
+    $node->{"array"} = $array_expr;
+    return $node;
+}
+
+# Create grep expression: grep { block } @array
+func ast_new_grep(scalar $block, scalar $array_expr) scalar {
+    my scalar $node = ast_new_node(NODE_GREP());
+    $node->{"block"} = $block;
+    $node->{"array"} = $array_expr;
+    return $node;
+}
+
+# Create assignment
+func ast_new_assign(str $op, scalar $target, scalar $value) scalar {
+    my scalar $node = ast_new_node(NODE_ASSIGN());
+    $node->{"op"} = $op;
+    $node->{"target"} = $target;
+    $node->{"value"} = $value;
+    return $node;
+}
+
+# Create array subscript
+func ast_new_subscript(scalar $arr, scalar $index) scalar {
+    my scalar $node = ast_new_node(NODE_SUBSCRIPT());
+    $node->{"array"} = $arr;
+    $node->{"index"} = $index;
+    return $node;
+}
+
+# Create hash access
+func ast_new_hash_access(scalar $hash_var, scalar $key) scalar {
+    my scalar $node = ast_new_node(NODE_HASH_ACCESS());
+    $node->{"hash"} = $hash_var;
+    $node->{"key"} = $key;
+    return $node;
+}
+
+# Create reference
+func ast_new_ref(scalar $target, str $ref_type) scalar {
+    my scalar $node = ast_new_node(NODE_REF());
+    $node->{"target"} = $target;
+    $node->{"ref_type"} = $ref_type;
+    return $node;
+}
+
+# Create hash dereference ($ref->{key})
+func ast_new_deref_hash(scalar $ref_expr, scalar $key) scalar {
+    my scalar $node = ast_new_node(NODE_DEREF_HASH());
+    $node->{"ref"} = $ref_expr;
+    $node->{"key"} = $key;
+    return $node;
+}
+
+# Create array dereference ($ref->[index])
+func ast_new_deref_array(scalar $ref_expr, scalar $index) scalar {
+    my scalar $node = ast_new_node(NODE_DEREF_ARRAY());
+    $node->{"ref"} = $ref_expr;
+    $node->{"index"} = $index;
+    return $node;
+}
+
+# Create scalar dereference ($$ref) or array/hash dereference (@{}, %{})
+func ast_new_deref_scalar(scalar $ref_expr, str $sigil) scalar {
+    my scalar $node = ast_new_node(NODE_DEREF_SCALAR());
+    $node->{"ref"} = $ref_expr;
+    $node->{"sigil"} = $sigil;
+    return $node;
+}
+
+# Create anonymous hash ({ key => value, ... })
+func ast_new_anon_hash() scalar {
+    my scalar $node = ast_new_node(NODE_ANON_HASH());
+    my array @keys = ();
+    my array @values = ();
+    $node->{"keys"} = \@keys;
+    $node->{"values"} = \@values;
+    $node->{"pair_count"} = 0;
+    return $node;
+}
+
+# Add pair to anonymous hash
+func ast_add_hash_pair(scalar $hash_node, str $key, scalar $value) void {
+    my scalar $keys = $hash_node->{"keys"};
+    my scalar $values = $hash_node->{"values"};
+    push($keys, $key);
+    push($values, $value);
+    $hash_node->{"pair_count"} = $hash_node->{"pair_count"} + 1;
+}
+
+# Create anonymous array ([ elem, ... ])
+func ast_new_anon_array() scalar {
+    my scalar $node = ast_new_node(NODE_ANON_ARRAY());
+    my array @elems = ();
+    $node->{"elements"} = \@elems;
+    $node->{"element_count"} = 0;
+    return $node;
+}
+
+# Add element to anonymous array
+func ast_add_array_elem(scalar $arr_node, scalar $elem) void {
+    my scalar $elems = $arr_node->{"elements"};
+    push($elems, $elem);
+    $arr_node->{"element_count"} = $arr_node->{"element_count"} + 1;
+}
+
+# Create field access node (obj->field)
+func ast_new_field_access(scalar $obj, str $field) scalar {
+    my scalar $node = ast_new_node(NODE_FIELD_ACCESS());
+    $node->{"object"} = $obj;
+    $node->{"field"} = $field;
+    return $node;
+}
+
+# Create function reference node (&func_name)
+func ast_new_func_ref(str $name) scalar {
+    my scalar $node = ast_new_node(NODE_FUNC_REF());
+    $node->{"name"} = $name;
+    return $node;
+}
+
+# Create method call node ($obj->method(args))
+func ast_new_method_call(scalar $object, str $method) scalar {
+    my scalar $node = ast_new_node(NODE_METHOD_CALL());
+    my array @args = ();
+    $node->{"object"} = $object;
+    $node->{"method"} = $method;
+    $node->{"args"} = \@args;
+    $node->{"arg_count"} = 0;
+    return $node;
+}
+
+# Create SUPER::method() call node
+func ast_new_super_call(str $method) scalar {
+    my scalar $node = ast_new_node(NODE_SUPER_CALL());
+    my array @args = ();
+    $node->{"method"} = $method;
+    $node->{"args"} = \@args;
+    $node->{"arg_count"} = 0;
+    return $node;
+}
+
+# Create __PACKAGE__ node
+func ast_new_dunder_package() scalar {
+    return ast_new_node(NODE_DUNDER_PACKAGE());
+}
+
+# Create __FILE__ node
+func ast_new_dunder_file() scalar {
+    return ast_new_node(NODE_DUNDER_FILE());
+}
+
+# Create __LINE__ node (stores the line number)
+func ast_new_dunder_line(int $line) scalar {
+    my scalar $node = ast_new_node(NODE_DUNDER_LINE());
+    $node->{"line_value"} = $line;
+    return $node;
+}
+
+# Create regex match node ($str =~ /pattern/ or $str !~ /pattern/)
+func ast_new_regex_match(str $op, scalar $target, str $pattern, str $flags) scalar {
+    my scalar $node = ast_new_node(NODE_REGEX_MATCH());
+    $node->{"op"} = $op;           # "=~" or "!~"
+    $node->{"target"} = $target;   # Expression being matched
+    $node->{"pattern"} = $pattern;
+    $node->{"flags"} = $flags;
+    return $node;
+}
+
+# Create regex substitution node ($str =~ s/pattern/replacement/flags)
+func ast_new_regex_subst(scalar $target, str $pattern, str $replacement, str $flags) scalar {
+    my scalar $node = ast_new_node(NODE_REGEX_SUBST());
+    $node->{"target"} = $target;   # Variable being modified
+    $node->{"pattern"} = $pattern;
+    $node->{"replacement"} = $replacement;
+    $node->{"flags"} = $flags;
+    return $node;
+}
+
+# Create try/catch node
+func ast_new_try_catch(scalar $try_block, str $catch_var, scalar $catch_block) scalar {
+    my scalar $node = ast_new_node(NODE_TRY_CATCH());
+    $node->{"try_block"} = $try_block;
+    $node->{"catch_var"} = $catch_var;     # Variable name for exception (e.g., "$e")
+    $node->{"catch_block"} = $catch_block;
+    return $node;
+}
+
+# Create throw node
+func ast_new_throw(scalar $expr) scalar {
+    my scalar $node = ast_new_node(NODE_THROW());
+    $node->{"expr"} = $expr;
+    return $node;
+}
+
+# Create a label node
+func ast_new_label(str $name) scalar {
+    my scalar $node = ast_new_node(NODE_LABEL());
+    $node->{"name"} = $name;
+    return $node;
+}
+
+# Create a goto node
+func ast_new_goto(str $target) scalar {
+    my scalar $node = ast_new_node(NODE_GOTO());
+    $node->{"target"} = $target;
+    return $node;
+}
+
+# Create anonymous function node
+func ast_new_anon_func(int $return_type) scalar {
+    my scalar $node = ast_new_node(NODE_ANON_FUNC());
+    my array @params = ();
+    my array @captures = ();
+    $node->{"return_type"} = $return_type;
+    $node->{"params"} = \@params;
+    $node->{"param_count"} = 0;
+    $node->{"body"} = 0;
+    $node->{"captures"} = \@captures;
+    $node->{"capture_count"} = 0;
+    return $node;
+}
+
+# Create closure call node ($closure->(args))
+func ast_new_closure_call(scalar $closure, scalar $args, int $arg_count) scalar {
+    my scalar $node = ast_new_node(NODE_CLOSURE_CALL());
+    $node->{"closure"} = $closure;
+    $node->{"args"} = $args;
+    $node->{"arg_count"} = $arg_count;
+    return $node;
+}
+
+# Create ternary expression node ($cond ? $true_val : $false_val)
+func ast_new_ternary(scalar $condition, scalar $true_expr, scalar $false_expr) scalar {
+    my scalar $node = ast_new_node(NODE_TERNARY());
+    $node->{"condition"} = $condition;
+    $node->{"true_expr"} = $true_expr;
+    $node->{"false_expr"} = $false_expr;
+    return $node;
+}
+
+# Create switch statement node
+func ast_new_switch(scalar $expr) scalar {
+    my scalar $node = ast_new_node(NODE_SWITCH());
+    my array @cases = ();
+    my array @blocks = ();
+    $node->{"expr"} = $expr;
+    $node->{"cases"} = \@cases;
+    $node->{"blocks"} = \@blocks;
+    $node->{"case_count"} = 0;
+    $node->{"default_block"} = 0;
+    $node->{"has_default"} = 0;
+    return $node;
+}
+
+# Add case to switch statement
+func ast_add_case(scalar $switch_node, scalar $case_expr, scalar $block) void {
+    my scalar $cases = $switch_node->{"cases"};
+    my scalar $blocks = $switch_node->{"blocks"};
+    push($cases, $case_expr);
+    push($blocks, $block);
+    $switch_node->{"case_count"} = $switch_node->{"case_count"} + 1;
+}
+
+# Create range expression node (start..end)
+func ast_new_range(scalar $start, scalar $end) scalar {
+    my scalar $node = ast_new_node(NODE_RANGE());
+    $node->{"start"} = $start;
+    $node->{"end"} = $end;
+    return $node;
+}
+
+# ============================================================
+# Utility functions
+# ============================================================
+
+# Get node type name for debugging
+func ast_type_name(int $type) str {
+    if ($type == NODE_PROGRAM()) { return "PROGRAM"; }
+    if ($type == NODE_FUNC()) { return "FUNC"; }
+    if ($type == NODE_PARAM()) { return "PARAM"; }
+    if ($type == NODE_BLOCK()) { return "BLOCK"; }
+    if ($type == NODE_VAR_DECL()) { return "VAR_DECL"; }
+    if ($type == NODE_IF_STMT()) { return "IF_STMT"; }
+    if ($type == NODE_WHILE_STMT()) { return "WHILE_STMT"; }
+    if ($type == NODE_FOR_STMT()) { return "FOR_STMT"; }
+    if ($type == NODE_FOREACH_STMT()) { return "FOREACH_STMT"; }
+    if ($type == NODE_RETURN_STMT()) { return "RETURN_STMT"; }
+    if ($type == NODE_EXPR_STMT()) { return "EXPR_STMT"; }
+    if ($type == NODE_BINARY_OP()) { return "BINARY_OP"; }
+    if ($type == NODE_UNARY_OP()) { return "UNARY_OP"; }
+    if ($type == NODE_CALL()) { return "CALL"; }
+    if ($type == NODE_VARIABLE()) { return "VARIABLE"; }
+    if ($type == NODE_INT_LITERAL()) { return "INT_LITERAL"; }
+    if ($type == NODE_NUM_LITERAL()) { return "NUM_LITERAL"; }
+    if ($type == NODE_STR_LITERAL()) { return "STR_LITERAL"; }
+    if ($type == NODE_ASSIGN()) { return "ASSIGN"; }
+    if ($type == NODE_SUBSCRIPT()) { return "SUBSCRIPT"; }
+    if ($type == NODE_HASH_ACCESS()) { return "HASH_ACCESS"; }
+    if ($type == NODE_REF()) { return "REF"; }
+    if ($type == NODE_DEREF_HASH()) { return "DEREF_HASH"; }
+    if ($type == NODE_DEREF_ARRAY()) { return "DEREF_ARRAY"; }
+    if ($type == NODE_DEREF_SCALAR()) { return "DEREF_SCALAR"; }
+    if ($type == NODE_ANON_HASH()) { return "ANON_HASH"; }
+    if ($type == NODE_ANON_ARRAY()) { return "ANON_ARRAY"; }
+    if ($type == NODE_TRY_CATCH()) { return "TRY_CATCH"; }
+    if ($type == NODE_THROW()) { return "THROW"; }
+    if ($type == NODE_TERNARY()) { return "TERNARY"; }
+    if ($type == NODE_SWITCH()) { return "SWITCH"; }
+    return "UNKNOWN";
+}
+
+# Get type name for debugging
+func ast_data_type_name(int $type) str {
+    if ($type == TYPE_INT()) { return "int"; }
+    if ($type == TYPE_NUM()) { return "num"; }
+    if ($type == TYPE_STR()) { return "str"; }
+    if ($type == TYPE_ARRAY()) { return "array"; }
+    if ($type == TYPE_HASH()) { return "hash"; }
+    if ($type == TYPE_SCALAR()) { return "scalar"; }
+    if ($type == TYPE_VOID()) { return "void"; }
+    return "unknown";
+}

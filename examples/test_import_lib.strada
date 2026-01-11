@@ -1,0 +1,32 @@
+# test_import_lib.strada - Test the import_lib feature
+# This imports MathLib.so as if it were a normal module
+
+use lib "lib";
+import_lib "MathLib";
+
+func main() int {
+    say("Testing import_lib feature...");
+
+    # Test addition
+    my int $sum = MathLib_add(10, 32);
+    say("10 + 32 = " . $sum);
+
+    # Test subtraction
+    my int $diff = MathLib_subtract(100, 58);
+    say("100 - 58 = " . $diff);
+
+    # Test multiplication
+    my int $prod = MathLib_multiply(6, 7);
+    say("6 * 7 = " . $prod);
+
+    # Test double
+    my int $dbl = MathLib_double_val(21);
+    say("double(21) = " . $dbl);
+
+    # Test string function
+    my str $greeting = MathLib_greet("World");
+    say($greeting);
+
+    say("All import_lib tests passed!");
+    return 0;
+}

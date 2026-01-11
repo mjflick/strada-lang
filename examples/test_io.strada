@@ -1,0 +1,37 @@
+# test_io.strada - Test printf, sprintf, warn
+
+func main() int {
+    say("=== Testing New I/O Functions ===");
+    say("");
+    
+    say("1. Testing printf():");
+    printf("Hello, %s!\n", "World");
+    printf("Number: %d\n", "42");
+    printf("Pi: %.2f\n", "3.14159");
+    say("");
+    
+    say("2. Testing sprintf():");
+    my str $formatted = sprintf("Name: %s, Age: %s", "Alice", "30");
+    say("Formatted string: " . $formatted);
+    
+    my str $msg = sprintf("Error code: %s", "404");
+    say("Message: " . $msg);
+    say("");
+    
+    say("3. Testing warn():");
+    warn("This is a warning message");
+    warn("Warning: %s", "Something might be wrong");
+    say("");
+    
+    say("4. Combining functions:");
+    my str $user = "Bob";
+    my str $greeting = sprintf("Hello, %s!", $user);
+    say($greeting);
+    
+    printf("User: %s, Status: %s\n", $user, "active");
+    say("");
+    
+    say("✓ All I/O functions working!");
+    
+    return 0;
+}

@@ -1,0 +1,82 @@
+# lib/compress.strada - Compression library bindings
+#
+# Provides gzip compression for HTTP responses
+# Uses zlib via C library wrapper
+
+# Library handle (lazy loaded)
+my int $_compress_lib = 0;
+my int $_gzip_fn = 0;
+my int $_deflate_fn = 0;
+my int $_gunzip_fn = 0;
+my int $_should_compress_fn = 0;
+
+# Initialize compression library
+func compress_init() int {
+    if ($_compress_lib != 0) {
+        return 1;
+    }
+
+    # Try to load the library from common locations
+    my str $lib_path = "lib/compress/libstrada_compress.so";
+    $_compress_lib = sys::dl_open($lib_path);
+
+    if ($_compress_lib == 0) {
+        $lib_path = "../lib/compress/libstrada_compress.so";
+        $_compress_lib = sys::dl_open($lib_path);
+    }
+
+    if ($_compress_lib == 0) {
+        return 0;
+    }
+
+    $_gzip_fn = sys::dl_sym($_compress_lib, "strada_gzip_compress");
+    $_deflate_fn = sys::dl_sym($_compress_lib, "strada_deflate_compress");
+    $_gunzip_fn = sys::dl_sym($_compress_lib, "strada_gzip_decompress");
+    $_should_compress_fn = sys::dl_sym($_compress_lib, "strada_should_compress");
+
+    return 1;
+}
+
+# Compress data using gzip format
+func compress_gzip(str $data) str {
+    if (compress_init() == 0) {
+        return $data;  # Return uncompressed if library not available
+    }
+    if ($_gzip_fn == 0) {
+        return $data;
+    }
+    return sys::dl_call_str_sv($_gzip_fn, [$data]);
+}
+
+# Compress data using deflate format (no gzip header)
+func compress_deflate(str $data) str {
+    if (compress_init() == 0) {
+        return $data;
+    }
+    if ($_deflate_fn == 0) {
+        return $data;
+    }
+    return sys::dl_call_str_sv($_deflate_fn, [$data]);
+}
+
+# Decompress gzip data
+func compress_gunzip(str $data) str {
+    if (compress_init() == 0) {
+        return $data;
+    }
+    if ($_gunzip_fn == 0) {
+        return $data;
+    }
+    return sys::dl_call_str_sv($_gunzip_fn, [$data]);
+}
+
+# Check if content should be compressed based on content-type
+func compress_should_compress(str $content_type, str $data) int {
+    if (compress_init() == 0) {
+        return 0;
+    }
+    if ($_should_compress_fn == 0) {
+        return 0;
+    }
+    return sys::dl_call_int_sv($_should_compress_fn, [$content_type, $data]);
+}

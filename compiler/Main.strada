@@ -1,0 +1,153 @@
+# Main.strada - Entry point for self-hosting Strada compiler
+# This is the main compiler executable
+
+func compile(str $source, str $filename, int $debug_info, int $show_timing, int $show_warnings, int $enable_profiling, scalar $lib_paths, scalar $lib_paths_low) str {
+    my num $t0 = 0.0;
+    my num $t1 = 0.0;
+
+    # Tokenize
+    $t0 = sys::hires_time();
+    my scalar $tokens = lex_tokenize($source);
+    $t1 = sys::hires_time();
+    if ($show_timing == 1) {
+        say("  Lexer:    " . ($t1 - $t0) . " seconds");
+    }
+
+    # Parse (with optional library paths from -L and -LL flags)
+    $t0 = sys::hires_time();
+    my scalar $ast = parse_with_lib_paths($tokens, $filename, $lib_paths, $lib_paths_low);
+    $t1 = sys::hires_time();
+    if ($show_timing == 1) {
+        say("  Parser:   " . ($t1 - $t0) . " seconds");
+    }
+
+    # Semantic analysis (validates symbols, types, etc.)
+    $t0 = sys::hires_time();
+    semantic_analyze($ast, $show_warnings);
+    $t1 = sys::hires_time();
+    if ($show_timing == 1) {
+        say("  Semantic: " . ($t1 - $t0) . " seconds");
+    }
+
+    # Generate code (pass debug flag for #line directives, profiling flag)
+    $t0 = sys::hires_time();
+    my str $code = generate($ast, $filename, $debug_info, $enable_profiling);
+    $t1 = sys::hires_time();
+    if ($show_timing == 1) {
+        say("  CodeGen:  " . ($t1 - $t0) . " seconds");
+    }
+
+    return $code;
+}
+
+func print_usage() void {
+    say("Strada Compiler v1.0 (Self-Hosting)");
+    say("Usage: stradac [options] <input.strada> <output.c>");
+    say("");
+    say("Options:");
+    say("  -L <path>       Add library search path (high priority, searched first)");
+    say("  -LL <path>      Add library search path (low priority, searched last)");
+    say("  -g, --debug     Emit #line directives for source-level debugging");
+    say("  -p, --profile   Enable function profiling (timing and call counts)");
+    say("  -t, --timing    Show compilation phase timing");
+    say("  -w, --warnings  Show warnings (unused variables, etc.)");
+    say("  -h, --help      Show this help message");
+    say("");
+    say("The self-hosting Strada compiler, written in Strada.");
+}
+
+func main() int {
+    my int $arg_count = size(@ARGV);
+
+    # Parse command-line arguments
+    my int $debug_info = 0;
+    my int $show_timing = 0;
+    my int $show_warnings = 0;
+    my int $enable_profiling = 0;
+    my str $input_file = "";
+    my str $output_file = "";
+    my array @lib_paths = ();
+    my array @lib_paths_low = ();
+    my int $i = 1;
+
+    while ($i < $arg_count) {
+        my str $arg = @ARGV[$i];
+
+        if ($arg eq "-g" || $arg eq "--debug") {
+            $debug_info = 1;
+        } elsif ($arg eq "-p" || $arg eq "--profile") {
+            $enable_profiling = 1;
+        } elsif ($arg eq "-t" || $arg eq "--timing") {
+            $show_timing = 1;
+        } elsif ($arg eq "-w" || $arg eq "--warnings") {
+            $show_warnings = 1;
+        } elsif ($arg eq "-LL") {
+            # -LL <path> - add low-priority library search path
+            $i = $i + 1;
+            if ($i < $arg_count) {
+                push(@lib_paths_low, @ARGV[$i]);
+            } else {
+                say("Error: -LL requires a path argument");
+                return 1;
+            }
+        } elsif (substr($arg, 0, 3) eq "-LL") {
+            # -LL<path> (no space) - add low-priority library search path
+            my str $path = substr($arg, 3, length($arg) - 3);
+            push(@lib_paths_low, $path);
+        } elsif ($arg eq "-L") {
+            # -L <path> - add library search path
+            $i = $i + 1;
+            if ($i < $arg_count) {
+                push(@lib_paths, @ARGV[$i]);
+            } else {
+                say("Error: -L requires a path argument");
+                return 1;
+            }
+        } elsif (substr($arg, 0, 2) eq "-L") {
+            # -L<path> (no space) - add library search path
+            my str $path = substr($arg, 2, length($arg) - 2);
+            push(@lib_paths, $path);
+        } elsif ($arg eq "-h" || $arg eq "--help") {
+            print_usage();
+            return 0;
+        } elsif (substr($arg, 0, 1) eq "-") {
+            say("Unknown option: " . $arg);
+            print_usage();
+            return 1;
+        } elsif (length($input_file) == 0) {
+            $input_file = $arg;
+        } elsif (length($output_file) == 0) {
+            $output_file = $arg;
+        }
+
+        $i = $i + 1;
+    }
+
+    # Check required arguments
+    if (length($input_file) == 0 || length($output_file) == 0) {
+        print_usage();
+        return 1;
+    }
+
+    say("Strada Compiler (Self-Hosting)");
+    if ($debug_info == 1) {
+        say("Debug mode: emitting #line directives");
+    }
+    if ($enable_profiling == 1) {
+        say("Profiling mode: instrumenting functions for timing");
+    }
+    say("Compiling: " . $input_file . " -> " . $output_file);
+
+    # Read source file
+    my str $source = slurp($input_file);
+
+    # Compile (pass lib paths)
+    my str $code = compile($source, $input_file, $debug_info, $show_timing, $show_warnings, $enable_profiling, \@lib_paths, \@lib_paths_low);
+
+    # Write output
+    spew($output_file, $code);
+
+    say("Success! Generated " . $output_file);
+
+    return 0;
+}

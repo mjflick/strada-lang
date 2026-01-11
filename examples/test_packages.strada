@@ -1,0 +1,30 @@
+# test_packages.strada - Test package/module support
+
+use lib "lib";
+use Math::Utils;
+use File::IO;
+
+func main() int {
+    say("╔══════════════════════════════════════╗");
+    say("║  Package/Module Test                 ║");
+    say("╚══════════════════════════════════════╝");
+    say("");
+    
+    # For now, just test that the syntax parses correctly
+    say("Package syntax parsed successfully!");
+    say("");
+    
+    # Test that regular functions still work
+    my int $x = 5;
+    my int $y = 3;
+    say("x = " . $x);
+    say("y = " . $y);
+    say("x + y = " . ($x + $y));
+    
+    say("");
+    say("╔══════════════════════════════════════╗");
+    say("║  ✓ Package test complete!            ║");
+    say("╚══════════════════════════════════════╝");
+    
+    return 0;
+}

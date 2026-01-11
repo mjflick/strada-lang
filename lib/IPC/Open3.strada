@@ -1,0 +1,174 @@
+# IPC::Open3 - Run a command with access to stdin, stdout, and stderr
+#
+# Similar to Perl's IPC::Open3 module
+#
+# Usage:
+#   my hash %result = open3("command");
+#   write_fd($result{"stdin"}, "input\n");
+#   close_fd($result{"stdin"});
+#   my str $output = read_all_fd($result{"stdout"});
+#   my str $errors = read_all_fd($result{"stderr"});
+#   my int $pid = waitpid($result{"pid"}, 0);
+
+package IPC::Open3;
+
+# open3 - Run a command with full I/O control
+# Returns a hash with:
+#   pid    - Child process ID
+#   stdin  - File descriptor to write to child's stdin
+#   stdout - File descriptor to read child's stdout
+#   stderr - File descriptor to read child's stderr
+#
+func open3(str $cmd) hash {
+    my hash %result = ();
+
+    # Create pipes for stdin, stdout, stderr
+    my scalar $stdin_pipe = pipe();
+    my scalar $stdout_pipe = pipe();
+    my scalar $stderr_pipe = pipe();
+
+    if (!defined($stdin_pipe) || !defined($stdout_pipe) || !defined($stderr_pipe)) {
+        $result{"error"} = "Failed to create pipes";
+        return \%result;
+    }
+
+    # stdin_pipe:  [0]=read (child),  [1]=write (parent)
+    # stdout_pipe: [0]=read (parent), [1]=write (child)
+    # stderr_pipe: [0]=read (parent), [1]=write (child)
+
+    my int $pid = fork();
+
+    if ($pid == 0) {
+        # Child process
+
+        # Redirect stdin from pipe
+        close_fd($stdin_pipe->[1]);   # Close write end
+        dup2($stdin_pipe->[0], 0);
+        close_fd($stdin_pipe->[0]);
+
+        # Redirect stdout to pipe
+        close_fd($stdout_pipe->[0]);  # Close read end
+        dup2($stdout_pipe->[1], 1);
+        close_fd($stdout_pipe->[1]);
+
+        # Redirect stderr to pipe
+        close_fd($stderr_pipe->[0]);  # Close read end
+        dup2($stderr_pipe->[1], 2);
+        close_fd($stderr_pipe->[1]);
+
+        # Execute the command
+        exec($cmd);
+
+        # If exec returns, it failed
+        exit(127);
+    } elsif ($pid > 0) {
+        # Parent process
+
+        # Close unused ends of pipes
+        close_fd($stdin_pipe->[0]);   # Close read end
+        close_fd($stdout_pipe->[1]);  # Close write end
+        close_fd($stderr_pipe->[1]);  # Close write end
+
+        $result{"pid"} = $pid;
+        $result{"stdin"} = $stdin_pipe->[1];
+        $result{"stdout"} = $stdout_pipe->[0];
+        $result{"stderr"} = $stderr_pipe->[0];
+    } else {
+        $result{"error"} = "Fork failed";
+    }
+
+    return \%result;
+}
+
+# open2 - Like open3 but combines stdout and stderr
+# Returns a hash with:
+#   pid    - Child process ID
+#   stdin  - File descriptor to write to child's stdin
+#   stdout - File descriptor to read child's combined output
+#
+func open2(str $cmd) hash {
+    my hash %result = ();
+
+    my scalar $stdin_pipe = pipe();
+    my scalar $stdout_pipe = pipe();
+
+    if (!defined($stdin_pipe) || !defined($stdout_pipe)) {
+        $result{"error"} = "Failed to create pipes";
+        return \%result;
+    }
+
+    my int $pid = fork();
+
+    if ($pid == 0) {
+        # Child process
+        close_fd($stdin_pipe->[1]);
+        dup2($stdin_pipe->[0], 0);
+        close_fd($stdin_pipe->[0]);
+
+        close_fd($stdout_pipe->[0]);
+        dup2($stdout_pipe->[1], 1);
+        dup2($stdout_pipe->[1], 2);  # stderr -> stdout
+        close_fd($stdout_pipe->[1]);
+
+        exec($cmd);
+        exit(127);
+    } elsif ($pid > 0) {
+        # Parent process
+        close_fd($stdin_pipe->[0]);
+        close_fd($stdout_pipe->[1]);
+
+        $result{"pid"} = $pid;
+        $result{"stdin"} = $stdin_pipe->[1];
+        $result{"stdout"} = $stdout_pipe->[0];
+    } else {
+        $result{"error"} = "Fork failed";
+    }
+
+    return \%result;
+}
+
+# cmd_output - Simple command capture (like backticks)
+# Runs command and returns its stdout
+#
+func cmd_output(str $cmd) str {
+    my scalar $pipe = pipe();
+    if (!defined($pipe)) {
+        return "";
+    }
+
+    my int $pid = fork();
+
+    if ($pid == 0) {
+        # Child
+        close_fd($pipe->[0]);
+        dup2($pipe->[1], 1);
+        close_fd($pipe->[1]);
+        exec($cmd);
+        exit(127);
+    } elsif ($pid > 0) {
+        # Parent
+        close_fd($pipe->[1]);
+        my str $output = read_all_fd($pipe->[0]);
+        close_fd($pipe->[0]);
+        wait();
+        return $output;
+    }
+
+    return "";
+}
+
+# run - Run command and return exit status
+#
+func run(str $cmd) int {
+    my int $pid = fork();
+
+    if ($pid == 0) {
+        exec($cmd);
+        exit(127);
+    } elsif ($pid > 0) {
+        wait();
+        return 0;  # TODO: get actual exit status
+    }
+
+    return -1;
+}

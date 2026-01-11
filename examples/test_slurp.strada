@@ -1,0 +1,75 @@
+# Example: Implementing slurp in Strada
+
+# Implementation using sys::fgets
+func my_slurp_fgets(str $filename) str {
+    my scalar $fh = sys::open($filename, "r");
+    if (!defined($fh)) {
+        return "";
+    }
+
+    my str $contents = "";
+    my str $line = sys::fgets($fh, 4096);
+    while (length($line) > 0) {
+        $contents = $contents . $line;
+        $line = sys::fgets($fh, 4096);
+    }
+
+    sys::close($fh);
+    return $contents;
+}
+
+# Implementation using readline
+# Note: readline() strips newlines, so we add them back
+func my_slurp_readline(str $filename) str {
+    my scalar $fh = sys::open($filename, "r");
+    if (!defined($fh)) {
+        return "";
+    }
+
+    my str $contents = "";
+    my str $line = readline($fh);
+    while (defined($line)) {
+        $contents = $contents . $line . "\n";
+        $line = readline($fh);
+    }
+
+    sys::close($fh);
+    return $contents;
+}
+
+func main() int {
+    # Create a test file
+    my scalar $fh = sys::open("/tmp/test_slurp_data.txt", "w");
+    sys::fputs("Line 1\n", $fh);
+    sys::fputs("Line 2\n", $fh);
+    sys::fputs("Line 3\n", $fh);
+    sys::close($fh);
+
+    say("=== Testing slurp implementations ===");
+    say("");
+
+    # Test built-in slurp
+    say("Built-in slurp():");
+    my str $builtin = slurp("/tmp/test_slurp_data.txt");
+    say($builtin);
+
+    # Test fgets implementation
+    say("my_slurp_fgets():");
+    my str $fgets_result = my_slurp_fgets("/tmp/test_slurp_data.txt");
+    say($fgets_result);
+
+    # Test read_line implementation
+    say("my_slurp_readline():");
+    my str $readline_result = my_slurp_readline("/tmp/test_slurp_data.txt");
+    say($readline_result);
+
+    # Verify they all match
+    say("=== Verification ===");
+    if ($builtin eq $fgets_result && $builtin eq $readline_result) {
+        say("All implementations produce identical output!");
+    } else {
+        say("WARNING: Outputs differ!");
+    }
+
+    return 0;
+}

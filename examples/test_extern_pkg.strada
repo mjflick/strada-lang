@@ -1,0 +1,33 @@
+# Test extern functions don't get package prefix
+package MyLib::Utils;
+
+# This should be exported as "compute" not "MyLib_Utils_compute"
+extern func compute(int $a, int $b) int {
+    return $a + $b;
+}
+
+# This internal function should get the prefix
+func helper(int $x) int {
+    return $x * 2;
+}
+
+# This should call MyLib_Utils_helper internally
+func process(int $val) int {
+    return helper($val) + 10;
+}
+
+# Strada-callable wrapper for compute (for testing from Strada code)
+func strada_compute(int $a, int $b) int {
+    return $a + $b;
+}
+
+# Test main function
+func main() int {
+    say("Testing extern package functions:");
+    say("  strada_compute(5, 3) = " . strada_compute(5, 3));
+    say("  helper(7) = " . helper(7));
+    say("  process(4) = " . process(4));
+    say("");
+    say("Note: extern func 'compute' is for C interop, not Strada calls.");
+    return 0;
+}

@@ -1,0 +1,327 @@
+# LWP_SSL - HTTP/HTTPS client library with SSL support
+#
+# This is a standalone HTTP client that supports both HTTP and HTTPS.
+# HTTPS requires the SSL library (lib/ssl/libstrada_ssl.so) to be built.
+#
+# Usage:
+#   use lib "lib";
+#   use LWP_SSL;
+#
+#   my hash %response = LWP_SSL::get("https://example.com");
+
+package LWP_SSL;
+
+# Parse a URL into components
+func parse_url(str $url) hash {
+    my hash %result = ();
+    $result{"scheme"} = "http";
+    $result{"host"} = "";
+    $result{"port"} = 80;
+    $result{"path"} = "/";
+    $result{"query"} = "";
+
+    my str $remaining = $url;
+
+    my int $scheme_end = index($remaining, "://");
+    if ($scheme_end > 0) {
+        $result{"scheme"} = substr($remaining, 0, $scheme_end);
+        $remaining = substr($remaining, $scheme_end + 3, length($remaining) - $scheme_end - 3);
+        if ($result{"scheme"} eq "https") {
+            $result{"port"} = 443;
+        }
+    }
+
+    my int $path_start = index($remaining, "/");
+    my str $host_part = "";
+    if ($path_start < 0) {
+        $host_part = $remaining;
+        $remaining = "/";
+    } else {
+        $host_part = substr($remaining, 0, $path_start);
+        $remaining = substr($remaining, $path_start, length($remaining) - $path_start);
+    }
+
+    my int $port_sep = index($host_part, ":");
+    if ($port_sep > 0) {
+        $result{"host"} = substr($host_part, 0, $port_sep);
+        my str $port_str = substr($host_part, $port_sep + 1, length($host_part) - $port_sep - 1);
+        $result{"port"} = cast_int($port_str);
+    } else {
+        $result{"host"} = $host_part;
+    }
+
+    my int $query_start = index($remaining, "?");
+    if ($query_start >= 0) {
+        $result{"path"} = substr($remaining, 0, $query_start);
+        $result{"query"} = substr($remaining, $query_start + 1, length($remaining) - $query_start - 1);
+    } else {
+        $result{"path"} = $remaining;
+    }
+
+    if (length($result{"path"}) == 0) {
+        $result{"path"} = "/";
+    }
+
+    return %result;
+}
+
+# URL encode
+func url_encode(str $s) str {
+    my str $result = "";
+    my int $i = 0;
+    while ($i < length($s)) {
+        my str $c = substr($s, $i, 1);
+        my int $code = ord($c);
+        if (($code >= 65 && $code <= 90) || ($code >= 97 && $code <= 122) ||
+            ($code >= 48 && $code <= 57) || $c eq "-" || $c eq "_" || $c eq "." || $c eq "~") {
+            $result = $result . $c;
+        } else {
+            my int $hi = cast_int($code / 16);
+            my int $lo = $code % 16;
+            my str $hex = "%";
+            if ($hi < 10) { $hex = $hex . chr(48 + $hi); } else { $hex = $hex . chr(55 + $hi); }
+            if ($lo < 10) { $hex = $hex . chr(48 + $lo); } else { $hex = $hex . chr(55 + $lo); }
+            $result = $result . $hex;
+        }
+        $i = $i + 1;
+    }
+    return $result;
+}
+
+# Build query string from hash
+func build_query(hash %params) str {
+    my str $result = "";
+    my array @keys = keys(%params);
+    my int $i = 0;
+    while ($i < scalar(@keys)) {
+        my str $key = @keys[$i];
+        if ($i > 0) { $result = $result . "&"; }
+        $result = $result . LWP_SSL::url_encode($key) . "=" . LWP_SSL::url_encode($params{$key});
+        $i = $i + 1;
+    }
+    return $result;
+}
+
+# Parse HTTP response
+func parse_response(str $raw) hash {
+    my hash %response = ();
+    $response{"success"} = 0;
+    $response{"status"} = 0;
+    $response{"reason"} = "";
+    $response{"content"} = "";
+
+    my int $sep = index($raw, "\r\n\r\n");
+    if ($sep < 0) {
+        $response{"error"} = "Invalid HTTP response";
+        return %response;
+    }
+
+    my str $header_section = substr($raw, 0, $sep);
+    my str $body = substr($raw, $sep + 4, length($raw) - $sep - 4);
+
+    my int $first_line_end = index($header_section, "\r\n");
+    my str $status_line = "";
+    if ($first_line_end > 0) {
+        $status_line = substr($header_section, 0, $first_line_end);
+    } else {
+        $status_line = $header_section;
+    }
+
+    my array @status_parts = split(" ", $status_line);
+    if (scalar(@status_parts) >= 2) {
+        $response{"protocol"} = @status_parts[0];
+        $response{"status"} = cast_int(@status_parts[1]);
+        if (scalar(@status_parts) >= 3) {
+            my str $reason = "";
+            my int $i = 2;
+            while ($i < scalar(@status_parts)) {
+                if ($i > 2) { $reason = $reason . " "; }
+                $reason = $reason . @status_parts[$i];
+                $i = $i + 1;
+            }
+            $response{"reason"} = $reason;
+        }
+    }
+
+    $response{"content"} = $body;
+
+    my int $status = $response{"status"};
+    if ($status >= 200 && $status < 300) {
+        $response{"success"} = 1;
+    }
+
+    return %response;
+}
+
+# Load SSL library functions
+func load_ssl_lib() array {
+    my int $ssl_lib = sys::dl_open("lib/ssl/libstrada_ssl.so");
+    if ($ssl_lib == 0) {
+        $ssl_lib = sys::dl_open("libstrada_ssl.so");
+    }
+    if ($ssl_lib == 0) {
+        return (0, 0, 0, 0, 0, 0);
+    }
+
+    my int $init_fn = sys::dl_sym($ssl_lib, "strada_ssl_init");
+    my int $connect_fn = sys::dl_sym($ssl_lib, "strada_ssl_connect");
+    my int $write_fn = sys::dl_sym($ssl_lib, "strada_ssl_write_str");
+    my int $read_fn = sys::dl_sym($ssl_lib, "strada_ssl_read_str");
+    my int $close_fn = sys::dl_sym($ssl_lib, "strada_ssl_close");
+
+    if ($connect_fn == 0 || $write_fn == 0 || $read_fn == 0 || $close_fn == 0) {
+        return (0, 0, 0, 0, 0, 0);
+    }
+
+    return ($ssl_lib, $init_fn, $connect_fn, $write_fn, $read_fn, $close_fn);
+}
+
+# Build HTTP request
+func build_request(str $method, str $host, str $path, str $body) str {
+    my str $request = $method . " " . $path . " HTTP/1.1\r\n";
+    $request = $request . "Host: " . $host . "\r\n";
+    $request = $request . "User-Agent: Strada-LWP/1.0\r\n";
+    $request = $request . "Connection: close\r\n";
+
+    if (length($body) > 0) {
+        $request = $request . "Content-Type: application/x-www-form-urlencoded\r\n";
+        $request = $request . "Content-Length: " . length($body) . "\r\n";
+    }
+
+    $request = $request . "\r\n";
+    if (length($body) > 0) {
+        $request = $request . $body;
+    }
+    return $request;
+}
+
+# Read HTTP response from socket
+func read_http_response(scalar $sock) str {
+    my str $response = "";
+    my int $reads = 0;
+    while ($reads < 1000) {
+        my str $chunk = sys::socket_recv($sock, 8192);
+        if (!defined($chunk) || length($chunk) == 0) {
+            break;
+        }
+        $response = $response . $chunk;
+        $reads = $reads + 1;
+    }
+    return $response;
+}
+
+# Internal: Make HTTP request (plain)
+func do_http_request(str $host, int $port, str $request) hash {
+    my hash %response = ();
+    $response{"success"} = 0;
+
+    my scalar $sock = sys::socket_client($host, $port);
+    if (!defined($sock)) {
+        $response{"error"} = "Connection failed to " . $host . ":" . $port;
+        return %response;
+    }
+
+    sys::socket_send($sock, $request);
+    my str $raw_response = LWP_SSL::read_http_response($sock);
+    sys::socket_close($sock);
+
+    return LWP_SSL::parse_response($raw_response);
+}
+
+# Internal: Make HTTPS request
+func do_https_request(str $host, int $port, str $request) hash {
+    my hash %response = ();
+    $response{"success"} = 0;
+
+    my array @ssl_fns = LWP_SSL::load_ssl_lib();
+    my int $ssl_lib = @ssl_fns[0];
+    my int $init_fn = @ssl_fns[1];
+    my int $connect_fn = @ssl_fns[2];
+    my int $write_fn = @ssl_fns[3];
+    my int $read_fn = @ssl_fns[4];
+    my int $close_fn = @ssl_fns[5];
+
+    if ($ssl_lib == 0) {
+        $response{"error"} = "SSL library not available - build lib/ssl/libstrada_ssl.so";
+        return %response;
+    }
+
+    # Initialize SSL library
+    sys::dl_call_int($init_fn, []);
+
+    # Connect returns an int handle
+    my int $conn = sys::dl_call_int_sv($connect_fn, [$host, $port]);
+    if ($conn == 0) {
+        $response{"error"} = "SSL connection failed to " . $host . ":" . $port;
+        return %response;
+    }
+
+    # Write request
+    sys::dl_call_int_sv($write_fn, [$conn, $request]);
+
+    # Read response
+    my str $raw_response = "";
+    my str $chunk = sys::dl_call_str_sv($read_fn, [$conn, 8192]);
+    while (defined($chunk) && length($chunk) > 0) {
+        $raw_response = $raw_response . $chunk;
+        $chunk = sys::dl_call_str_sv($read_fn, [$conn, 8192]);
+    }
+
+    # Close connection
+    sys::dl_call_int_sv($close_fn, [$conn]);
+
+    return LWP_SSL::parse_response($raw_response);
+}
+
+# Main request function
+func do_request(str $method, str $url, str $body) hash {
+    my hash %url_parts = LWP_SSL::parse_url($url);
+    my str $host = $url_parts{"host"};
+    my int $port = $url_parts{"port"};
+    my str $path = $url_parts{"path"};
+    my str $query = $url_parts{"query"};
+    my str $scheme = $url_parts{"scheme"};
+
+    if (length($query) > 0) {
+        $path = $path . "?" . $query;
+    }
+
+    my str $request = LWP_SSL::build_request($method, $host, $path, $body);
+
+    if ($scheme eq "https") {
+        return LWP_SSL::do_https_request($host, $port, $request);
+    } else {
+        return LWP_SSL::do_http_request($host, $port, $request);
+    }
+}
+
+# GET request
+func get(str $url) hash {
+    return LWP_SSL::do_request("GET", $url, "");
+}
+
+# POST request
+func post(str $url, str $data) hash {
+    return LWP_SSL::do_request("POST", $url, $data);
+}
+
+# POST form data
+func post_form(str $url, hash %form_data) hash {
+    my str $body = LWP_SSL::build_query(%form_data);
+    return LWP_SSL::do_request("POST", $url, $body);
+}
+
+# Simple content fetch
+func get_content(str $url) str {
+    my hash %resp = LWP_SSL::get($url);
+    if ($resp{"success"}) {
+        return $resp{"content"};
+    }
+    return "";
+}
+
+# Check if SSL is available
+func ssl_available() int {
+    my array @ssl_fns = LWP_SSL::load_ssl_lib();
+    return @ssl_fns[0] != 0 && @ssl_fns[1] != 0;
+}

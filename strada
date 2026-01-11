@@ -1,0 +1,433 @@
+#!/bin/bash
+#
+# strada - Compile Strada programs to native executables or shared libraries
+#
+# Usage: strada [options] input.strada [output]
+#
+# Options:
+#   -c          Keep the generated C file
+#   -r, --run   Run the program after compiling
+#   -o FILE     Specify output file name
+#   -O LEVEL    Optimization level (0, 1, 2, 3, s, fast)
+#   -g          Debug with Strada source (#line directives + DWARF)
+#   --c-debug   Debug with C source only (DWARF, no #line)
+#   --shared      Compile as shared library (.so)
+#   --static      Compile as fully static binary (no dynamic linking)
+#   --static-lib  Compile as static library (.a)
+#   --object      Compile to object file only (.o)
+#   -v            Verbose output
+#   -h, --help    Show this help
+#
+# Examples:
+#   strada hello.strada              # Creates ./hello
+#   strada hello.strada myapp        # Creates ./myapp
+#   strada -r hello.strada           # Compile and run
+#   strada -c -g hello.strada        # Keep .c file, debug at Strada level
+#   strada -c --c-debug hello.strada # Keep .c file, debug at C level
+#   strada --shared mylib.strada     # Creates ./mylib.so
+#   strada --static-lib mylib.strada # Creates ./mylib.a (static library)
+#   strada --object mylib.strada     # Creates ./mylib.o (object file)
+#   strada --static hello.strada     # Creates static binary (no libc dependency)
+#
+
+set -e
+#set -x
+# Find the directory where this script lives
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Paths relative to script directory
+STRADAC="$SCRIPT_DIR/stradac"
+RUNTIME_SRC="$SCRIPT_DIR/runtime/strada_runtime.c"
+RUNTIME_OBJ="$SCRIPT_DIR/runtime/strada_runtime.o"
+RUNTIME_DIR="$SCRIPT_DIR/runtime"
+
+# Default options
+KEEP_C=0
+RUN_AFTER=0
+VERBOSE=0
+OPT_LEVEL="2"
+DEBUG_SYMBOLS=0
+C_DEBUG_SYMBOLS=0
+OUTPUT_FILE=""
+SHARED_LIB=0
+STATIC_LIB=0
+OBJECT_ONLY=0
+STATIC_LINK=0
+SHOW_WARNINGS=0
+ENABLE_PROFILING=0
+LIB_PATHS=()
+LIB_PATHS_LOW=()
+
+# Colors (if terminal supports them)
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    NC='\033[0m' # No Color
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    CYAN=''
+    BOLD=''
+    NC=''
+fi
+
+usage() {
+    cat << EOF
+Usage: strada [options] input.strada [output]
+
+Compile Strada programs to native executables or shared libraries.
+
+Options:
+  -c          Keep the generated C file
+  -r, --run   Run the program after compiling
+  -o FILE     Specify output file name
+  -O LEVEL    Optimization level (0, 1, 2, 3, s, fast) [default: 2]
+  -L PATH     Add library search path (high priority, searched first)
+  -LL PATH    Add library search path (low priority, searched last)
+  -g          Debug with Strada source (emits #line directives + DWARF symbols)
+  -p, --profile  Enable function profiling (timing and call counts)
+  --c-debug   Debug with C source only (DWARF symbols, no #line directives)
+  --shared      Compile as shared library (.so)
+  --static      Compile as fully static binary (no dynamic linking)
+  --static-lib  Compile as static library (.a)
+  --object      Compile to object file only (.o)
+  -w            Show compiler warnings (unused variables, etc.)
+  -v          Verbose output
+  -h, --help  Show this help
+
+Examples:
+  strada hello.strada              # Creates ./hello
+  strada hello.strada myapp        # Creates ./myapp
+  strada -r hello.strada           # Compile and run
+  strada -L /opt/strada/lib -r app.strada  # Use custom lib path
+  strada -c -g hello.strada        # Keep .c file, debug at Strada level
+  strada -c --c-debug hello.strada # Keep .c file, debug at C level
+  strada -O0 -g test.strada        # No optimization, debug build
+  strada --shared mylib.strada     # Creates ./mylib.so
+  strada --shared -o libfoo.so foo.strada  # Custom output name
+  strada --static-lib mylib.strada # Creates ./mylib.a (static library)
+  strada --object mylib.strada     # Creates ./mylib.o (object file)
+  strada --static hello.strada     # Creates portable static binary
+
+EOF
+    exit 0
+}
+
+error() {
+    echo -e "${RED}error:${NC} $1" >&2
+    exit 1
+}
+
+info() {
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo -e "${GREEN}info:${NC} $1"
+    fi
+}
+
+warn() {
+    echo -e "${YELLOW}warning:${NC} $1" >&2
+}
+
+# Run a command, showing it first if verbose
+run_cmd() {
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo -e "${CYAN}\$${NC} $*"
+    fi
+    "$@"
+}
+
+# Show a command without running it (for display purposes)
+show_cmd() {
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo -e "${CYAN}\$${NC} $*"
+    fi
+}
+
+# Parse command line arguments
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -c)
+            KEEP_C=1
+            shift
+            ;;
+        -r|--run)
+            RUN_AFTER=1
+            shift
+            ;;
+        -o)
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
+        -O)
+            OPT_LEVEL="$2"
+            shift 2
+            ;;
+        -O*)
+            OPT_LEVEL="${1#-O}"
+            shift
+            ;;
+        -g)
+            DEBUG_SYMBOLS=1
+            shift
+            ;;
+        --c-debug)
+            C_DEBUG_SYMBOLS=1
+            shift
+            ;;
+        --shared)
+            SHARED_LIB=1
+            shift
+            ;;
+        --static)
+            STATIC_LINK=1
+            shift
+            ;;
+        --static-lib)
+            STATIC_LIB=1
+            shift
+            ;;
+        --object)
+            OBJECT_ONLY=1
+            shift
+            ;;
+        -w|--warnings)
+            SHOW_WARNINGS=1
+            shift
+            ;;
+        -p|--profile)
+            ENABLE_PROFILING=1
+            shift
+            ;;
+        -LL)
+            LIB_PATHS_LOW+=("$2")
+            shift 2
+            ;;
+        -LL*)
+            LIB_PATHS_LOW+=("${1#-LL}")
+            shift
+            ;;
+        -L)
+            LIB_PATHS+=("$2")
+            shift 2
+            ;;
+        -L*)
+            LIB_PATHS+=("${1#-L}")
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        -*)
+            error "Unknown option: $1"
+            ;;
+        *)
+            POSITIONAL+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Restore positional parameters
+set -- "${POSITIONAL[@]}"
+
+# Check for input file
+if [ $# -lt 1 ]; then
+    echo "Usage: strada [options] input.strada [output]"
+    echo "Try 'strada --help' for more information."
+    exit 1
+fi
+
+INPUT_FILE="$1"
+shift
+
+# Check input file exists
+if [ ! -f "$INPUT_FILE" ]; then
+    error "Input file not found: $INPUT_FILE"
+fi
+
+# Check input file has .strada extension
+if [[ "$INPUT_FILE" != *.strada ]]; then
+    warn "Input file does not have .strada extension"
+fi
+
+# Determine output file name
+if [ -n "$OUTPUT_FILE" ]; then
+    OUTPUT="$OUTPUT_FILE"
+elif [ $# -gt 0 ]; then
+    OUTPUT="$1"
+else
+    # Remove .strada extension and path
+    OUTPUT="$(basename "$INPUT_FILE" .strada)"
+    # Add appropriate extension for libraries
+    if [ "$SHARED_LIB" -eq 1 ]; then
+        OUTPUT="${OUTPUT}.so"
+    elif [ "$STATIC_LIB" -eq 1 ]; then
+        OUTPUT="${OUTPUT}.a"
+    elif [ "$OBJECT_ONLY" -eq 1 ]; then
+        OUTPUT="${OUTPUT}.o"
+    fi
+fi
+
+# Determine C file name
+if [ "$KEEP_C" -eq 1 ]; then
+    C_FILE="${OUTPUT}.c"
+else
+    C_FILE="$(mktemp --suffix=.c)"
+    trap "rm -f '$C_FILE'" EXIT
+fi
+
+# Check for stradac
+if [ ! -x "$STRADAC" ]; then
+    error "Strada compiler not found at $STRADAC\nRun 'make' in $SCRIPT_DIR to build it."
+fi
+
+# Check for runtime
+if [ ! -f "$RUNTIME_SRC" ]; then
+    error "Runtime not found at $RUNTIME_SRC"
+fi
+
+# Build pre-compiled runtime if needed (much faster compilation)
+build_runtime() {
+    info "Building pre-compiled runtime..."
+    if ! run_cmd gcc -O2 -std=c99 -c "$RUNTIME_SRC" -I"$RUNTIME_DIR" -o "$RUNTIME_OBJ"; then
+        error "Failed to compile runtime"
+    fi
+}
+
+if [ ! -f "$RUNTIME_OBJ" ]; then
+    build_runtime
+elif [ "$RUNTIME_SRC" -nt "$RUNTIME_OBJ" ]; then
+    info "Runtime source changed, rebuilding..."
+    build_runtime
+fi
+
+# Build gcc flags
+GCC_FLAGS="-Wall -Wextra -Wno-unused-variable -Wno-return-type -Wno-unused-but-set-variable -Wno-unused-result -Wno-comment -std=c99"
+GCC_FLAGS="$GCC_FLAGS -O$OPT_LEVEL"
+if [ "$DEBUG_SYMBOLS" -eq 1 ] || [ "$C_DEBUG_SYMBOLS" -eq 1 ]; then
+    GCC_FLAGS="$GCC_FLAGS -g"
+fi
+
+# Step 1: Compile Strada to C
+# Build stradac flags
+STRADAC_FLAGS=""
+if [ "$DEBUG_SYMBOLS" -eq 1 ]; then
+    STRADAC_FLAGS="$STRADAC_FLAGS -g"
+fi
+if [ "$SHOW_WARNINGS" -eq 1 ]; then
+    STRADAC_FLAGS="$STRADAC_FLAGS -w"
+fi
+if [ "$ENABLE_PROFILING" -eq 1 ]; then
+    STRADAC_FLAGS="$STRADAC_FLAGS -p"
+fi
+# Add library paths (high priority)
+for path in "${LIB_PATHS[@]}"; do
+    STRADAC_FLAGS="$STRADAC_FLAGS -L $path"
+done
+# Add library paths (low priority)
+for path in "${LIB_PATHS_LOW[@]}"; do
+    STRADAC_FLAGS="$STRADAC_FLAGS -LL $path"
+done
+
+info "Compiling $INPUT_FILE -> $C_FILE"
+if [ -n "$STRADAC_FLAGS" ]; then
+    if ! run_cmd "$STRADAC" $STRADAC_FLAGS "$INPUT_FILE" "$C_FILE"; then
+        error "Strada compilation failed"
+    fi
+else
+    if ! run_cmd "$STRADAC" "$INPUT_FILE" "$C_FILE"; then
+        error "Strada compilation failed"
+    fi
+fi
+
+# Step 2: Compile C to executable or library
+if [ "$SHARED_LIB" -eq 1 ]; then
+    # Shared library: -shared -fPIC, link against runtime source (not object)
+    if [ "$STATIC_LINK" -eq 1 ]; then
+        error "Cannot use --shared and --static together"
+    fi
+    if [ "$STATIC_LIB" -eq 1 ]; then
+        error "Cannot use --shared and --static-lib together"
+    fi
+    if [ "$OBJECT_ONLY" -eq 1 ]; then
+        error "Cannot use --shared and --object together"
+    fi
+    info "Compiling $C_FILE -> $OUTPUT (shared library)"
+    if ! run_cmd gcc -shared -fPIC $GCC_FLAGS -o "$OUTPUT" "$C_FILE" "$RUNTIME_SRC" -I"$RUNTIME_DIR" -ldl -lm -lpthread; then
+        error "C compilation failed"
+    fi
+elif [ "$OBJECT_ONLY" -eq 1 ]; then
+    # Object file only: compile to .o without linking
+    if [ "$STATIC_LIB" -eq 1 ]; then
+        error "Cannot use --object and --static-lib together"
+    fi
+    if [ "$STATIC_LINK" -eq 1 ]; then
+        error "Cannot use --object and --static together"
+    fi
+    info "Compiling $C_FILE -> $OUTPUT (object file)"
+    if ! run_cmd gcc -c $GCC_FLAGS -o "$OUTPUT" "$C_FILE" -I"$RUNTIME_DIR"; then
+        error "C compilation failed"
+    fi
+elif [ "$STATIC_LIB" -eq 1 ]; then
+    # Static library: compile to .o then archive with ar
+    if [ "$STATIC_LINK" -eq 1 ]; then
+        error "Cannot use --static-lib and --static together"
+    fi
+    OBJ_FILE="${OUTPUT%.a}.o"
+    RUNTIME_OBJ_STATIC="${OUTPUT%.a}_runtime.o"
+    info "Compiling $C_FILE -> $OBJ_FILE"
+    if ! run_cmd gcc -c $GCC_FLAGS -o "$OBJ_FILE" "$C_FILE" -I"$RUNTIME_DIR"; then
+        error "C compilation failed"
+    fi
+    info "Compiling runtime -> $RUNTIME_OBJ_STATIC"
+    if ! run_cmd gcc -c $GCC_FLAGS -o "$RUNTIME_OBJ_STATIC" "$RUNTIME_SRC" -I"$RUNTIME_DIR"; then
+        error "Runtime compilation failed"
+    fi
+    info "Creating archive $OUTPUT"
+    if ! run_cmd ar rcs "$OUTPUT" "$OBJ_FILE" "$RUNTIME_OBJ_STATIC"; then
+        error "ar failed"
+    fi
+    # Clean up object files
+    rm -f "$OBJ_FILE" "$RUNTIME_OBJ_STATIC"
+elif [ "$STATIC_LINK" -eq 1 ]; then
+    # Static binary: no dynamic linking, fully portable
+    # Note: -ldl removed (no dynamic loading), -lpthread needs special handling
+    info "Compiling $C_FILE -> $OUTPUT (static binary)"
+    warn "Static binaries cannot use FFI/dynamic library loading (sys::dl_open, import_lib)"
+    if ! run_cmd gcc -static $GCC_FLAGS -o "$OUTPUT" "$C_FILE" "$RUNTIME_SRC" -I"$RUNTIME_DIR" -lm -lpthread; then
+        error "C compilation failed"
+    fi
+else
+    # Executable: -rdynamic exports symbols so dynamically loaded libraries (FFI) can use runtime functions
+    info "Compiling $C_FILE -> $OUTPUT"
+    if ! run_cmd gcc -rdynamic $GCC_FLAGS -o "$OUTPUT" "$C_FILE" "$RUNTIME_OBJ" -I"$RUNTIME_DIR" -ldl -lm -lpthread; then
+        error "C compilation failed"
+    fi
+fi
+
+echo -e "${GREEN}Created:${NC} $OUTPUT"
+
+# Step 3: Run if requested
+if [ "$RUN_AFTER" -eq 1 ]; then
+    if [ "$SHARED_LIB" -eq 1 ]; then
+        warn "Cannot run a shared library directly. Use --shared without --run."
+    elif [ "$STATIC_LIB" -eq 1 ]; then
+        warn "Cannot run a static library directly. Use --static-lib without --run."
+    elif [ "$OBJECT_ONLY" -eq 1 ]; then
+        warn "Cannot run an object file directly. Use --object without --run."
+    else
+        echo ""
+        show_cmd "./$OUTPUT"
+        echo "---"
+        exec "./$OUTPUT"
+    fi
+fi

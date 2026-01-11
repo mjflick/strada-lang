@@ -1,0 +1,6 @@
+# test_exit_error.strada - Exit with error code
+
+func main() int {
+    say("Error: Something went wrong!");
+    return 1;
+}

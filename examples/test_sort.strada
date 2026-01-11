@@ -1,0 +1,50 @@
+# Test sort and nsort functions
+
+func main() int {
+    say("=== Array Sorting Demo ===");
+    say("");
+
+    # Alphabetical sort (string comparison)
+    say("--- Alphabetical Sort (sort) ---");
+    my array @fruits = ("banana", "apple", "cherry", "date", "apricot");
+    say("Original: " . join(", ", @fruits));
+
+    my array @sorted_fruits = sort(@fruits);
+    say("Sorted:   " . join(", ", @sorted_fruits));
+
+    say("");
+
+    # Numeric sort
+    say("--- Numeric Sort (nsort) ---");
+    my array @numbers = (42, 7, 100, 3, 25, 1);
+    say("Original: " . join(", ", @numbers));
+
+    my array @sorted_num = nsort(@numbers);
+    say("Sorted:   " . join(", ", @sorted_num));
+
+    say("");
+
+    # Demonstrate difference between sort and nsort with numbers
+    say("--- sort vs nsort with numbers ---");
+    my array @mixed = (1, 10, 2, 20, 3, 100);
+    say("Original:        " . join(", ", @mixed));
+    say("sort (string):   " . join(", ", sort(@mixed)));
+    say("nsort (numeric): " . join(", ", nsort(@mixed)));
+    say("");
+    say("Note: sort() compares as strings, so '10' < '2'");
+    say("      nsort() compares as numbers, so 2 < 10");
+
+    say("");
+
+    # Sort preserves original array
+    say("--- Original array unchanged ---");
+    my array @original = (3, 1, 2);
+    my array @sorted = nsort(@original);
+    say("Original after sort: " . join(", ", @original));
+    say("Sorted copy:         " . join(", ", @sorted));
+
+    say("");
+    say("Done!");
+
+    return 0;
+}

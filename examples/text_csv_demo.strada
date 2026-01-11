@@ -1,0 +1,50 @@
+# text_csv_demo.strada - Example usage of Text::CSV
+#
+# Run: ./strada examples/text_csv_demo.strada
+
+use lib "lib";
+use Text::CSV;
+
+func main() int {
+    my scalar $csv = Text::CSV::new({});
+
+    my str $line = "a,\"b\",c";
+    if (!Text::CSV::parse($csv, $line)) {
+        say("parse error: " . Text::CSV::error_diag($csv));
+        return 1;
+    }
+
+    my scalar $fields = Text::CSV::fields($csv);
+    say("Parsed fields:");
+    say("  0: " . $fields->[0]);
+    say("  1: " . $fields->[1]);
+    say("  2: " . $fields->[2]);
+
+    my scalar $out_fields = ["x", "y,z", "q\"u"];
+    if (!Text::CSV::combine($csv, $out_fields)) {
+        say("combine error: " . Text::CSV::error_diag($csv));
+        return 1;
+    }
+
+    say("Combined: " . Text::CSV::string($csv));
+
+    # Multi-line demo via getline
+    my scalar $fh = sys::open("/tmp/text_csv_demo.csv", "w");
+    sys::fwrite($fh, "a,\"multi\nline\",c\n");
+    sys::close($fh);
+
+    $fh = sys::open("/tmp/text_csv_demo.csv", "r");
+    my scalar $row = Text::CSV::getline($csv, $fh);
+    sys::close($fh);
+
+    if (defined($row)) {
+        say("Multiline row:");
+        say("  0: " . $row->[0]);
+        say("  1: " . $row->[1]);
+        say("  2: " . $row->[2]);
+    } else {
+        say("getline error: " . Text::CSV::error_diag($csv));
+    }
+
+    return 0;
+}

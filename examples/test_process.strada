@@ -1,0 +1,41 @@
+# test_process.strada - Test sleep, usleep, fork, and process functions
+
+func main() int {
+    say("=== Process Control Test ===");
+    say("");
+
+    # Test getpid
+    my int $pid = sys::getpid();
+    say("Current PID: " . $pid);
+
+    # Test usleep (100ms = 100000 microseconds)
+    say("Sleeping for 100ms...");
+    sys::usleep(100000);
+    say("Woke up!");
+
+    # Test fork
+    say("");
+    say("Forking...");
+    my int $child = sys::fork();
+
+    if ($child == 0) {
+        # Child process
+        say("  Child: Hello from child! PID=" . sys::getpid() . " PPID=" . sys::getppid());
+        sys::usleep(50000);
+        say("  Child: Exiting");
+        exit(42);
+    } elsif ($child > 0) {
+        # Parent process
+        say("  Parent: Forked child with PID=" . $child);
+        say("  Parent: Waiting for child...");
+        my int $waited = sys::wait();
+        say("  Parent: Child " . $waited . " exited");
+    } else {
+        say("  Fork failed!");
+        return 1;
+    }
+
+    say("");
+    say("=== Test Complete ===");
+    return 0;
+}

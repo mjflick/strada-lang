@@ -1,0 +1,49 @@
+# test_package_full.strada - Full package/module test
+
+# Add custom library paths
+use lib "/var/strada/lib";
+use lib "mylib";
+
+# Import modules (paths resolved at compile time)
+use Math::Utils;
+use File::IO;
+use Data::Structures;
+
+# This file is in the 'main' package (no package declaration)
+
+func helper(str $msg) void {
+    say("Helper: " . $msg);
+}
+
+func main() int {
+    say("╔══════════════════════════════════════╗");
+    say("║  Full Package Test                   ║");
+    say("╚══════════════════════════════════════╝");
+    say("");
+    
+    # Call local function
+    helper("testing packages");
+    
+    # In the future, we can call module functions like:
+    # Math::Utils::add(1, 2)
+    # or after import: add(1, 2)
+    
+    say("");
+    say("Library paths (@INC):");
+    say("  - lib (default)");
+    say("  - /var/strada/lib");
+    say("  - mylib");
+    
+    say("");
+    say("Imported modules:");
+    say("  - Math::Utils");
+    say("  - File::IO");
+    say("  - Data::Structures");
+    
+    say("");
+    say("╔══════════════════════════════════════╗");
+    say("║  ✓ Full package test complete!       ║");
+    say("╚══════════════════════════════════════╝");
+    
+    return 0;
+}

@@ -1,0 +1,52 @@
+# mathlib.strada - Simple math library for shared library demo
+
+func strada_add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func strada_multiply(int $a, int $b) int {
+    return $a * $b;
+}
+
+func strada_factorial(int $n) int {
+    if ($n <= 1) {
+        return 1;
+    }
+    
+    my int $result = 1;
+    my int $i = 2;
+    while ($i <= $n) {
+        $result = $result * $i;
+        $i = $i + 1;
+    }
+    
+    return $result;
+}
+
+func strada_fibonacci(int $n) int {
+    if ($n <= 1) {
+        return $n;
+    }
+    
+    my int $a = 0;
+    my int $b = 1;
+    my int $i = 2;
+    
+    while ($i <= $n) {
+        my int $temp = $a + $b;
+        $a = $b;
+        $b = $temp;
+        $i = $i + 1;
+    }
+    
+    return $b;
+}
+
+func main() int {
+    say("Math library test");
+    say("5 + 3 = " . strada_add(5, 3));
+    say("5 * 3 = " . strada_multiply(5, 3));
+    say("5! = " . strada_factorial(5));
+    say("fib(10) = " . strada_fibonacci(10));
+    return 0;
+}

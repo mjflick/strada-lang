@@ -1,0 +1,67 @@
+# example.strada - Sample Strada program demonstrating the language
+
+# Fibonacci function
+func fibonacci(int $n) int {
+    my int $a = 0;
+    my int $b = 1;
+    
+    if ($n == 0) {
+        return $a;
+    }
+    
+    my int $i = 0;
+    while ($i < $n) {
+        my int $temp = $a + $b;
+        $a = $b;
+        $b = $temp;
+        $i = $i + 1;
+    }
+    
+    return $a;
+}
+
+# Hash demonstration
+func test_hash() void {
+    my hash %person = ();
+    $person{"name"} = "Alice";
+    $person{"age"} = 30;
+    $person{"city"} = "NYC";
+    
+    say("Person information:");
+    dumper(\%person);
+}
+
+# Array demonstration  
+func test_array() void {
+    my array @numbers = (1, 2, 3, 4, 5);
+    
+    say("Array contents:");
+    dumper(\@numbers);
+    
+    push(@numbers, 6);
+    push(@numbers, 7);
+    
+    say("After push:");
+    dumper(\@numbers);
+    
+    my scalar $len = scalar(@numbers);
+    say("Length: " . $len);
+}
+
+# Main entry point
+func main() int {
+    say("=== Strada Language Demo ===");
+    say("");
+    
+    say("Fibonacci of 10:");
+    my int $fib = fibonacci(10);
+    say($fib);
+    say("");
+    
+    test_array();
+    say("");
+    
+    test_hash();
+    
+    return 0;
+}

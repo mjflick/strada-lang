@@ -1,0 +1,38 @@
+# test_exit.strada - Test exit codes and early returns
+
+func main() int {
+    say("=== Exit Code Examples ===");
+    say("");
+    
+    # Example 1: Success
+    say("Case 1: Success");
+    my int $success = 1;
+    if ($success == 1) {
+        say("Operation successful");
+        say("Exiting with code 0");
+        return 0;
+    }
+    
+    # Example 2: Error - file not found
+    say("Case 2: File not found error");
+    my int $file_exists = 0;
+    if ($file_exists == 0) {
+        say("Error: File not found");
+        say("Exiting with code 1");
+        return 1;
+    }
+    
+    # Example 3: Validation error
+    say("Case 3: Validation error");
+    my int $valid = 0;
+    if ($valid == 0) {
+        say("Error: Invalid input");
+        say("Exiting with code 2");
+        return 2;
+    }
+    
+    # This won't be reached
+    say("This line won't execute");
+    return 99;
+}
+

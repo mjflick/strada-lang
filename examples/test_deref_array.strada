@@ -1,0 +1,55 @@
+# test_deref_array.strada - Test converting array reference to array
+
+func main() int {
+    say("=== Array Reference to Array Test ===");
+    say("");
+    
+    # Create an array reference
+    my scalar $arr_ref = [10, 20, 30, 40, 50];
+    
+    say("Array reference created");
+    say("is_ref: " . is_ref($arr_ref));
+    say("reftype: " . reftype($arr_ref));
+    
+    # Access via arrow (reference)
+    say("");
+    say("Via arrow notation:");
+    say("  [0] = " . $arr_ref->[0]);
+    say("  [2] = " . $arr_ref->[2]);
+    
+    # Convert to regular array (not a reference)
+    say("");
+    say("Converting to regular array...");
+    my scalar $arr = deref_array($arr_ref);
+    
+    say("is_ref after deref_array: " . is_ref($arr));
+    say("Size: " . size($arr));
+    
+    # Access via subscript (regular array)
+    say("");
+    say("Via subscript notation:");
+    say("  [0] = " . $arr[0]);
+    say("  [2] = " . $arr[2]);
+    say("  [4] = " . $arr[4]);
+    
+    # Iterate with while
+    say("");
+    say("All elements:");
+    my int $i = 0;
+    while ($i < size($arr)) {
+        say("  [" . $i . "] = " . $arr[$i]);
+        $i = $i + 1;
+    }
+    
+    # Modify the copy - shouldn't affect original
+    say("");
+    $arr[0] = 999;
+    say("After modifying copy:");
+    say("  Copy [0] = " . $arr[0]);
+    say("  Original [0] = " . $arr_ref->[0]);
+    
+    say("");
+    say("=== Test Complete ===");
+    
+    return 0;
+}

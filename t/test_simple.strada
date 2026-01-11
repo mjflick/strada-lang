@@ -1,0 +1,12 @@
+func add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func main() int {
+    my int $x = 10;
+    my int $y = 20;
+    my int $result = add($x, $y);
+    say($result);
+warn Dumper \@INC;
+    return 0;
+}

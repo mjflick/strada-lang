@@ -1,0 +1,146 @@
+# crypt - Password Hashing Module for Strada
+#
+# Wraps the C crypt.h functions for secure password hashing.
+#
+# Usage:
+#   use lib "lib";
+#   use crypt;
+#
+#   # Hash a password with SHA-512 (recommended)
+#   my str $salt = crypt::gen_salt("sha512");
+#   my str $hash = crypt::crypt_hash("mypassword", $salt);
+#
+#   # Verify a password
+#   if (crypt::verify("mypassword", $hash)) {
+#       say("Password correct!");
+#   }
+#
+# Supported algorithms:
+#   - "des"     - Traditional DES (weak, 8 char max)
+#   - "md5"     - MD5 ($1$)
+#   - "sha256"  - SHA-256 ($5$)
+#   - "sha512"  - SHA-512 ($6$) - recommended
+#   - "bcrypt"  - bcrypt ($2b$) - if available
+#
+# Requires: lib/crypt/libstrada_crypt.so (build with: cd lib/crypt && make)
+
+package crypt;
+
+# Load the library - tries multiple paths
+func _get_lib() int {
+    my int $lib = sys::dl_open("lib/crypt/libstrada_crypt.so");
+    if ($lib == 0) {
+        $lib = sys::dl_open("./lib/crypt/libstrada_crypt.so");
+    }
+    if ($lib == 0) {
+        $lib = sys::dl_open("libstrada_crypt.so");
+    }
+    return $lib;
+}
+
+# Hash a password with the given salt
+# Returns the hashed password string, or empty string on error
+#
+# Example:
+#   my str $hash = crypt::crypt_hash("password", "$6$rounds=5000$saltsalt");
+func crypt_hash(str $password, str $salt) str {
+    my int $lib = crypt::_get_lib();
+    if ($lib == 0) {
+        return "";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_crypt_hash");
+    return sys::dl_call_str_sv($fn, [$password, $salt]);
+}
+
+# Generate a random salt for the specified algorithm
+# Algorithm options: "des", "md5", "sha256", "sha512", "bcrypt"
+# Returns the salt string (e.g., "$6$randomchars$")
+#
+# Example:
+#   my str $salt = crypt::gen_salt("sha512");
+func gen_salt(str $algorithm) str {
+    my int $lib = crypt::_get_lib();
+    if ($lib == 0) {
+        return "";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_crypt_gen_salt");
+    return sys::dl_call_str_sv($fn, [$algorithm]);
+}
+
+# Generate a salt with custom rounds (for sha256, sha512, bcrypt)
+# Rounds controls the computational cost (higher = more secure but slower)
+# - sha256/sha512: 1000-999999999 (default: 5000)
+# - bcrypt: 4-31 (default: 12)
+#
+# Example:
+#   my str $salt = crypt::gen_salt_rounds("sha512", 10000);
+func gen_salt_rounds(str $algorithm, int $rounds) str {
+    my int $lib = crypt::_get_lib();
+    if ($lib == 0) {
+        return "";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_crypt_gen_salt_rounds");
+    return sys::dl_call_str_sv($fn, [$algorithm, $rounds]);
+}
+
+# Verify a password against a hash
+# Returns 1 if password matches, 0 otherwise
+#
+# Example:
+#   if (crypt::verify("password", $stored_hash)) { ... }
+func verify(str $password, str $hashed) int {
+    my int $lib = crypt::_get_lib();
+    if ($lib == 0) {
+        return 0;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_crypt_verify");
+    return sys::dl_call_int_sv($fn, [$password, $hashed]);
+}
+
+# Hash a password using the recommended algorithm (SHA-512)
+# Convenience function that generates a salt automatically
+#
+# Example:
+#   my str $hash = crypt::hash_password("mypassword");
+func hash_password(str $password) str {
+    my str $salt = crypt::gen_salt("sha512");
+    return crypt::crypt_hash($password, $salt);
+}
+
+# Get the algorithm used in a hash string
+# Returns: "des", "md5", "sha256", "sha512", "bcrypt", or "unknown"
+#
+# Example:
+#   my str $algo = crypt::get_algorithm($hash);
+func get_algorithm(str $hashed) str {
+    my int $lib = crypt::_get_lib();
+    if ($lib == 0) {
+        return "unknown";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_crypt_get_algorithm");
+    return sys::dl_call_str_sv($fn, [$hashed]);
+}
+
+# Check if an algorithm is supported on this system
+# Returns 1 if supported, 0 otherwise
+#
+# Example:
+#   if (crypt::is_supported("bcrypt")) { ... }
+func is_supported(str $algorithm) int {
+    my int $lib = crypt::_get_lib();
+    if ($lib == 0) {
+        return 0;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_crypt_is_supported");
+    return sys::dl_call_int_sv($fn, [$algorithm]);
+}
+
+# Get last error message
+func error() str {
+    my int $lib = crypt::_get_lib();
+    if ($lib == 0) {
+        return "Failed to load crypt library";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_crypt_error");
+    return sys::dl_call_str($fn, []);
+}

@@ -1,0 +1,52 @@
+# extern_lib.strada - Shared library with C-callable extern functions
+# These functions can be called directly from C without wrappers!
+
+# Add two integers - C-callable
+extern func add_integers(int $a, int $b) int {
+    return $a + $b;
+}
+
+# Multiply two integers - C-callable
+extern func multiply_integers(int $a, int $b) int {
+    return $a * $b;
+}
+
+# Subtract - C-callable
+extern func subtract_integers(int $a, int $b) int {
+    return $a - $b;
+}
+
+# Floating point addition - C-callable
+extern func add_floats(num $a, num $b) num {
+    return $a + $b;
+}
+
+# Strada-callable wrappers for testing
+func strada_add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func strada_multiply(int $a, int $b) int {
+    return $a * $b;
+}
+
+func strada_subtract(int $a, int $b) int {
+    return $a - $b;
+}
+
+func strada_add_floats(num $a, num $b) num {
+    return $a + $b;
+}
+
+# Test main function - tests Strada-callable versions
+# (The extern versions are for C code to call)
+func main() int {
+    say("Testing extern library (via Strada wrappers):");
+    say("  add(5, 3) = " . strada_add(5, 3));
+    say("  multiply(4, 7) = " . strada_multiply(4, 7));
+    say("  subtract(10, 4) = " . strada_subtract(10, 4));
+    say("  add_floats(3.14, 2.86) = " . strada_add_floats(3.14, 2.86));
+    say("");
+    say("Note: The extern functions (add_integers, etc.) are for C interop.");
+    return 0;
+}

@@ -1,0 +1,22 @@
+# test_socket_client.strada - Simple client
+
+func main() int {
+    say("Connecting to localhost:8080...");
+    
+    my scalar $sock = sys::socket_client("localhost", 8080);
+
+    say("Connected!");
+
+    my str $greeting = sys::socket_recv($sock, 1024);
+    say("Server says: " . $greeting);
+
+    sys::socket_send($sock, "Hello from Strada client!");
+
+    my str $response = sys::socket_recv($sock, 1024);
+    say("Server response: " . $response);
+
+    sys::socket_close($sock);
+    
+    say("Client done!");
+    return 0;
+}

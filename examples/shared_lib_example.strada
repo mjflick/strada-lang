@@ -1,0 +1,23 @@
+# Example: Strada shared library
+#
+# Compile as shared library:
+#   ./strada --shared examples/shared_lib_example.strada
+#
+# This creates shared_lib_example.so which can be loaded by other
+# Strada programs using sys::dl_open() and sys::dl_call_sv().
+
+func add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func greet(str $name) str {
+    return "Hello, " . $name . "!";
+}
+
+# For cannoli integration (optional)
+func cannoli_dispatch(str $method, str $path, str $path_info, str $body) str {
+    if ($path eq "/api/add") {
+        return "{\"result\":42}";
+    }
+    return "";
+}
