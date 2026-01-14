@@ -6442,10 +6442,42 @@ const char* strada_get_method_package(void) {
     return oop_current_method_package;
 }
 
+/* Validate that a string pointer looks valid (basic sanity check) */
+static int strada_validate_blessed_package(const char *pkg) {
+    if (!pkg) return 0;
+    /* Check if first char is printable ASCII (valid package names start with letter) */
+    unsigned char c = (unsigned char)pkg[0];
+    if (c < 32 || c > 126) {
+        fprintf(stderr, "Warning: corrupted blessed_package detected (first byte: 0x%02x)\n", c);
+        return 0;
+    }
+    /* Additional sanity: check string length isn't absurd */
+    size_t len = 0;
+    while (len < 256 && pkg[len] != '\0') {
+        c = (unsigned char)pkg[len];
+        if (c < 32 || c > 126) {
+            fprintf(stderr, "Warning: corrupted blessed_package detected at pos %zu (byte: 0x%02x)\n", len, c);
+            return 0;
+        }
+        len++;
+    }
+    if (len == 0 || len >= 256) {
+        fprintf(stderr, "Warning: corrupted blessed_package detected (len: %zu)\n", len);
+        return 0;
+    }
+    return 1;
+}
+
 /* Call DESTROY on an object if it has one */
 void strada_call_destroy(StradaValue *obj) {
     if (!obj || !obj->blessed_package || oop_destroying) return;
     if (!oop_initialized) return;
+
+    /* Validate blessed_package before using it */
+    if (!strada_validate_blessed_package(obj->blessed_package)) {
+        fprintf(stderr, "Error: strada_call_destroy skipping due to corrupted blessed_package\n");
+        return;
+    }
 
     StradaMethod destroy = oop_lookup_method(obj->blessed_package, "DESTROY");
     if (destroy) {
