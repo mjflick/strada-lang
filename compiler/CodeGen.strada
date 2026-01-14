@@ -7170,31 +7170,62 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         my int $profiling = $cg->{"enable_profiling"};
         my str $func_name = $cg->{"current_func_name"};
 
-        # main() and struct-returning functions - cleanup then simple return
+        # main() and struct-returning functions - evaluate return value, cleanup, then return
         if ($in_main == 1 || $returns_struct == 1) {
-            # Emit cleanup before return (unless disabled)
-            if ($cleanup_enabled == 1) {
-                scope_emit_all_cleanup($cg);
-            }
-            # Pop any active try blocks before returning
-            emit_try_cleanup($cg);
-            emit_indent($cg);
-            emit($cg, "return");
             if ($stmt->{"value"}) {
-                emit($cg, " ");
+                # Evaluate return expression BEFORE cleanup to avoid use-after-free
+                emit_indent($cg);
                 if ($in_main == 1) {
                     if ($stmt->{"value"}->{"type"} == NODE_INT_LITERAL()) {
-                        emit($cg, $stmt->{"value"}->{"value"});
+                        # Simple literal - can emit directly after cleanup
+                        if ($cleanup_enabled == 1) {
+                            scope_emit_all_cleanup($cg);
+                        }
+                        emit_try_cleanup($cg);
+                        emit_indent($cg);
+                        emit($cg, "return " . $stmt->{"value"}->{"value"} . ";\n");
                     } else {
-                        emit($cg, "strada_to_int(");
+                        # Complex expression - evaluate first, then cleanup
+                        emit($cg, "{ int __main_ret = strada_to_int(");
                         gen_expression($cg, $stmt->{"value"});
-                        emit($cg, ")");
+                        emit($cg, ");\n");
+                        indent($cg);
+                        if ($cleanup_enabled == 1) {
+                            scope_emit_all_cleanup($cg);
+                        }
+                        emit_try_cleanup($cg);
+                        emit_indent($cg);
+                        emit($cg, "return __main_ret; }\n");
+                        dedent($cg);
                     }
                 } else {
+                    # Struct return - evaluate first
+                    emit($cg, "{ ");
+                    my str $ret_type = $cg->{"current_func_return_type_str"};
+                    if (length($ret_type) == 0) {
+                        $ret_type = "void*";
+                    }
+                    emit($cg, $ret_type . " __struct_ret = ");
                     gen_expression($cg, $stmt->{"value"});
+                    emit($cg, ";\n");
+                    indent($cg);
+                    if ($cleanup_enabled == 1) {
+                        scope_emit_all_cleanup($cg);
+                    }
+                    emit_try_cleanup($cg);
+                    emit_indent($cg);
+                    emit($cg, "return __struct_ret; }\n");
+                    dedent($cg);
                 }
+            } else {
+                # No return value - cleanup then return
+                if ($cleanup_enabled == 1) {
+                    scope_emit_all_cleanup($cg);
+                }
+                emit_try_cleanup($cg);
+                emit_indent($cg);
+                emit($cg, "return;\n");
             }
-            emit($cg, ";\n");
         } elsif ($cleanup_enabled == 0) {
             # Cleanup disabled - simple return
             # Still need to pop try blocks even if cleanup is disabled
