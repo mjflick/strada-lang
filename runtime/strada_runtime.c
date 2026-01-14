@@ -2164,21 +2164,25 @@ void strada_socket_close(StradaValue *sock) {
 /* High-level socket helpers */
 
 StradaValue* strada_socket_server(int port) {
+    return strada_socket_server_backlog(port, 128);
+}
+
+StradaValue* strada_socket_server_backlog(int port, int backlog) {
     StradaValue *sock = strada_socket_create();
     if (sock->type == STRADA_UNDEF) {
         return sock;
     }
-    
+
     if (strada_socket_bind(sock, port) < 0) {
         strada_socket_close(sock);
         return strada_new_undef();
     }
-    
-    if (strada_socket_listen(sock, 5) < 0) {
+
+    if (strada_socket_listen(sock, backlog) < 0) {
         strada_socket_close(sock);
         return strada_new_undef();
     }
-    
+
     return sock;
 }
 

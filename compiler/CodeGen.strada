@@ -4478,7 +4478,18 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, "))");
             return;
         }
-        
+
+        # socket_server_backlog
+        if ($name eq "sys::socket_server_backlog") {
+            emit($cg, "strada_socket_server_backlog(strada_to_int(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, "), strada_to_int(");
+            gen_expression($cg, $args->[1]);
+            emit($cg, "))");
+            return;
+        }
+
         # socket_accept
         if ($name eq "sys::socket_accept") {
             emit($cg, "strada_socket_accept(");

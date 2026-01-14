@@ -1,19 +1,19 @@
 /*
- * This file is part of the Strada Language (https://github.com/mjflick/strada-lang).
- * Copyright (c) 2026 Michael J. Flickinger
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 2.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- */
+ This file is part of the Strada Language (https://github.com/mjflick/strada-lang).
+ Copyright (c) 2026 Michael J. Flickinger
+ 
+ This program is free software: you can redistribute it and/or modify  
+ it under the terms of the GNU General Public License as published by  
+ the Free Software Foundation, version 2.
+
+ This program is distributed in the hope that it will be useful, but 
+ WITHOUT ANY WARRANTY; without even the implied warranty of 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
+ General Public License for more details.
+
+ You should have received a copy of the GNU General Public License 
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 # cannoli/src/server.strada - Preforking HTTP server
 #
@@ -268,8 +268,9 @@ func Server_create_ssl_socket(scalar $server_ref) scalar {
 func Server_create_socket(scalar $server_ref) scalar {
     my str $host = $server_ref->{"host"};
     my int $port = $server_ref->{"port"};
+    my int $backlog = $server_ref->{"backlog"};
 
-    my scalar $server_sock = sys::socket_server($port);
+    my scalar $server_sock = sys::socket_server_backlog($port, $backlog);
 
     if (!defined($server_sock)) {
         say("Error: Could not create server socket on port " . $port);
@@ -277,7 +278,7 @@ func Server_create_socket(scalar $server_ref) scalar {
     }
 
     $server_ref->{"server_sock"} = $server_sock;
-    say("Listening on " . $host . ":" . $port);
+    say("Listening on " . $host . ":" . $port . " (backlog=" . $backlog . ")");
 
     return $server_sock;
 }

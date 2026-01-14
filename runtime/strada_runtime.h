@@ -468,6 +468,7 @@ int strada_socket_send_sv(StradaValue *sock, StradaValue *data);  /* Binary-safe
 StradaValue* strada_socket_recv(StradaValue *sock, int max_len);
 void strada_socket_close(StradaValue *sock);
 StradaValue* strada_socket_server(int port);
+StradaValue* strada_socket_server_backlog(int port, int backlog);
 StradaValue* strada_socket_client(const char *host, int port);
 StradaValue* strada_socket_select(StradaValue *sockets, int timeout_ms);
 int strada_socket_fd(StradaValue *sock);
