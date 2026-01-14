@@ -2,6 +2,8 @@
 
 A strongly-typed, self-hosting programming language with Perl-inspired syntax that compiles to native code via C.
 
+## This should be considered an experimental language.
+
 ## Quick Start
 
 ```bash
