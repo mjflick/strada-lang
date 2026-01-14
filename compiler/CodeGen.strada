@@ -4260,10 +4260,10 @@ func gen_expression(scalar $cg, scalar $expr) void {
         
         # refcount - get reference count
         if ($name eq "refcount") {
-            emit($cg, "strada_new_int((");
+            emit($cg, "strada_new_int(strada_refcount(");
             my scalar $args = $expr->{"args"};
             gen_expression($cg, $args->[0]);
-            emit($cg, ")->refcount)");
+            emit($cg, "))");
             return;
         }
 

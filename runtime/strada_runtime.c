@@ -2012,8 +2012,9 @@ StradaValue* strada_undef(StradaValue *sv) {
 }
 
 int strada_refcount(StradaValue *sv) {
-    /* Return current reference count */
-    return sv ? sv->refcount : 0;
+    /* Return current reference count, 0 for undef/NULL */
+    if (!sv || sv->type == STRADA_UNDEF) return 0;
+    return sv->refcount;
 }
 
 /* ===== SOCKET FUNCTIONS ===== */
