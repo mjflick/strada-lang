@@ -5328,6 +5328,8 @@ func get_builtins() scalar {
     $b{"sys::byte_substr"} = 1;
     $b{"sys::pack"} = 1;
     $b{"sys::unpack"} = 1;
+    $b{"sys::base64_encode"} = 1;
+    $b{"sys::base64_decode"} = 1;
 
     # ============================================================
     # math:: ADDITIONAL FUNCTIONS
@@ -9440,6 +9442,24 @@ func gen_expression(scalar $cg, scalar $expr) void {
             gen_expression($cg, $args->[0]);
             emit($cg, "), ");
             gen_expression($cg, $args->[1]);
+            emit($cg, ")");
+            return;
+        }
+
+        # base64_encode - encode string to base64
+        if ($name eq "sys::base64_encode") {
+            emit($cg, "strada_base64_encode(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ")");
+            return;
+        }
+
+        # base64_decode - decode base64 to string
+        if ($name eq "sys::base64_decode") {
+            emit($cg, "strada_base64_decode(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
             emit($cg, ")");
             return;
         }

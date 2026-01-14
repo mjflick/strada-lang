@@ -9136,6 +9136,7 @@ void strada_profile_enter(const char *func_name) {
 }
 
 void strada_profile_exit(const char *func_name) {
+    (void)func_name;  /* Currently unused - exit uses stack frame index */
     if (!profile_initialized || profile_stack_depth == 0) return;
 
     double now = profile_get_time();
