@@ -3435,6 +3435,83 @@ func gen_expression(scalar $cg, scalar $expr) void {
             return;
         }
 
+        # get_byte - get byte at position (0-indexed), returns 0-255 or -1
+        if ($name eq "sys::get_byte") {
+            emit($cg, "strada_new_int(strada_get_byte(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ", strada_to_int(");
+            gen_expression($cg, $args->[1]);
+            emit($cg, ")))");
+            return;
+        }
+
+        # set_byte - set byte at position, returns new string
+        if ($name eq "sys::set_byte") {
+            emit($cg, "strada_set_byte(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ", strada_to_int(");
+            gen_expression($cg, $args->[1]);
+            emit($cg, "), strada_to_int(");
+            gen_expression($cg, $args->[2]);
+            emit($cg, "))");
+            return;
+        }
+
+        # byte_length - get byte length (not UTF-8 character count)
+        if ($name eq "sys::byte_length") {
+            emit($cg, "strada_new_int(strada_byte_length(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, "))");
+            return;
+        }
+
+        # byte_substr - substring by byte positions
+        if ($name eq "sys::byte_substr") {
+            emit($cg, "strada_byte_substr(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ", strada_to_int(");
+            gen_expression($cg, $args->[1]);
+            emit($cg, "), strada_to_int(");
+            gen_expression($cg, $args->[2]);
+            emit($cg, "))");
+            return;
+        }
+
+        # pack - pack values into binary string (Perl-like)
+        # sys::pack($fmt, $val1, $val2, ...) -> strada_pack(fmt, array_of_values)
+        if ($name eq "sys::pack") {
+            emit($cg, "strada_pack(strada_to_str(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, "), ");
+            # Build array from remaining arguments
+            my int $value_count = $expr->{"arg_count"} - 1;
+            emit($cg, "strada_anon_array(" . $value_count);
+            my int $i = 1;
+            while ($i < $expr->{"arg_count"}) {
+                emit($cg, ", ");
+                gen_expression($cg, $args->[$i]);
+                $i = $i + 1;
+            }
+            emit($cg, "))");
+            return;
+        }
+
+        # unpack - unpack binary string to array (Perl-like)
+        if ($name eq "sys::unpack") {
+            emit($cg, "strada_unpack(strada_to_str(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, "), ");
+            gen_expression($cg, $args->[1]);
+            emit($cg, ")");
+            return;
+        }
+
         if ($name eq "uc" || $name eq "upper") {
             emit($cg, "strada_new_str(strada_uc(strada_to_str(");
             my scalar $args = $expr->{"args"};
@@ -4624,15 +4701,28 @@ func gen_expression(scalar $cg, scalar $expr) void {
             return;
         }
 
-        # stacktrace
+        # stacktrace - print stack trace to stderr (like Carp::cluck)
         if ($name eq "stacktrace") {
-            emit($cg, "strada_new_str(\"[stacktrace not available]\")");
+            emit($cg, "(strada_stacktrace(), strada_new_undef())");
             return;
         }
-        
-        # caller
+
+        # stacktrace_str - return stack trace as string (like Carp::longmess)
+        if ($name eq "stacktrace_str") {
+            emit($cg, "strada_new_str(strada_stacktrace_str())");
+            return;
+        }
+
+        # caller - get caller info at given level
         if ($name eq "caller") {
-            emit($cg, "strada_new_str(\"main\")");
+            my scalar $args = $expr->{"args"};
+            if ($expr->{"arg_count"} > 0) {
+                emit($cg, "strada_new_str(strada_caller(strada_to_int(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ")))");
+            } else {
+                emit($cg, "strada_new_str(strada_caller(1))");
+            }
             return;
         }
         

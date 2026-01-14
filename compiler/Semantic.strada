@@ -253,6 +253,7 @@ func get_builtins() scalar {
     $b{"dumper_str"} = 1;
     $b{"dump"} = 1;
     $b{"stacktrace"} = 1;
+    $b{"stacktrace_str"} = 1;
     $b{"caller"} = 1;
 
     # Misc
@@ -632,6 +633,15 @@ func get_builtins() scalar {
     $b{"sys::statvfs"} = 1;
     $b{"sys::fstatvfs"} = 1;
     $b{"sys::dup"} = 1;
+
+    # sys:: Binary/Byte operations
+    $b{"sys::ord_byte"} = 1;
+    $b{"sys::get_byte"} = 1;
+    $b{"sys::set_byte"} = 1;
+    $b{"sys::byte_length"} = 1;
+    $b{"sys::byte_substr"} = 1;
+    $b{"sys::pack"} = 1;
+    $b{"sys::unpack"} = 1;
 
     # ============================================================
     # math:: ADDITIONAL FUNCTIONS

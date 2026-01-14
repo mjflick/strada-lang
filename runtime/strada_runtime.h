@@ -267,6 +267,7 @@ void strada_die(const char *format, ...);
 void strada_exit(int code);
 void strada_stacktrace(void);
 void strada_backtrace(void);
+char* strada_stacktrace_str(void);  /* Returns stack trace as string */
 const char* strada_caller(int level);
 
 /* Exception handling (try/catch/throw) */

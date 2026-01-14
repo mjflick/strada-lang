@@ -3662,6 +3662,39 @@ void strada_backtrace(void) {
     strada_stacktrace();
 }
 
+/* Return stack trace as a string */
+char* strada_stacktrace_str(void) {
+    void *array[20];
+    size_t size;
+    char **strings;
+
+    size = backtrace(array, 20);
+    strings = backtrace_symbols(array, size);
+
+    /* Calculate total size needed */
+    size_t total_len = 0;
+    for (size_t i = 0; i < size; i++) {
+        total_len += strlen(strings[i]) + 16; /* room for "#N  " and newline */
+    }
+    total_len += 32; /* header */
+
+    char *result = malloc(total_len + 1);
+    if (!result) {
+        free(strings);
+        return strdup("Stack trace: (allocation failed)");
+    }
+
+    char *p = result;
+    p += sprintf(p, "Stack trace:\n");
+
+    for (size_t i = 0; i < size; i++) {
+        p += sprintf(p, "#%zu  %s\n", i, strings[i]);
+    }
+
+    free(strings);
+    return result;
+}
+
 const char* strada_caller(int level) {
     void *array[20];
     size_t size;
