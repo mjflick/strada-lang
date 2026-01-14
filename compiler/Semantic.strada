@@ -642,6 +642,8 @@ func get_builtins() scalar {
     $b{"sys::byte_substr"} = 1;
     $b{"sys::pack"} = 1;
     $b{"sys::unpack"} = 1;
+    $b{"sys::base64_encode"} = 1;
+    $b{"sys::base64_decode"} = 1;
 
     # ============================================================
     # math:: ADDITIONAL FUNCTIONS

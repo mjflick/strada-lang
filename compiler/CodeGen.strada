@@ -3512,6 +3512,24 @@ func gen_expression(scalar $cg, scalar $expr) void {
             return;
         }
 
+        # base64_encode - encode string to base64
+        if ($name eq "sys::base64_encode") {
+            emit($cg, "strada_base64_encode(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ")");
+            return;
+        }
+
+        # base64_decode - decode base64 to string
+        if ($name eq "sys::base64_decode") {
+            emit($cg, "strada_base64_decode(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ")");
+            return;
+        }
+
         if ($name eq "uc" || $name eq "upper") {
             emit($cg, "strada_new_str(strada_uc(strada_to_str(");
             my scalar $args = $expr->{"args"};

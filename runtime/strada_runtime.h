@@ -217,6 +217,8 @@ int strada_byte_length(StradaValue *sv);  /* Get byte length (not UTF-8 char cou
 StradaValue* strada_byte_substr(StradaValue *sv, int start, int len);  /* Substring by byte positions */
 StradaValue* strada_pack(const char *fmt, StradaValue *args);  /* Pack values into binary string */
 StradaValue* strada_unpack(const char *fmt, StradaValue *data);  /* Unpack binary string to array */
+StradaValue* strada_base64_encode(StradaValue *sv);  /* Encode string to base64 */
+StradaValue* strada_base64_decode(StradaValue *sv);  /* Decode base64 to string */
 char* strada_chomp(const char *str);
 char* strada_chop(const char *str);
 int strada_strcmp(const char *s1, const char *s2);

@@ -4979,9 +4979,127 @@ StradaValue* strada_unpack(const char *fmt, StradaValue *data_sv) {
     return result;
 }
 
+/* Base64 encoding table */
+static const char base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/* Base64 decoding table (maps ASCII chars to 6-bit values, -1 for invalid) */
+static const int8_t base64_decode_table[256] = {
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,
+    52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1,
+    -1,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
+    15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
+    -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+    41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+};
+
+/* Base64 encode - encodes binary data to base64 string */
+StradaValue* strada_base64_encode(StradaValue *sv) {
+    if (!sv) return strada_new_str("");
+
+    const unsigned char *data = NULL;
+    size_t len = 0;
+
+    if (sv->type == STRADA_STR && sv->value.pv) {
+        data = (const unsigned char *)sv->value.pv;
+        len = sv->struct_size > 0 ? sv->struct_size : strlen(sv->value.pv);
+    } else {
+        const char *str = strada_to_str(sv);
+        data = (const unsigned char *)str;
+        len = str ? strlen(str) : 0;
+    }
+
+    if (!data || len == 0) return strada_new_str("");
+
+    /* Output length: 4 chars for every 3 bytes, rounded up */
+    size_t out_len = ((len + 2) / 3) * 4;
+    char *result = malloc(out_len + 1);
+
+    size_t i, j;
+    for (i = 0, j = 0; i < len; ) {
+        uint32_t octet_a = i < len ? data[i++] : 0;
+        uint32_t octet_b = i < len ? data[i++] : 0;
+        uint32_t octet_c = i < len ? data[i++] : 0;
+
+        uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
+
+        result[j++] = base64_table[(triple >> 18) & 0x3F];
+        result[j++] = base64_table[(triple >> 12) & 0x3F];
+        result[j++] = base64_table[(triple >>  6) & 0x3F];
+        result[j++] = base64_table[triple & 0x3F];
+    }
+
+    /* Add padding */
+    size_t mod = len % 3;
+    if (mod == 1) {
+        result[out_len - 1] = '=';
+        result[out_len - 2] = '=';
+    } else if (mod == 2) {
+        result[out_len - 1] = '=';
+    }
+
+    result[out_len] = '\0';
+    return strada_new_str(result);
+}
+
+/* Base64 decode - decodes base64 string to binary data */
+StradaValue* strada_base64_decode(StradaValue *sv) {
+    if (!sv) return strada_new_str("");
+
+    const char *str = strada_to_str(sv);
+    if (!str || !str[0]) return strada_new_str("");
+
+    size_t len = strlen(str);
+
+    /* Remove padding from length calculation */
+    size_t pad = 0;
+    if (len >= 1 && str[len - 1] == '=') pad++;
+    if (len >= 2 && str[len - 2] == '=') pad++;
+
+    /* Output length: 3 bytes for every 4 chars, minus padding */
+    size_t out_len = (len / 4) * 3 - pad;
+    unsigned char *result = malloc(out_len + 1);
+
+    size_t i, j;
+    for (i = 0, j = 0; i + 3 < len; i += 4) {
+        /* Get 4 input characters, decode each */
+        int8_t sextet_a = base64_decode_table[(unsigned char)str[i]];
+        int8_t sextet_b = base64_decode_table[(unsigned char)str[i + 1]];
+        int8_t sextet_c = (str[i + 2] != '=') ? base64_decode_table[(unsigned char)str[i + 2]] : 0;
+        int8_t sextet_d = (str[i + 3] != '=') ? base64_decode_table[(unsigned char)str[i + 3]] : 0;
+
+        /* Treat invalid characters as 0 */
+        if (sextet_a < 0) sextet_a = 0;
+        if (sextet_b < 0) sextet_b = 0;
+        if (sextet_c < 0) sextet_c = 0;
+        if (sextet_d < 0) sextet_d = 0;
+
+        uint32_t triple = ((uint32_t)sextet_a << 18) |
+                          ((uint32_t)sextet_b << 12) |
+                          ((uint32_t)sextet_c <<  6) |
+                          (uint32_t)sextet_d;
+
+        if (j < out_len) result[j++] = (triple >> 16) & 0xFF;
+        if (j < out_len) result[j++] = (triple >>  8) & 0xFF;
+        if (j < out_len) result[j++] = triple & 0xFF;
+    }
+
+    result[out_len] = '\0';
+    return strada_new_str_len((char *)result, out_len);
+}
+
 char* strada_chomp(const char *str) {
     if (!str) return strdup("");
-    
+
     size_t len = strlen(str);
     if (len == 0) return strdup("");
     

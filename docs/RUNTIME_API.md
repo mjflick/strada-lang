@@ -446,6 +446,14 @@ StradaValue* strada_pack(const char *fmt, StradaValue *args);
 // fmt: format string with unpack characters
 // data: binary string to unpack
 StradaValue* strada_unpack(const char *fmt, StradaValue *data);
+
+// Base64 encode string to base64 format (RFC 4648)
+// Returns base64-encoded string
+StradaValue* strada_base64_encode(StradaValue *sv);
+
+// Base64 decode string from base64 format
+// Returns decoded binary string (may contain NUL bytes)
+StradaValue* strada_base64_decode(StradaValue *sv);
 ```
 
 ### Pack/Unpack Format Characters
