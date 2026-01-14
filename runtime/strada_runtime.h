@@ -18,6 +18,8 @@
 #include <execinfo.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <termios.h>
+#include <fcntl.h>
 
 /* Forward declarations */
 typedef struct StradaValue StradaValue;
@@ -208,6 +210,13 @@ char* strada_repeat(const char *str, int count);
 char* strada_chr(int code);
 StradaValue* strada_chr_sv(int code);  /* Binary-safe version that handles NUL bytes */
 int strada_ord(const char *str);
+int strada_ord_byte(StradaValue *sv);  /* Binary-safe: returns raw byte value 0-255 */
+int strada_get_byte(StradaValue *sv, int pos);  /* Get byte at position, returns 0-255 or -1 */
+StradaValue* strada_set_byte(StradaValue *sv, int pos, int val);  /* Set byte, returns new string */
+int strada_byte_length(StradaValue *sv);  /* Get byte length (not UTF-8 char count) */
+StradaValue* strada_byte_substr(StradaValue *sv, int start, int len);  /* Substring by byte positions */
+StradaValue* strada_pack(const char *fmt, StradaValue *args);  /* Pack values into binary string */
+StradaValue* strada_unpack(const char *fmt, StradaValue *data);  /* Unpack binary string to array */
 char* strada_chomp(const char *str);
 char* strada_chop(const char *str);
 int strada_strcmp(const char *s1, const char *s2);
@@ -473,6 +482,14 @@ StradaValue* strada_socket_client(const char *host, int port);
 StradaValue* strada_socket_select(StradaValue *sockets, int timeout_ms);
 int strada_socket_fd(StradaValue *sock);
 StradaValue* strada_select_fds(StradaValue *fds, int timeout_ms);
+
+/* UDP socket functions */
+StradaValue* strada_udp_socket(void);
+int strada_udp_bind(StradaValue *sock, int port);
+StradaValue* strada_udp_server(int port);
+StradaValue* strada_udp_recvfrom(StradaValue *sock, int max_len);
+int strada_udp_sendto(StradaValue *sock, const char *data, int data_len, const char *host, int port);
+int strada_udp_sendto_sv(StradaValue *sock, StradaValue *data, const char *host, int port);
 
 /* Memory management */
 void strada_free_value(StradaValue *sv);
@@ -753,6 +770,9 @@ StradaValue* strada_cfgetospeed(StradaValue *termios);
 StradaValue* strada_cfsetospeed(StradaValue *termios, StradaValue *speed);
 StradaValue* strada_cfgetispeed(StradaValue *termios);
 StradaValue* strada_cfsetispeed(StradaValue *termios, StradaValue *speed);
+StradaValue* strada_serial_open(const char *device, int baud, const char *config);
+StradaValue* strada_tcflush(StradaValue *fd, StradaValue *queue);
+StradaValue* strada_tcdrain(StradaValue *fd);
 
 /* Advanced file operations */
 StradaValue* strada_fcntl(StradaValue *fd, StradaValue *cmd, StradaValue *arg);

@@ -3425,7 +3425,16 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, ")))");
             return;
         }
-        
+
+        # ord_byte - binary-safe ord that returns raw byte value 0-255
+        if ($name eq "sys::ord_byte") {
+            emit($cg, "strada_new_int(strada_ord_byte(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, "))");
+            return;
+        }
+
         if ($name eq "uc" || $name eq "upper") {
             emit($cg, "strada_new_str(strada_uc(strada_to_str(");
             my scalar $args = $expr->{"args"};
@@ -4561,6 +4570,60 @@ func gen_expression(scalar $cg, scalar $expr) void {
             return;
         }
 
+        # UDP socket functions
+
+        # udp_socket - create a UDP socket
+        if ($name eq "sys::udp_socket") {
+            emit($cg, "strada_udp_socket()");
+            return;
+        }
+
+        # udp_bind - bind UDP socket to a port
+        if ($name eq "sys::udp_bind") {
+            emit($cg, "strada_new_int(strada_udp_bind(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ", strada_to_int(");
+            gen_expression($cg, $args->[1]);
+            emit($cg, ")))");
+            return;
+        }
+
+        # udp_server - create UDP server bound to a port
+        if ($name eq "sys::udp_server") {
+            emit($cg, "strada_udp_server(strada_to_int(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, "))");
+            return;
+        }
+
+        # udp_recvfrom - receive UDP packet with sender info
+        if ($name eq "sys::udp_recvfrom") {
+            emit($cg, "strada_udp_recvfrom(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ", strada_to_int(");
+            gen_expression($cg, $args->[1]);
+            emit($cg, "))");
+            return;
+        }
+
+        # udp_sendto - send UDP packet to host:port
+        if ($name eq "sys::udp_sendto") {
+            emit($cg, "strada_new_int(strada_udp_sendto_sv(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ", ");
+            gen_expression($cg, $args->[1]);
+            emit($cg, ", strada_to_str(");
+            gen_expression($cg, $args->[2]);
+            emit($cg, "), strada_to_int(");
+            gen_expression($cg, $args->[3]);
+            emit($cg, ")))");
+            return;
+        }
+
         # stacktrace
         if ($name eq "stacktrace") {
             emit($cg, "strada_new_str(\"[stacktrace not available]\")");
@@ -5649,6 +5712,140 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, ")");
             return;
         }
+
+        # serial_open - high-level serial port open
+        if ($name eq "sys::serial_open") {
+            emit($cg, "strada_serial_open(strada_to_str(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, "), strada_to_int(");
+            gen_expression($cg, $args->[1]);
+            emit($cg, "), ");
+            if ($expr->{"arg_count"} > 2) {
+                emit($cg, "strada_to_str(");
+                gen_expression($cg, $args->[2]);
+                emit($cg, ")");
+            } else {
+                emit($cg, "NULL");
+            }
+            emit($cg, ")");
+            return;
+        }
+
+        # tcflush - flush input/output queues
+        if ($name eq "sys::tcflush") {
+            emit($cg, "strada_tcflush(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ", ");
+            gen_expression($cg, $args->[1]);
+            emit($cg, ")");
+            return;
+        }
+
+        # tcdrain - wait for output to be transmitted
+        if ($name eq "sys::tcdrain") {
+            emit($cg, "strada_tcdrain(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ")");
+            return;
+        }
+
+        # Baud rate constants
+        if ($name eq "sys::B0") { emit($cg, "strada_new_int(B0)"); return; }
+        if ($name eq "sys::B50") { emit($cg, "strada_new_int(B50)"); return; }
+        if ($name eq "sys::B75") { emit($cg, "strada_new_int(B75)"); return; }
+        if ($name eq "sys::B110") { emit($cg, "strada_new_int(B110)"); return; }
+        if ($name eq "sys::B134") { emit($cg, "strada_new_int(B134)"); return; }
+        if ($name eq "sys::B150") { emit($cg, "strada_new_int(B150)"); return; }
+        if ($name eq "sys::B200") { emit($cg, "strada_new_int(B200)"); return; }
+        if ($name eq "sys::B300") { emit($cg, "strada_new_int(B300)"); return; }
+        if ($name eq "sys::B600") { emit($cg, "strada_new_int(B600)"); return; }
+        if ($name eq "sys::B1200") { emit($cg, "strada_new_int(B1200)"); return; }
+        if ($name eq "sys::B1800") { emit($cg, "strada_new_int(B1800)"); return; }
+        if ($name eq "sys::B2400") { emit($cg, "strada_new_int(B2400)"); return; }
+        if ($name eq "sys::B4800") { emit($cg, "strada_new_int(B4800)"); return; }
+        if ($name eq "sys::B9600") { emit($cg, "strada_new_int(B9600)"); return; }
+        if ($name eq "sys::B19200") { emit($cg, "strada_new_int(B19200)"); return; }
+        if ($name eq "sys::B38400") { emit($cg, "strada_new_int(B38400)"); return; }
+        if ($name eq "sys::B57600") { emit($cg, "strada_new_int(B57600)"); return; }
+        if ($name eq "sys::B115200") { emit($cg, "strada_new_int(B115200)"); return; }
+        if ($name eq "sys::B230400") { emit($cg, "strada_new_int(B230400)"); return; }
+        if ($name eq "sys::B460800") { emit($cg, "strada_new_int(B460800)"); return; }
+        if ($name eq "sys::B500000") { emit($cg, "strada_new_int(B500000)"); return; }
+        if ($name eq "sys::B576000") { emit($cg, "strada_new_int(B576000)"); return; }
+        if ($name eq "sys::B921600") { emit($cg, "strada_new_int(B921600)"); return; }
+        if ($name eq "sys::B1000000") { emit($cg, "strada_new_int(B1000000)"); return; }
+        if ($name eq "sys::B1152000") { emit($cg, "strada_new_int(B1152000)"); return; }
+        if ($name eq "sys::B1500000") { emit($cg, "strada_new_int(B1500000)"); return; }
+        if ($name eq "sys::B2000000") { emit($cg, "strada_new_int(B2000000)"); return; }
+
+        # Termios control mode flags (c_cflag)
+        if ($name eq "sys::CSIZE") { emit($cg, "strada_new_int(CSIZE)"); return; }
+        if ($name eq "sys::CS5") { emit($cg, "strada_new_int(CS5)"); return; }
+        if ($name eq "sys::CS6") { emit($cg, "strada_new_int(CS6)"); return; }
+        if ($name eq "sys::CS7") { emit($cg, "strada_new_int(CS7)"); return; }
+        if ($name eq "sys::CS8") { emit($cg, "strada_new_int(CS8)"); return; }
+        if ($name eq "sys::CSTOPB") { emit($cg, "strada_new_int(CSTOPB)"); return; }
+        if ($name eq "sys::CREAD") { emit($cg, "strada_new_int(CREAD)"); return; }
+        if ($name eq "sys::PARENB") { emit($cg, "strada_new_int(PARENB)"); return; }
+        if ($name eq "sys::PARODD") { emit($cg, "strada_new_int(PARODD)"); return; }
+        if ($name eq "sys::HUPCL") { emit($cg, "strada_new_int(HUPCL)"); return; }
+        if ($name eq "sys::CLOCAL") { emit($cg, "strada_new_int(CLOCAL)"); return; }
+        if ($name eq "sys::CRTSCTS") { emit($cg, "strada_new_int(CRTSCTS)"); return; }
+
+        # Termios input mode flags (c_iflag)
+        if ($name eq "sys::IGNBRK") { emit($cg, "strada_new_int(IGNBRK)"); return; }
+        if ($name eq "sys::BRKINT") { emit($cg, "strada_new_int(BRKINT)"); return; }
+        if ($name eq "sys::IGNPAR") { emit($cg, "strada_new_int(IGNPAR)"); return; }
+        if ($name eq "sys::PARMRK") { emit($cg, "strada_new_int(PARMRK)"); return; }
+        if ($name eq "sys::INPCK") { emit($cg, "strada_new_int(INPCK)"); return; }
+        if ($name eq "sys::ISTRIP") { emit($cg, "strada_new_int(ISTRIP)"); return; }
+        if ($name eq "sys::INLCR") { emit($cg, "strada_new_int(INLCR)"); return; }
+        if ($name eq "sys::IGNCR") { emit($cg, "strada_new_int(IGNCR)"); return; }
+        if ($name eq "sys::ICRNL") { emit($cg, "strada_new_int(ICRNL)"); return; }
+        if ($name eq "sys::IXON") { emit($cg, "strada_new_int(IXON)"); return; }
+        if ($name eq "sys::IXOFF") { emit($cg, "strada_new_int(IXOFF)"); return; }
+        if ($name eq "sys::IXANY") { emit($cg, "strada_new_int(IXANY)"); return; }
+
+        # Termios output mode flags (c_oflag)
+        if ($name eq "sys::OPOST") { emit($cg, "strada_new_int(OPOST)"); return; }
+        if ($name eq "sys::ONLCR") { emit($cg, "strada_new_int(ONLCR)"); return; }
+        if ($name eq "sys::OCRNL") { emit($cg, "strada_new_int(OCRNL)"); return; }
+
+        # Termios local mode flags (c_lflag)
+        if ($name eq "sys::ISIG") { emit($cg, "strada_new_int(ISIG)"); return; }
+        if ($name eq "sys::ICANON") { emit($cg, "strada_new_int(ICANON)"); return; }
+        if ($name eq "sys::ECHO") { emit($cg, "strada_new_int(ECHO)"); return; }
+        if ($name eq "sys::ECHOE") { emit($cg, "strada_new_int(ECHOE)"); return; }
+        if ($name eq "sys::ECHOK") { emit($cg, "strada_new_int(ECHOK)"); return; }
+        if ($name eq "sys::ECHONL") { emit($cg, "strada_new_int(ECHONL)"); return; }
+        if ($name eq "sys::NOFLSH") { emit($cg, "strada_new_int(NOFLSH)"); return; }
+        if ($name eq "sys::TOSTOP") { emit($cg, "strada_new_int(TOSTOP)"); return; }
+        if ($name eq "sys::IEXTEN") { emit($cg, "strada_new_int(IEXTEN)"); return; }
+
+        # tcsetattr when values
+        if ($name eq "sys::TCSANOW") { emit($cg, "strada_new_int(TCSANOW)"); return; }
+        if ($name eq "sys::TCSADRAIN") { emit($cg, "strada_new_int(TCSADRAIN)"); return; }
+        if ($name eq "sys::TCSAFLUSH") { emit($cg, "strada_new_int(TCSAFLUSH)"); return; }
+
+        # tcflush queue selectors
+        if ($name eq "sys::TCIFLUSH") { emit($cg, "strada_new_int(TCIFLUSH)"); return; }
+        if ($name eq "sys::TCOFLUSH") { emit($cg, "strada_new_int(TCOFLUSH)"); return; }
+        if ($name eq "sys::TCIOFLUSH") { emit($cg, "strada_new_int(TCIOFLUSH)"); return; }
+
+        # File open flags (for low-level open)
+        if ($name eq "sys::O_RDONLY") { emit($cg, "strada_new_int(O_RDONLY)"); return; }
+        if ($name eq "sys::O_WRONLY") { emit($cg, "strada_new_int(O_WRONLY)"); return; }
+        if ($name eq "sys::O_RDWR") { emit($cg, "strada_new_int(O_RDWR)"); return; }
+        if ($name eq "sys::O_CREAT") { emit($cg, "strada_new_int(O_CREAT)"); return; }
+        if ($name eq "sys::O_EXCL") { emit($cg, "strada_new_int(O_EXCL)"); return; }
+        if ($name eq "sys::O_NOCTTY") { emit($cg, "strada_new_int(O_NOCTTY)"); return; }
+        if ($name eq "sys::O_TRUNC") { emit($cg, "strada_new_int(O_TRUNC)"); return; }
+        if ($name eq "sys::O_APPEND") { emit($cg, "strada_new_int(O_APPEND)"); return; }
+        if ($name eq "sys::O_NONBLOCK") { emit($cg, "strada_new_int(O_NONBLOCK)"); return; }
+        if ($name eq "sys::O_SYNC") { emit($cg, "strada_new_int(O_SYNC)"); return; }
 
         # Advanced file operations
         if ($name eq "sys::fcntl") {

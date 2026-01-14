@@ -1071,6 +1071,70 @@ printf("Name: %s, Age: %d\n", $name, $age);
 my str $formatted = sprintf("%s is %d years old", $name, $age);
 ```
 
+### Binary/Byte Operations
+
+For working with binary data (protocols, file formats, etc.), use the `sys::` byte functions:
+
+```strada
+# Get bytes from strings (binary-safe, not UTF-8 aware)
+my int $byte = sys::ord_byte($str);        # First byte (0-255)
+my int $b = sys::get_byte($str, 5);        # Byte at position
+my int $len = sys::byte_length($str);      # Byte count
+my str $sub = sys::byte_substr($str, 0, 4); # Substring by bytes
+
+# Set a byte (returns new string)
+my str $modified = sys::set_byte($str, 0, 0xFF);
+```
+
+#### Pack and Unpack
+
+Use `sys::pack()` and `sys::unpack()` for binary protocol construction and parsing:
+
+```strada
+# Pack values into binary string
+my str $header = sys::pack("NnC", 0x12345678, 80, 255);
+# N = 4-byte big-endian int, n = 2-byte big-endian short, C = 1-byte unsigned
+
+# Unpack binary data to array
+my array @values = sys::unpack("NnC", $header);
+my int $magic = $values[0];   # 0x12345678
+my int $port = $values[1];    # 80
+my int $flags = $values[2];   # 255
+```
+
+**Pack Format Characters:**
+
+| Char | Description | Size |
+|------|-------------|------|
+| `c/C` | Signed/unsigned char | 1 byte |
+| `s/S` | Signed/unsigned short (native endian) | 2 bytes |
+| `n/v` | Unsigned short (big/little endian) | 2 bytes |
+| `l/L` | Signed/unsigned long (native endian) | 4 bytes |
+| `N/V` | Unsigned long (big/little endian) | 4 bytes |
+| `q/Q` | Signed/unsigned quad (native endian) | 8 bytes |
+| `a/A` | ASCII string (null/space padded) | variable |
+| `H` | Hex string (high nybble first) | variable |
+| `x/X` | Null byte / backup one byte | 1 byte |
+
+**Example: DNS Query Header**
+
+```strada
+func build_dns_header(int $id, int $flags) str {
+    # DNS header: ID(2), Flags(2), QD(2), AN(2), NS(2), AR(2)
+    return sys::pack("nnnnnn", $id, $flags, 1, 0, 0, 0);
+}
+
+func parse_dns_header(str $data) hash {
+    my array @fields = sys::unpack("nnnnnn", $data);
+    my hash %header = ();
+    $header{"id"} = $fields[0];
+    $header{"flags"} = $fields[1];
+    $header{"questions"} = $fields[2];
+    $header{"answers"} = $fields[3];
+    return %header;
+}
+```
+
 ---
 
 ## File I/O

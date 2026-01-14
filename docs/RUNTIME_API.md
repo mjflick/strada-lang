@@ -414,6 +414,78 @@ int strada_ord(const char *str);
 char* strada_join(const char *sep, StradaArray *arr);
 ```
 
+## Binary/Byte Operations
+
+These functions provide binary-safe byte-level string manipulation, useful for binary protocols and raw data handling.
+
+```c
+// Get first byte as integer (0-255), binary-safe
+// Unlike strada_ord(), this treats strings as byte arrays, not UTF-8
+int strada_ord_byte(StradaValue *sv);
+
+// Get byte at position (0-indexed)
+// Returns 0-255 on success, -1 if out of bounds
+int strada_get_byte(StradaValue *sv, int pos);
+
+// Set byte at position, returns new string
+// Does not modify original
+StradaValue* strada_set_byte(StradaValue *sv, int pos, int val);
+
+// Get byte length (not UTF-8 character count)
+int strada_byte_length(StradaValue *sv);
+
+// Substring by byte positions (not character positions)
+StradaValue* strada_byte_substr(StradaValue *sv, int start, int len);
+
+// Pack values into binary string (Perl-like)
+// fmt: format string with pack characters
+// args: array of values to pack
+StradaValue* strada_pack(const char *fmt, StradaValue *args);
+
+// Unpack binary string to array (Perl-like)
+// fmt: format string with unpack characters
+// data: binary string to unpack
+StradaValue* strada_unpack(const char *fmt, StradaValue *data);
+```
+
+### Pack/Unpack Format Characters
+
+| Char | Description | Size |
+|------|-------------|------|
+| `c` | Signed char | 1 byte |
+| `C` | Unsigned char | 1 byte |
+| `s` | Signed short, native endian | 2 bytes |
+| `S` | Unsigned short, native endian | 2 bytes |
+| `n` | Unsigned short, big-endian (network) | 2 bytes |
+| `v` | Unsigned short, little-endian (VAX) | 2 bytes |
+| `l` | Signed long, native endian | 4 bytes |
+| `L` | Unsigned long, native endian | 4 bytes |
+| `N` | Unsigned long, big-endian (network) | 4 bytes |
+| `V` | Unsigned long, little-endian (VAX) | 4 bytes |
+| `q` | Signed quad, native endian | 8 bytes |
+| `Q` | Unsigned quad, native endian | 8 bytes |
+| `a` | ASCII string (null-padded) | variable |
+| `A` | ASCII string (space-padded) | variable |
+| `H` | Hex string (high nybble first) | variable |
+| `x` | Null byte (pack only) | 1 byte |
+| `X` | Backup one byte (pack only) | -1 byte |
+| `@` | Go to absolute position (unpack only) | 0 bytes |
+
+### Pack/Unpack Usage Example
+
+```c
+// Pack a network header: magic (4 bytes), port (2 bytes), flags (1 byte)
+StradaValue *args = strada_anon_array(3,
+    strada_new_int(0x12345678),  // magic
+    strada_new_int(80),          // port
+    strada_new_int(255));        // flags
+StradaValue *header = strada_pack("NnC", args);
+
+// Unpack the header
+StradaValue *fields = strada_unpack("NnC", header);
+// fields[0] = 0x12345678, fields[1] = 80, fields[2] = 255
+```
+
 ## Output Functions
 
 ```c

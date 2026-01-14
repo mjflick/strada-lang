@@ -2373,6 +2373,150 @@ StradaValue* strada_select_fds(StradaValue *fds, int timeout_ms) {
     return ready;
 }
 
+/* ===== UDP SOCKET FUNCTIONS ===== */
+
+/* Create a UDP socket */
+StradaValue* strada_udp_socket(void) {
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        return strada_new_undef();
+    }
+
+    /* Set socket options to reuse address */
+    int opt = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    StradaValue *sv = malloc(sizeof(StradaValue));
+    sv->type = STRADA_SOCKET;
+    sv->refcount = 1;
+    sv->blessed_package = NULL;
+    sv->value.sockfd = sockfd;
+
+    return sv;
+}
+
+/* Bind UDP socket to a port */
+int strada_udp_bind(StradaValue *sock, int port) {
+    if (!sock || sock->type != STRADA_SOCKET) {
+        return -1;
+    }
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(port);
+
+    return bind(sock->value.sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+}
+
+/* Create a UDP server socket bound to a port */
+StradaValue* strada_udp_server(int port) {
+    StradaValue *sock = strada_udp_socket();
+    if (sock->type == STRADA_UNDEF) {
+        return sock;
+    }
+
+    if (strada_udp_bind(sock, port) < 0) {
+        strada_socket_close(sock);
+        return strada_new_undef();
+    }
+
+    return sock;
+}
+
+/* Receive data from UDP socket
+ * Returns a hash with:
+ *   data - the received data as a string
+ *   ip - sender's IP address as a string
+ *   port - sender's port as an integer
+ * Or undef on error
+ */
+StradaValue* strada_udp_recvfrom(StradaValue *sock, int max_len) {
+    if (!sock || sock->type != STRADA_SOCKET) {
+        return strada_new_undef();
+    }
+
+    char *buffer = malloc(max_len + 1);
+    struct sockaddr_in sender_addr;
+    socklen_t sender_len = sizeof(sender_addr);
+
+    ssize_t received = recvfrom(sock->value.sockfd, buffer, max_len, 0,
+                                 (struct sockaddr *)&sender_addr, &sender_len);
+
+    if (received < 0) {
+        free(buffer);
+        return strada_new_undef();
+    }
+
+    buffer[received] = '\0';
+
+    /* Create result hash with data, ip, and port */
+    StradaValue *result = strada_new_hash();
+
+    /* Add data - use strada_new_str_len to preserve binary data */
+    strada_hash_set(result->value.hv, "data", strada_new_str_len(buffer, (size_t)received));
+
+    /* Add sender IP */
+    char ip_str[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &sender_addr.sin_addr, ip_str, INET_ADDRSTRLEN);
+    strada_hash_set(result->value.hv, "ip", strada_new_str(ip_str));
+
+    /* Add sender port */
+    strada_hash_set(result->value.hv, "port", strada_new_int(ntohs(sender_addr.sin_port)));
+
+    free(buffer);
+    return result;
+}
+
+/* Send data via UDP to a specific host and port
+ * Returns number of bytes sent, or -1 on error
+ */
+int strada_udp_sendto(StradaValue *sock, const char *data, int data_len, const char *host, int port) {
+    if (!sock || sock->type != STRADA_SOCKET || !data) {
+        return -1;
+    }
+
+    struct sockaddr_in dest_addr;
+    memset(&dest_addr, 0, sizeof(dest_addr));
+    dest_addr.sin_family = AF_INET;
+    dest_addr.sin_port = htons(port);
+
+    /* Try to parse as IP address first */
+    if (inet_pton(AF_INET, host, &dest_addr.sin_addr) != 1) {
+        /* If not an IP, resolve hostname */
+        struct hostent *he = gethostbyname(host);
+        if (!he) {
+            return -1;
+        }
+        memcpy(&dest_addr.sin_addr, he->h_addr_list[0], he->h_length);
+    }
+
+    ssize_t sent = sendto(sock->value.sockfd, data, data_len, 0,
+                          (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+
+    return (int)sent;
+}
+
+/* Send StradaValue data via UDP (binary-safe) */
+int strada_udp_sendto_sv(StradaValue *sock, StradaValue *data, const char *host, int port) {
+    if (!sock || sock->type != STRADA_SOCKET || !data) {
+        return -1;
+    }
+
+    const char *buf;
+    int len;
+
+    if (data->type == STRADA_STR && data->value.pv) {
+        buf = data->value.pv;
+        len = data->struct_size > 0 ? (int)data->struct_size : (int)strlen(data->value.pv);
+    } else {
+        return -1;
+    }
+
+    return strada_udp_sendto(sock, buf, len, host, port);
+}
+
 /* ===== REGEX FUNCTIONS ===== */
 
 /* Helper: Convert flag string to POSIX regex cflags */
@@ -4213,6 +4357,593 @@ StradaValue* strada_chr_sv(int code) {
 int strada_ord(const char *str) {
     if (!str || !str[0]) return 0;
     return (int)utf8_decode(str, NULL);
+}
+
+/* Binary-safe ord - returns raw byte value (0-255) of first byte */
+int strada_ord_byte(StradaValue *sv) {
+    if (!sv) return 0;
+    const char *str = NULL;
+    if (sv->type == STRADA_STR && sv->value.pv) {
+        str = sv->value.pv;
+    } else {
+        str = strada_to_str(sv);
+    }
+    if (!str || !str[0]) return 0;
+    return (unsigned char)str[0];
+}
+
+/* Get byte at position (0-indexed) - returns 0-255 or -1 if out of bounds */
+int strada_get_byte(StradaValue *sv, int pos) {
+    if (!sv) return -1;
+    const char *str = NULL;
+    size_t len = 0;
+
+    if (sv->type == STRADA_STR && sv->value.pv) {
+        str = sv->value.pv;
+        len = sv->struct_size > 0 ? sv->struct_size : strlen(str);
+    } else {
+        str = strada_to_str(sv);
+        len = strlen(str);
+    }
+
+    if (pos < 0 || (size_t)pos >= len) return -1;
+    return (unsigned char)str[pos];
+}
+
+/* Set byte at position - returns new string with byte modified */
+StradaValue* strada_set_byte(StradaValue *sv, int pos, int val) {
+    if (!sv) return strada_new_str("");
+    const char *str = NULL;
+    size_t len = 0;
+
+    if (sv->type == STRADA_STR && sv->value.pv) {
+        str = sv->value.pv;
+        len = sv->struct_size > 0 ? sv->struct_size : strlen(str);
+    } else {
+        str = strada_to_str(sv);
+        len = strlen(str);
+    }
+
+    if (pos < 0 || (size_t)pos >= len) {
+        return strada_new_str_len(str, len);
+    }
+
+    char *result = malloc(len + 1);
+    memcpy(result, str, len);
+    result[pos] = (unsigned char)(val & 0xFF);
+    result[len] = '\0';
+
+    StradaValue *ret = strada_new_str_len(result, len);
+    free(result);
+    return ret;
+}
+
+/* Get byte length of string (not UTF-8 character count) */
+int strada_byte_length(StradaValue *sv) {
+    if (!sv) return 0;
+
+    if (sv->type == STRADA_STR) {
+        if (sv->struct_size > 0) return (int)sv->struct_size;
+        if (sv->value.pv) return (int)strlen(sv->value.pv);
+        return 0;
+    }
+
+    const char *str = strada_to_str(sv);
+    return str ? (int)strlen(str) : 0;
+}
+
+/* Substring by byte positions (not UTF-8 character positions) */
+StradaValue* strada_byte_substr(StradaValue *sv, int start, int len) {
+    if (!sv) return strada_new_str("");
+    const char *str = NULL;
+    size_t str_len = 0;
+
+    if (sv->type == STRADA_STR && sv->value.pv) {
+        str = sv->value.pv;
+        str_len = sv->struct_size > 0 ? sv->struct_size : strlen(str);
+    } else {
+        str = strada_to_str(sv);
+        str_len = strlen(str);
+    }
+
+    /* Handle negative start (from end) */
+    if (start < 0) {
+        start = (int)str_len + start;
+        if (start < 0) start = 0;
+    }
+
+    if ((size_t)start >= str_len) {
+        return strada_new_str("");
+    }
+
+    /* Handle length */
+    if (len < 0) {
+        /* Negative length means "leave that many off the end" */
+        len = (int)str_len - start + len;
+        if (len < 0) len = 0;
+    }
+
+    size_t actual_len = len;
+    if (start + actual_len > str_len) {
+        actual_len = str_len - start;
+    }
+
+    return strada_new_str_len(str + start, actual_len);
+}
+
+/* Pack values into binary string - Perl-like pack() */
+StradaValue* strada_pack(const char *fmt, StradaValue *args) {
+    if (!fmt || !args) return strada_new_str("");
+
+    StradaArray *av = strada_deref_array(args);
+    if (!av) return strada_new_str("");
+
+    size_t buf_size = 1024;
+    char *buf = malloc(buf_size);
+    size_t buf_pos = 0;
+    int arg_idx = 0;
+    int arg_count = strada_array_length(av);
+
+    #define ENSURE_SPACE(n) do { \
+        if (buf_pos + (n) > buf_size) { \
+            buf_size = buf_size * 2 + (n); \
+            buf = realloc(buf, buf_size); \
+        } \
+    } while(0)
+
+    #define GET_ARG_INT() (arg_idx < arg_count ? strada_to_int(strada_array_get(av, arg_idx++)) : 0)
+    #define GET_ARG_STR() (arg_idx < arg_count ? strada_to_str(strada_array_get(av, arg_idx++)) : "")
+
+    const char *p = fmt;
+    while (*p) {
+        int count = 1;
+        char c = *p++;
+
+        /* Parse repeat count */
+        if (*p >= '0' && *p <= '9') {
+            count = 0;
+            while (*p >= '0' && *p <= '9') {
+                count = count * 10 + (*p - '0');
+                p++;
+            }
+        } else if (*p == '*') {
+            count = -1;  /* Use remaining string length */
+            p++;
+        }
+
+        switch (c) {
+            case 'c':  /* Signed char */
+            case 'C': {  /* Unsigned char */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(1);
+                    buf[buf_pos++] = (char)(GET_ARG_INT() & 0xFF);
+                }
+                break;
+            }
+
+            case 's': {  /* Signed short, native endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(2);
+                    int16_t val = (int16_t)GET_ARG_INT();
+                    memcpy(buf + buf_pos, &val, 2);
+                    buf_pos += 2;
+                }
+                break;
+            }
+
+            case 'S': {  /* Unsigned short, native endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(2);
+                    uint16_t val = (uint16_t)GET_ARG_INT();
+                    memcpy(buf + buf_pos, &val, 2);
+                    buf_pos += 2;
+                }
+                break;
+            }
+
+            case 'n': {  /* Unsigned short, network (big) endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(2);
+                    uint16_t val = (uint16_t)GET_ARG_INT();
+                    buf[buf_pos++] = (val >> 8) & 0xFF;
+                    buf[buf_pos++] = val & 0xFF;
+                }
+                break;
+            }
+
+            case 'v': {  /* Unsigned short, little endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(2);
+                    uint16_t val = (uint16_t)GET_ARG_INT();
+                    buf[buf_pos++] = val & 0xFF;
+                    buf[buf_pos++] = (val >> 8) & 0xFF;
+                }
+                break;
+            }
+
+            case 'l': {  /* Signed long, native endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(4);
+                    int32_t val = (int32_t)GET_ARG_INT();
+                    memcpy(buf + buf_pos, &val, 4);
+                    buf_pos += 4;
+                }
+                break;
+            }
+
+            case 'L': {  /* Unsigned long, native endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(4);
+                    uint32_t val = (uint32_t)GET_ARG_INT();
+                    memcpy(buf + buf_pos, &val, 4);
+                    buf_pos += 4;
+                }
+                break;
+            }
+
+            case 'N': {  /* Unsigned long, network (big) endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(4);
+                    uint32_t val = (uint32_t)GET_ARG_INT();
+                    buf[buf_pos++] = (val >> 24) & 0xFF;
+                    buf[buf_pos++] = (val >> 16) & 0xFF;
+                    buf[buf_pos++] = (val >> 8) & 0xFF;
+                    buf[buf_pos++] = val & 0xFF;
+                }
+                break;
+            }
+
+            case 'V': {  /* Unsigned long, little endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(4);
+                    uint32_t val = (uint32_t)GET_ARG_INT();
+                    buf[buf_pos++] = val & 0xFF;
+                    buf[buf_pos++] = (val >> 8) & 0xFF;
+                    buf[buf_pos++] = (val >> 16) & 0xFF;
+                    buf[buf_pos++] = (val >> 24) & 0xFF;
+                }
+                break;
+            }
+
+            case 'q': {  /* Signed quad (8 bytes), native endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(8);
+                    int64_t val = GET_ARG_INT();
+                    memcpy(buf + buf_pos, &val, 8);
+                    buf_pos += 8;
+                }
+                break;
+            }
+
+            case 'Q': {  /* Unsigned quad (8 bytes), native endian */
+                for (int i = 0; i < count; i++) {
+                    ENSURE_SPACE(8);
+                    uint64_t val = (uint64_t)GET_ARG_INT();
+                    memcpy(buf + buf_pos, &val, 8);
+                    buf_pos += 8;
+                }
+                break;
+            }
+
+            case 'a':    /* ASCII string, null padded */
+            case 'A': {  /* ASCII string, space padded */
+                const char *str = GET_ARG_STR();
+                size_t str_len = strlen(str);
+                size_t pad_len = (count < 0) ? str_len : (size_t)count;
+                ENSURE_SPACE(pad_len);
+
+                size_t copy_len = str_len < pad_len ? str_len : pad_len;
+                memcpy(buf + buf_pos, str, copy_len);
+
+                char pad_char = (c == 'a') ? '\0' : ' ';
+                for (size_t i = copy_len; i < pad_len; i++) {
+                    buf[buf_pos + i] = pad_char;
+                }
+                buf_pos += pad_len;
+                break;
+            }
+
+            case 'H': {  /* Hex string, high nybble first */
+                const char *str = GET_ARG_STR();
+                size_t str_len = strlen(str);
+                size_t hex_count = (count < 0) ? str_len : (size_t)count;
+                size_t bytes_needed = (hex_count + 1) / 2;
+                ENSURE_SPACE(bytes_needed);
+
+                for (size_t i = 0; i < hex_count && i < str_len; i++) {
+                    int nybble = 0;
+                    char ch = str[i];
+                    if (ch >= '0' && ch <= '9') nybble = ch - '0';
+                    else if (ch >= 'a' && ch <= 'f') nybble = ch - 'a' + 10;
+                    else if (ch >= 'A' && ch <= 'F') nybble = ch - 'A' + 10;
+
+                    if (i % 2 == 0) {
+                        buf[buf_pos] = (nybble << 4);
+                    } else {
+                        buf[buf_pos++] |= nybble;
+                    }
+                }
+                if (hex_count % 2 == 1) buf_pos++;
+                break;
+            }
+
+            case 'x': {  /* Null byte */
+                ENSURE_SPACE(count);
+                for (int i = 0; i < count; i++) {
+                    buf[buf_pos++] = '\0';
+                }
+                break;
+            }
+
+            case 'X': {  /* Back up a byte */
+                for (int i = 0; i < count && buf_pos > 0; i++) {
+                    buf_pos--;
+                }
+                break;
+            }
+
+            default:
+                /* Unknown format, skip */
+                break;
+        }
+    }
+
+    #undef ENSURE_SPACE
+    #undef GET_ARG_INT
+    #undef GET_ARG_STR
+
+    StradaValue *result = strada_new_str_len(buf, buf_pos);
+    free(buf);
+    return result;
+}
+
+/* Unpack binary string into array of values - Perl-like unpack() */
+StradaValue* strada_unpack(const char *fmt, StradaValue *data_sv) {
+    if (!fmt) return strada_new_array();
+
+    const char *data = NULL;
+    size_t data_len = 0;
+
+    if (data_sv && data_sv->type == STRADA_STR && data_sv->value.pv) {
+        data = data_sv->value.pv;
+        data_len = data_sv->struct_size > 0 ? data_sv->struct_size : strlen(data);
+    } else if (data_sv) {
+        data = strada_to_str(data_sv);
+        data_len = data ? strlen(data) : 0;
+    }
+
+    if (!data) return strada_new_array();
+
+    StradaValue *result = strada_new_array();
+    size_t pos = 0;
+
+    const char *p = fmt;
+    while (*p && pos <= data_len) {
+        int count = 1;
+        char c = *p++;
+
+        /* Parse repeat count */
+        if (*p >= '0' && *p <= '9') {
+            count = 0;
+            while (*p >= '0' && *p <= '9') {
+                count = count * 10 + (*p - '0');
+                p++;
+            }
+        } else if (*p == '*') {
+            count = -1;  /* Remaining data */
+            p++;
+        }
+
+        switch (c) {
+            case 'c': {  /* Signed char */
+                int actual = (count < 0) ? (int)(data_len - pos) : count;
+                for (int i = 0; i < actual && pos < data_len; i++) {
+                    int8_t val = (int8_t)data[pos++];
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'C': {  /* Unsigned char */
+                int actual = (count < 0) ? (int)(data_len - pos) : count;
+                for (int i = 0; i < actual && pos < data_len; i++) {
+                    uint8_t val = (uint8_t)data[pos++];
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 's': {  /* Signed short, native endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 2) : count;
+                for (int i = 0; i < actual && pos + 2 <= data_len; i++) {
+                    int16_t val;
+                    memcpy(&val, data + pos, 2);
+                    pos += 2;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'S': {  /* Unsigned short, native endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 2) : count;
+                for (int i = 0; i < actual && pos + 2 <= data_len; i++) {
+                    uint16_t val;
+                    memcpy(&val, data + pos, 2);
+                    pos += 2;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'n': {  /* Unsigned short, network (big) endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 2) : count;
+                for (int i = 0; i < actual && pos + 2 <= data_len; i++) {
+                    uint16_t val = ((uint8_t)data[pos] << 8) | (uint8_t)data[pos + 1];
+                    pos += 2;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'v': {  /* Unsigned short, little endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 2) : count;
+                for (int i = 0; i < actual && pos + 2 <= data_len; i++) {
+                    uint16_t val = (uint8_t)data[pos] | ((uint8_t)data[pos + 1] << 8);
+                    pos += 2;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'l': {  /* Signed long, native endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 4) : count;
+                for (int i = 0; i < actual && pos + 4 <= data_len; i++) {
+                    int32_t val;
+                    memcpy(&val, data + pos, 4);
+                    pos += 4;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'L': {  /* Unsigned long, native endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 4) : count;
+                for (int i = 0; i < actual && pos + 4 <= data_len; i++) {
+                    uint32_t val;
+                    memcpy(&val, data + pos, 4);
+                    pos += 4;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'N': {  /* Unsigned long, network (big) endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 4) : count;
+                for (int i = 0; i < actual && pos + 4 <= data_len; i++) {
+                    uint32_t val = ((uint8_t)data[pos] << 24) |
+                                   ((uint8_t)data[pos + 1] << 16) |
+                                   ((uint8_t)data[pos + 2] << 8) |
+                                   (uint8_t)data[pos + 3];
+                    pos += 4;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'V': {  /* Unsigned long, little endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 4) : count;
+                for (int i = 0; i < actual && pos + 4 <= data_len; i++) {
+                    uint32_t val = (uint8_t)data[pos] |
+                                   ((uint8_t)data[pos + 1] << 8) |
+                                   ((uint8_t)data[pos + 2] << 16) |
+                                   ((uint8_t)data[pos + 3] << 24);
+                    pos += 4;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'q': {  /* Signed quad (8 bytes), native endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 8) : count;
+                for (int i = 0; i < actual && pos + 8 <= data_len; i++) {
+                    int64_t val;
+                    memcpy(&val, data + pos, 8);
+                    pos += 8;
+                    strada_array_push(result->value.av, strada_new_int(val));
+                }
+                break;
+            }
+
+            case 'Q': {  /* Unsigned quad (8 bytes), native endian */
+                int actual = (count < 0) ? (int)((data_len - pos) / 8) : count;
+                for (int i = 0; i < actual && pos + 8 <= data_len; i++) {
+                    uint64_t val;
+                    memcpy(&val, data + pos, 8);
+                    pos += 8;
+                    strada_array_push(result->value.av, strada_new_int((int64_t)val));
+                }
+                break;
+            }
+
+            case 'a':    /* ASCII string, null included */
+            case 'A': {  /* ASCII string, trailing whitespace/nulls stripped */
+                size_t str_len = (count < 0) ? (data_len - pos) : (size_t)count;
+                if (pos + str_len > data_len) str_len = data_len - pos;
+
+                char *str = malloc(str_len + 1);
+                memcpy(str, data + pos, str_len);
+                str[str_len] = '\0';
+                pos += str_len;
+
+                /* 'A' strips trailing whitespace/nulls */
+                if (c == 'A') {
+                    size_t end = str_len;
+                    while (end > 0 && (str[end - 1] == ' ' || str[end - 1] == '\0')) {
+                        end--;
+                    }
+                    str[end] = '\0';
+                    str_len = end;
+                }
+
+                StradaValue *sv = strada_new_str_len(str, str_len);
+                strada_array_push(result->value.av, sv);
+                free(str);
+                break;
+            }
+
+            case 'H': {  /* Hex string, high nybble first */
+                size_t hex_count = (count < 0) ? ((data_len - pos) * 2) : (size_t)count;
+                size_t bytes_needed = (hex_count + 1) / 2;
+                if (pos + bytes_needed > data_len) bytes_needed = data_len - pos;
+
+                char *hex = malloc(hex_count + 1);
+                size_t hex_pos = 0;
+
+                for (size_t i = 0; i < bytes_needed && hex_pos < hex_count; i++) {
+                    uint8_t byte = (uint8_t)data[pos + i];
+                    if (hex_pos < hex_count) {
+                        hex[hex_pos++] = "0123456789abcdef"[(byte >> 4) & 0xF];
+                    }
+                    if (hex_pos < hex_count) {
+                        hex[hex_pos++] = "0123456789abcdef"[byte & 0xF];
+                    }
+                }
+                hex[hex_pos] = '\0';
+                pos += bytes_needed;
+
+                strada_array_push(result->value.av, strada_new_str(hex));
+                free(hex);
+                break;
+            }
+
+            case 'x': {  /* Skip forward */
+                int skip = (count < 0) ? (int)(data_len - pos) : count;
+                pos += skip;
+                if (pos > data_len) pos = data_len;
+                break;
+            }
+
+            case 'X': {  /* Skip backward */
+                for (int i = 0; i < count && pos > 0; i++) {
+                    pos--;
+                }
+                break;
+            }
+
+            case '@': {  /* Go to absolute position */
+                if (count >= 0 && (size_t)count <= data_len) {
+                    pos = count;
+                }
+                break;
+            }
+
+            default:
+                /* Unknown format, skip */
+                break;
+        }
+    }
+
+    return result;
 }
 
 char* strada_chomp(const char *str) {
@@ -7809,6 +8540,20 @@ StradaValue* strada_tcsetattr(StradaValue *fd, StradaValue *when, StradaValue *a
     if ((v = strada_hash_get(attrs->value.hv, "cflag"))) t.c_cflag = strada_to_int(v);
     if ((v = strada_hash_get(attrs->value.hv, "lflag"))) t.c_lflag = strada_to_int(v);
 
+    /* Handle baud rate setting */
+    if ((v = strada_hash_get(attrs->value.hv, "ispeed"))) {
+        cfsetispeed(&t, (speed_t)strada_to_int(v));
+    }
+    if ((v = strada_hash_get(attrs->value.hv, "ospeed"))) {
+        cfsetospeed(&t, (speed_t)strada_to_int(v));
+    }
+    /* Also support "speed" for setting both at once */
+    if ((v = strada_hash_get(attrs->value.hv, "speed"))) {
+        speed_t spd = (speed_t)strada_to_int(v);
+        cfsetispeed(&t, spd);
+        cfsetospeed(&t, spd);
+    }
+
     return strada_new_int(tcsetattr(f, w, &t));
 }
 
@@ -7834,6 +8579,118 @@ StradaValue* strada_cfsetispeed(StradaValue *termios, StradaValue *speed) {
     if (termios->type != STRADA_HASH) return strada_new_int(-1);
     strada_hash_set(termios->value.hv, "ispeed", speed);
     return strada_new_int(0);
+}
+
+/* High-level serial port open function
+ * Opens a serial port device and configures it for raw I/O
+ * Parameters:
+ *   device - path to serial device (e.g., "/dev/ttyUSB0")
+ *   baud   - baud rate constant (e.g., B9600, B115200)
+ *   config - optional config string: "8N1", "7E1", "8N2", etc.
+ *            Default is "8N1" (8 data bits, no parity, 1 stop bit)
+ * Returns: file descriptor on success, -1 on error
+ */
+StradaValue* strada_serial_open(const char *device, int baud, const char *config) {
+    int fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY);
+    if (fd < 0) {
+        return strada_new_int(-1);
+    }
+
+    /* Clear the non-blocking flag now that we've opened it */
+    fcntl(fd, F_SETFL, 0);
+
+    struct termios t;
+    if (tcgetattr(fd, &t) < 0) {
+        close(fd);
+        return strada_new_int(-1);
+    }
+
+    /* Set raw mode - disable all processing */
+    t.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+    t.c_oflag &= ~OPOST;
+    t.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+
+    /* Parse config string (default "8N1") */
+    int databits = 8;
+    char parity = 'N';
+    int stopbits = 1;
+
+    if (config && strlen(config) >= 3) {
+        databits = config[0] - '0';
+        parity = config[1];
+        stopbits = config[2] - '0';
+    }
+
+    /* Set character size */
+    t.c_cflag &= ~CSIZE;
+    switch (databits) {
+        case 5: t.c_cflag |= CS5; break;
+        case 6: t.c_cflag |= CS6; break;
+        case 7: t.c_cflag |= CS7; break;
+        case 8:
+        default: t.c_cflag |= CS8; break;
+    }
+
+    /* Set parity */
+    switch (parity) {
+        case 'E': case 'e':
+            t.c_cflag |= PARENB;
+            t.c_cflag &= ~PARODD;
+            break;
+        case 'O': case 'o':
+            t.c_cflag |= PARENB;
+            t.c_cflag |= PARODD;
+            break;
+        case 'N': case 'n':
+        default:
+            t.c_cflag &= ~PARENB;
+            break;
+    }
+
+    /* Set stop bits */
+    if (stopbits == 2) {
+        t.c_cflag |= CSTOPB;
+    } else {
+        t.c_cflag &= ~CSTOPB;
+    }
+
+    /* Enable receiver and set local mode */
+    t.c_cflag |= (CLOCAL | CREAD);
+
+    /* Disable hardware flow control */
+    t.c_cflag &= ~CRTSCTS;
+
+    /* Set baud rate */
+    cfsetispeed(&t, (speed_t)baud);
+    cfsetospeed(&t, (speed_t)baud);
+
+    /* Set VMIN and VTIME for blocking read with timeout */
+    t.c_cc[VMIN] = 0;   /* Return as soon as any data is available */
+    t.c_cc[VTIME] = 10; /* 1 second timeout (in tenths of a second) */
+
+    /* Apply settings */
+    if (tcsetattr(fd, TCSANOW, &t) < 0) {
+        close(fd);
+        return strada_new_int(-1);
+    }
+
+    /* Flush any pending data */
+    tcflush(fd, TCIOFLUSH);
+
+    return strada_new_int(fd);
+}
+
+/* tcflush - flush input/output queues */
+StradaValue* strada_tcflush(StradaValue *fd, StradaValue *queue) {
+    int f = strada_to_int(fd);
+    int q = strada_to_int(queue);
+    return strada_new_int(tcflush(f, q));
+}
+
+/* tcdrain - wait until all output has been transmitted */
+StradaValue* strada_tcdrain(StradaValue *fd) {
+    int f = strada_to_int(fd);
+    return strada_new_int(tcdrain(f));
 }
 
 /* ===== ADVANCED FILE OPERATIONS ===== */

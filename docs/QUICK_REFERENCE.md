@@ -366,6 +366,42 @@ join(",", @arr)         # Join array
 chr(65)  ord("A")       # Char conversion
 ```
 
+## Binary Data
+
+```strada
+# Byte-level operations (binary-safe, not UTF-8)
+my int $byte = sys::ord_byte($str);           # First byte (0-255)
+my int $b = sys::get_byte($str, 5);           # Byte at position
+my str $new = sys::set_byte($str, 0, 0xFF);   # Set byte, returns new string
+my int $len = sys::byte_length($str);         # Byte count (not chars)
+my str $sub = sys::byte_substr($str, 0, 4);   # Substring by bytes
+
+# Pack - create binary data from values
+my str $bin = sys::pack("NnC", 0x12345678, 80, 255);
+# N = 32-bit big-endian, n = 16-bit big-endian, C = unsigned byte
+
+# Unpack - parse binary data to array
+my array @vals = sys::unpack("NnC", $bin);
+my int $magic = $vals[0];   # 0x12345678
+my int $port = $vals[1];    # 80
+my int $flags = $vals[2];   # 255
+
+# Pack format characters:
+# c/C = signed/unsigned char (1 byte)
+# s/S = signed/unsigned short (2 bytes, native endian)
+# l/L = signed/unsigned long (4 bytes, native endian)
+# q/Q = signed/unsigned quad (8 bytes, native endian)
+# n   = unsigned short, big-endian (network order)
+# v   = unsigned short, little-endian
+# N   = unsigned long, big-endian (network order)
+# V   = unsigned long, little-endian
+# a   = ASCII string (null-padded)
+# A   = ASCII string (space-padded)
+# H   = hex string (high nybble first)
+# x   = null byte (pack only)
+# X   = backup one byte (pack only)
+```
+
 ## I/O
 
 ```strada
@@ -568,6 +604,8 @@ inherit("Duck", "Flyable");       # Multiple inheritance
 **Sockets:** `sys::socket_server`, `sys::socket_client`, `sys::socket_accept`, `sys::socket_send`, `sys::socket_recv`, `sys::socket_close`
 
 **FFI:** `sys::dl_open`, `sys::dl_sym`, `sys::dl_close`, `sys::dl_call_int`, `sys::dl_call_num`, `sys::dl_call_str`, `sys::dl_call_void`, `sys::dl_call_int_sv`, `sys::dl_call_str_sv`, `sys::dl_call_void_sv`, `sys::dl_error`
+
+**Binary/Bytes:** `sys::ord_byte`, `sys::get_byte`, `sys::set_byte`, `sys::byte_length`, `sys::byte_substr`, `sys::pack`, `sys::unpack`
 
 ### math:: Namespace Functions
 

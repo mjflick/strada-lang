@@ -733,6 +733,34 @@ $ref->{"key"}   # Element access
 | `join($sep, @arr)` | Join array elements |
 | `split($sep, $s)` | Split string to array |
 
+### 11.2 Binary/Byte Operations
+
+For working with binary data (protocols, file formats, etc.):
+
+| Function | Description |
+|----------|-------------|
+| `sys::ord_byte($s)` | First byte as integer (0-255) |
+| `sys::get_byte($s, $pos)` | Byte at position |
+| `sys::set_byte($s, $pos, $val)` | Set byte, returns new string |
+| `sys::byte_length($s)` | Byte count (not char count) |
+| `sys::byte_substr($s, $start, $len)` | Substring by bytes |
+| `sys::pack($fmt, @vals)` | Pack values to binary |
+| `sys::unpack($fmt, $s)` | Unpack binary to array |
+
+**Pack Format Characters:**
+
+| Char | Description |
+|------|-------------|
+| `c/C` | Signed/unsigned byte |
+| `s/S` | Short (native endian) |
+| `n/v` | Short (big/little endian) |
+| `l/L` | Long (native endian) |
+| `N/V` | Long (big/little endian) |
+| `q/Q` | Quad (native endian) |
+| `a/A` | String (null/space padded) |
+| `H` | Hex string |
+| `x/X` | Null / backup byte |
+
 ---
 
 ## 12. Regular Expressions
@@ -1108,6 +1136,15 @@ my int $result = sys::dl_call_int_sv($func, [$sv1, $sv2]);
 **Environment:**
 - `sys::getenv($name)` - Get environment variable
 - `sys::setenv($name, $val)` - Set environment variable
+
+**Binary/Bytes:**
+- `sys::ord_byte($s)` - First byte as integer (0-255)
+- `sys::get_byte($s, $pos)` - Byte at position
+- `sys::set_byte($s, $pos, $val)` - Set byte, returns new string
+- `sys::byte_length($s)` - Byte count
+- `sys::byte_substr($s, $start, $len)` - Substring by bytes
+- `sys::pack($fmt, @vals)` - Pack values to binary string
+- `sys::unpack($fmt, $s)` - Unpack binary string to array
 
 ### 20.3 math:: Namespace
 

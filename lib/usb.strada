@@ -1,0 +1,523 @@
+# usb - USB Device Access Module for Strada
+#
+# This module provides userspace USB device access via libusb-1.0.
+#
+# Usage:
+#   use lib "lib";
+#   use usb;
+#
+#   # Initialize USB subsystem
+#   usb::init();
+#
+#   # List all USB devices
+#   my array @devices = usb::get_device_list();
+#   foreach my hash %dev (@devices) {
+#       say("Device: " . $dev{"vidpid"});
+#   }
+#
+#   # Open a specific device by VID:PID
+#   my int $handle = usb::open_device(0x1234, 0x5678);
+#   if ($handle != 0) {
+#       # Claim interface 0
+#       usb::claim_interface($handle, 0);
+#
+#       # Bulk write to endpoint 1
+#       usb::bulk_transfer($handle, 0x01, "Hello", 1000);
+#
+#       # Bulk read from endpoint 0x81 (IN)
+#       my str $data = usb::bulk_transfer($handle, 0x81, 64, 1000);
+#
+#       usb::release_interface($handle, 0);
+#       usb::close($handle);
+#   }
+#
+#   usb::exit();
+#
+# Requires: lib/usb/libstrada_usb.so (build with: cd lib/usb && make)
+
+package usb;
+
+# Load the library - tries multiple paths
+func _get_lib() int {
+    my int $lib = sys::dl_open("lib/usb/libstrada_usb.so");
+    if ($lib == 0) {
+        $lib = sys::dl_open("./lib/usb/libstrada_usb.so");
+    }
+    if ($lib == 0) {
+        $lib = sys::dl_open("libstrada_usb.so");
+    }
+    return $lib;
+}
+
+# ===== Initialization =====
+
+# Initialize libusb (called automatically by most functions)
+# Returns 0 on success, negative error code on failure
+func init() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_init");
+    return sys::dl_call_int($fn, []);
+}
+
+# Cleanup libusb
+func exit() void {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_exit");
+    sys::dl_call_void($fn, []);
+}
+
+# Set debug level (0=none, 1=error, 2=warning, 3=info, 4=debug)
+func set_debug(int $level) void {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_set_debug");
+    sys::dl_call_void_sv($fn, [$level]);
+}
+
+# Get error string for error code
+func strerror(int $errcode) str {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return "Library not loaded";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_strerror");
+    return sys::dl_call_str_sv($fn, [$errcode]);
+}
+
+# ===== Device Enumeration =====
+
+# Get list of USB devices
+# Returns array of hashes with: vid, pid, bus, address, class, subclass, protocol, vidpid
+func get_device_list() array {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        my array @empty;
+        return @empty;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_get_device_list");
+    return sys::dl_call_sv($fn, []);
+}
+
+# ===== Device Open/Close =====
+
+# Open device by Vendor ID and Product ID
+# Returns device handle (int) or 0 on failure
+func open_device(int $vid, int $pid) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return 0;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_open_device");
+    return sys::dl_call_int_sv($fn, [$vid, $pid]);
+}
+
+# Open device by bus number and device address
+func open_device_by_path(int $bus, int $addr) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return 0;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_open_device_by_path");
+    return sys::dl_call_int_sv($fn, [$bus, $addr]);
+}
+
+# Close device handle
+func close(int $handle) void {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_close");
+    sys::dl_call_void_sv($fn, [$handle]);
+}
+
+# ===== Interface Management =====
+
+# Claim interface for exclusive use
+# Returns 0 on success, negative error code on failure
+func claim_interface(int $handle, int $iface) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_claim_interface");
+    return sys::dl_call_int_sv($fn, [$handle, $iface]);
+}
+
+# Release interface
+func release_interface(int $handle, int $iface) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_release_interface");
+    return sys::dl_call_int_sv($fn, [$handle, $iface]);
+}
+
+# Detach kernel driver from interface (Linux only)
+func detach_kernel_driver(int $handle, int $iface) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_detach_kernel_driver");
+    return sys::dl_call_int_sv($fn, [$handle, $iface]);
+}
+
+# Check if kernel driver is active on interface
+func kernel_driver_active(int $handle, int $iface) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_kernel_driver_active");
+    return sys::dl_call_int_sv($fn, [$handle, $iface]);
+}
+
+# Set auto-detach kernel driver mode (1=enable, 0=disable)
+func set_auto_detach(int $handle, int $enable) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_set_auto_detach");
+    return sys::dl_call_int_sv($fn, [$handle, $enable]);
+}
+
+# ===== Data Transfers =====
+
+# Bulk transfer (read or write based on endpoint direction)
+# endpoint: 0x01-0x0F for OUT (write), 0x81-0x8F for IN (read)
+# For OUT: data is the string to send, returns bytes transferred
+# For IN: data is the max length to read, returns data string
+func bulk_transfer(int $handle, int $endpoint, scalar $data, int $timeout) scalar {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return "";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_bulk_transfer");
+    return sys::dl_call_sv($fn, [$handle, $endpoint, $data, $timeout]);
+}
+
+# Interrupt transfer (same semantics as bulk_transfer)
+func interrupt_transfer(int $handle, int $endpoint, scalar $data, int $timeout) scalar {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return "";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_interrupt_transfer");
+    return sys::dl_call_sv($fn, [$handle, $endpoint, $data, $timeout]);
+}
+
+# Control transfer
+# request_type: direction | type | recipient (use constants below)
+# For device-to-host (read): data is max length, returns data string
+# For host-to-device (write): data is string to send, returns bytes transferred
+func control_transfer(int $handle, int $request_type, int $request,
+                      int $value, int $index, scalar $data, int $timeout) scalar {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return "";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_control_transfer");
+    return sys::dl_call_sv($fn, [$handle, $request_type, $request, $value, $index, $data, $timeout]);
+}
+
+# ===== Device Descriptors =====
+
+# Get device descriptor
+# Returns hash with: usb_version, device_class, device_subclass, device_protocol,
+#   max_packet_size, vendor_id, product_id, device_version, num_configurations,
+#   manufacturer_index, product_index, serial_index
+func get_device_descriptor(int $handle) hash {
+    my int $lib = usb::_get_lib();
+    my hash %empty;
+    if ($lib == 0) {
+        return %empty;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_get_device_descriptor");
+    return sys::dl_call_sv($fn, [$handle]);
+}
+
+# Get string descriptor by index
+func get_string_descriptor(int $handle, int $index) str {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return "";
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_get_string_descriptor");
+    return sys::dl_call_str_sv($fn, [$handle, $index]);
+}
+
+# Get configuration descriptor
+# Returns hash with: num_interfaces, configuration_value, max_power, attributes, interfaces
+func get_config_descriptor(int $handle, int $config_index) hash {
+    my int $lib = usb::_get_lib();
+    my hash %empty;
+    if ($lib == 0) {
+        return %empty;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_get_config_descriptor");
+    return sys::dl_call_sv($fn, [$handle, $config_index]);
+}
+
+# ===== Configuration =====
+
+# Get active configuration
+func get_configuration(int $handle) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_get_configuration");
+    return sys::dl_call_int_sv($fn, [$handle]);
+}
+
+# Set configuration
+func set_configuration(int $handle, int $config) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_set_configuration");
+    return sys::dl_call_int_sv($fn, [$handle, $config]);
+}
+
+# Set alternate setting for interface
+func set_interface_alt_setting(int $handle, int $iface, int $alt) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_set_interface_alt_setting");
+    return sys::dl_call_int_sv($fn, [$handle, $iface, $alt]);
+}
+
+# Clear halt/stall on endpoint
+func clear_halt(int $handle, int $endpoint) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_clear_halt");
+    return sys::dl_call_int_sv($fn, [$handle, $endpoint]);
+}
+
+# Reset device
+func reset_device(int $handle) int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) {
+        return -1;
+    }
+    my int $fn = sys::dl_sym($lib, "strada_usb_reset_device");
+    return sys::dl_call_int_sv($fn, [$handle]);
+}
+
+# ===== Constants =====
+
+# USB device class codes
+func CLASS_HID() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 3; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_class_hid");
+    return sys::dl_call_int($fn, []);
+}
+
+func CLASS_MASS_STORAGE() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 8; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_class_mass_storage");
+    return sys::dl_call_int($fn, []);
+}
+
+func CLASS_HUB() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 9; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_class_hub");
+    return sys::dl_call_int($fn, []);
+}
+
+func CLASS_VENDOR_SPEC() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 255; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_class_vendor_spec");
+    return sys::dl_call_int($fn, []);
+}
+
+func CLASS_PRINTER() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 7; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_class_printer");
+    return sys::dl_call_int($fn, []);
+}
+
+func CLASS_AUDIO() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 1; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_class_audio");
+    return sys::dl_call_int($fn, []);
+}
+
+func CLASS_VIDEO() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 14; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_class_video");
+    return sys::dl_call_int($fn, []);
+}
+
+func CLASS_COMM() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 2; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_class_comm");
+    return sys::dl_call_int($fn, []);
+}
+
+# Control transfer request type flags
+func REQUEST_TYPE_STANDARD() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 0; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_request_type_standard");
+    return sys::dl_call_int($fn, []);
+}
+
+func REQUEST_TYPE_CLASS() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 32; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_request_type_class");
+    return sys::dl_call_int($fn, []);
+}
+
+func REQUEST_TYPE_VENDOR() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 64; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_request_type_vendor");
+    return sys::dl_call_int($fn, []);
+}
+
+func RECIPIENT_DEVICE() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 0; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_recipient_device");
+    return sys::dl_call_int($fn, []);
+}
+
+func RECIPIENT_INTERFACE() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 1; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_recipient_interface");
+    return sys::dl_call_int($fn, []);
+}
+
+func RECIPIENT_ENDPOINT() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 2; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_recipient_endpoint");
+    return sys::dl_call_int($fn, []);
+}
+
+func ENDPOINT_IN() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 128; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_endpoint_in");
+    return sys::dl_call_int($fn, []);
+}
+
+func ENDPOINT_OUT() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return 0; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_endpoint_out");
+    return sys::dl_call_int($fn, []);
+}
+
+# Error codes
+func ERROR_IO() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -1; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_io");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_INVALID_PARAM() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -2; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_invalid_param");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_ACCESS() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -3; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_access");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_NO_DEVICE() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -4; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_no_device");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_NOT_FOUND() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -5; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_not_found");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_BUSY() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -6; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_busy");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_TIMEOUT() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -7; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_timeout");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_OVERFLOW() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -8; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_overflow");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_PIPE() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -9; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_pipe");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_INTERRUPTED() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -10; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_interrupted");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_NO_MEM() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -11; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_no_mem");
+    return sys::dl_call_int($fn, []);
+}
+
+func ERROR_NOT_SUPPORTED() int {
+    my int $lib = usb::_get_lib();
+    if ($lib == 0) { return -12; }
+    my int $fn = sys::dl_sym($lib, "strada_usb_error_not_supported");
+    return sys::dl_call_int($fn, []);
+}
