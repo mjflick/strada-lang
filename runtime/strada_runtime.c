@@ -61,6 +61,65 @@ static size_t strada_default_hash_capacity = 16;
 void strada_memprof_alloc(StradaType type, size_t bytes);
 void strada_memprof_free(StradaType type, size_t bytes);
 
+/* OOP debug tracing - set STRADA_DEBUG_BLESS=1 to enable */
+static int strada_debug_bless_checked = 0;
+static int strada_debug_bless = 0;
+
+static void strada_check_debug_bless(void) {
+    if (!strada_debug_bless_checked) {
+        const char *env = getenv("STRADA_DEBUG_BLESS");
+        strada_debug_bless = env && env[0] == '1';
+        strada_debug_bless_checked = 1;
+    }
+}
+
+/* Validate that a string pointer looks valid (basic sanity check) */
+static int strada_validate_blessed_package(const char *pkg) {
+    if (!pkg) return 0;
+
+    /* Check if pointer value looks like a valid heap address */
+    /* Invalid pointers often have suspicious values like small integers, */
+    /* or addresses in the first page (0x0 - 0xFFF) which are never valid */
+    uintptr_t addr = (uintptr_t)pkg;
+    if (addr < 0x10000) {
+        /* Pointer is in low memory - definitely invalid */
+        fprintf(stderr, "Warning: blessed_package pointer looks invalid (addr=0x%lx)\n", (unsigned long)addr);
+        return 0;
+    }
+
+    /* On x86-64 Linux, heap typically starts around 0x55... or higher */
+    /* Stack is around 0x7f... User space ends at 0x7fffffffffff */
+    /* Anything above that is kernel space and invalid for userspace */
+    if (addr > 0x7fffffffffff) {
+        fprintf(stderr, "Warning: blessed_package pointer in kernel space (addr=0x%lx)\n", (unsigned long)addr);
+        return 0;
+    }
+
+    /* Now it's safer to try reading - but use a volatile read to prevent optimization issues */
+    volatile unsigned char c = *(volatile unsigned char*)pkg;
+
+    /* Check if first char is printable ASCII (valid package names start with letter) */
+    if (c < 32 || c > 126) {
+        fprintf(stderr, "Warning: corrupted blessed_package detected (first byte: 0x%02x, addr=0x%lx)\n", c, (unsigned long)addr);
+        return 0;
+    }
+    /* Additional sanity: check string length isn't absurd */
+    size_t len = 0;
+    while (len < 256 && pkg[len] != '\0') {
+        c = (unsigned char)pkg[len];
+        if (c < 32 || c > 126) {
+            fprintf(stderr, "Warning: corrupted blessed_package detected at pos %zu (byte: 0x%02x)\n", len, c);
+            return 0;
+        }
+        len++;
+    }
+    if (len == 0 || len >= 256) {
+        fprintf(stderr, "Warning: corrupted blessed_package detected (len: %zu)\n", len);
+        return 0;
+    }
+    return 1;
+}
+
 StradaValue* strada_new_undef(void) {
     StradaValue *sv = malloc(sizeof(StradaValue));
     sv->type = STRADA_UNDEF;
@@ -117,6 +176,7 @@ StradaValue* strada_new_str_len(const char *s, size_t len) {
     StradaValue *sv = malloc(sizeof(StradaValue));
     sv->type = STRADA_STR;
     sv->refcount = 1;
+    sv->blessed_package = NULL;
     if (s && len > 0) {
         sv->value.pv = malloc(len + 1);
         memcpy(sv->value.pv, s, len);
@@ -2038,8 +2098,9 @@ StradaValue* strada_socket_accept(StradaValue *sock) {
     StradaValue *client = malloc(sizeof(StradaValue));
     client->type = STRADA_SOCKET;
     client->refcount = 1;
+    client->blessed_package = NULL;
     client->value.sockfd = client_fd;
-    
+
     return client;
 }
 
@@ -2705,9 +2766,27 @@ void strada_free_value(StradaValue *sv) {
 
     /* Call DESTROY method if this is a blessed reference */
     if (sv->blessed_package) {
-        strada_call_destroy(sv);
-        free(sv->blessed_package);
-        sv->blessed_package = NULL;
+        strada_check_debug_bless();
+
+        /* Debug logging if enabled */
+        if (strada_debug_bless) {
+            fprintf(stderr, "[FREE_VALUE] sv=%p type=%d blessed_package=%p\n",
+                    (void*)sv, sv->type, (void*)sv->blessed_package);
+        }
+
+        /* Only references (STRADA_REF) should have blessed_package set */
+        /* If another type has it, something is very wrong */
+        if (sv->type != STRADA_REF) {
+            fprintf(stderr, "ERROR: Non-reference type %d has blessed_package set! This indicates memory corruption.\n", sv->type);
+            sv->blessed_package = NULL;  /* Clear to prevent crash */
+        } else if (!strada_validate_blessed_package(sv->blessed_package)) {
+            fprintf(stderr, "Error: strada_free_value detected corrupted blessed_package at sv=%p, skipping DESTROY and free\n", (void*)sv);
+            sv->blessed_package = NULL;  /* Clear to prevent crash */
+        } else {
+            strada_call_destroy(sv);
+            free(sv->blessed_package);
+            sv->blessed_package = NULL;
+        }
     }
 
     switch (sv->type) {
@@ -6120,6 +6199,12 @@ StradaValue* strada_bless(StradaValue *ref, const char *package) {
     /* Bless a reference into a package (like Perl's bless) */
     if (!ref || !package) return ref;
 
+    strada_check_debug_bless();
+    if (strada_debug_bless) {
+        fprintf(stderr, "[BLESS] ref=%p package='%s' (old_pkg=%s)\n",
+                (void*)ref, package, ref->blessed_package ? ref->blessed_package : "NULL");
+    }
+
     /* Initialize OOP system if needed */
     if (!oop_initialized) strada_oop_init();
 
@@ -6442,41 +6527,26 @@ const char* strada_get_method_package(void) {
     return oop_current_method_package;
 }
 
-/* Validate that a string pointer looks valid (basic sanity check) */
-static int strada_validate_blessed_package(const char *pkg) {
-    if (!pkg) return 0;
-    /* Check if first char is printable ASCII (valid package names start with letter) */
-    unsigned char c = (unsigned char)pkg[0];
-    if (c < 32 || c > 126) {
-        fprintf(stderr, "Warning: corrupted blessed_package detected (first byte: 0x%02x)\n", c);
-        return 0;
-    }
-    /* Additional sanity: check string length isn't absurd */
-    size_t len = 0;
-    while (len < 256 && pkg[len] != '\0') {
-        c = (unsigned char)pkg[len];
-        if (c < 32 || c > 126) {
-            fprintf(stderr, "Warning: corrupted blessed_package detected at pos %zu (byte: 0x%02x)\n", len, c);
-            return 0;
-        }
-        len++;
-    }
-    if (len == 0 || len >= 256) {
-        fprintf(stderr, "Warning: corrupted blessed_package detected (len: %zu)\n", len);
-        return 0;
-    }
-    return 1;
-}
-
 /* Call DESTROY on an object if it has one */
 void strada_call_destroy(StradaValue *obj) {
     if (!obj || !obj->blessed_package || oop_destroying) return;
     if (!oop_initialized) return;
 
+    strada_check_debug_bless();
+    if (strada_debug_bless) {
+        fprintf(stderr, "[FREE] obj=%p blessed_package ptr=%p\n",
+                (void*)obj, (void*)obj->blessed_package);
+    }
+
     /* Validate blessed_package before using it */
     if (!strada_validate_blessed_package(obj->blessed_package)) {
-        fprintf(stderr, "Error: strada_call_destroy skipping due to corrupted blessed_package\n");
+        fprintf(stderr, "Error: strada_call_destroy skipping due to corrupted blessed_package (obj=%p)\n", (void*)obj);
         return;
+    }
+
+    if (strada_debug_bless) {
+        fprintf(stderr, "[FREE] obj=%p package='%s'\n",
+                (void*)obj, obj->blessed_package);
     }
 
     StradaMethod destroy = oop_lookup_method(obj->blessed_package, "DESTROY");
