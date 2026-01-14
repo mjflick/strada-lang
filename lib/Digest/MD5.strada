@@ -1,0 +1,121 @@
+/*
+ This file is part of the Strada Language (https://github.com/mjflick/strada-lang).
+ Copyright (c) 2026 Michael J. Flickinger
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, version 2.
+
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+# Digest::MD5 - MD5 Message-Digest Algorithm for Strada
+#
+# Provides MD5 hashing functions compatible with Perl's Digest::MD5 module.
+#
+# Usage:
+#   use lib "lib";
+#   use Digest::MD5;
+#
+#   # Get raw 16-byte MD5 digest
+#   my str $digest = Digest::MD5::md5("Hello, World!");
+#
+#   # Get 32-character hex string
+#   my str $hex = Digest::MD5::md5_hex("Hello, World!");
+#   # Returns: "65a8e27d8879283831b664bd8b7f0ad4"
+#
+#   # Get base64-encoded digest (22 chars, no padding - Perl-compatible)
+#   my str $b64 = Digest::MD5::md5_base64("Hello, World!");
+#   # Returns: "ZajifYh5KDgxtmS9i38K1A"
+#
+# Note: MD5 is considered cryptographically broken and should NOT be used
+# for security purposes (passwords, digital signatures, etc.). Use SHA-256
+# or better for security applications. MD5 is still useful for:
+#   - Checksums and data integrity verification
+#   - Cache keys and deduplication
+#   - Non-security hash tables
+#
+# Requires: lib/Digest/libstrada_md5.so (build with: cd lib/Digest && make)
+
+package Digest::MD5;
+version "1.0.0";
+
+# Load the library - tries multiple paths
+func _get_lib() int {
+    my int $lib = sys::dl_open("lib/Digest/libstrada_md5.so");
+    if ($lib == 0) {
+        $lib = sys::dl_open("./lib/Digest/libstrada_md5.so");
+    }
+    if ($lib == 0) {
+        $lib = sys::dl_open("libstrada_md5.so");
+    }
+    return $lib;
+}
+
+# md5($data) - Compute raw MD5 digest
+#
+# Returns the raw 16-byte MD5 digest as a binary string.
+# This is useful when you need to process the digest further
+# or when interfacing with systems that expect raw bytes.
+#
+# Example:
+#   my str $raw = Digest::MD5::md5("test");
+#   my int $len = sys::byte_length($raw);  # Returns 16
+func md5(str $data) str {
+    my int $lib = Digest::MD5::_get_lib();
+    if ($lib == 0) {
+        die("Failed to load Digest::MD5 library");
+    }
+    my int $fn = sys::dl_sym($lib, "strada_digest_md5");
+    if ($fn == 0) {
+        die("Failed to find md5 function");
+    }
+    return sys::dl_call_sv($fn, [$data]);
+}
+
+# md5_hex($data) - Compute MD5 digest as hex string
+#
+# Returns the MD5 digest as a 32-character lowercase hexadecimal string.
+# This is the most common format for displaying MD5 hashes.
+#
+# Example:
+#   my str $hex = Digest::MD5::md5_hex("Hello, World!");
+#   say($hex);  # "65a8e27d8879283831b664bd8b7f0ad4"
+func md5_hex(str $data) str {
+    my int $lib = Digest::MD5::_get_lib();
+    if ($lib == 0) {
+        die("Failed to load Digest::MD5 library");
+    }
+    my int $fn = sys::dl_sym($lib, "strada_digest_md5_hex");
+    if ($fn == 0) {
+        die("Failed to find md5_hex function");
+    }
+    return sys::dl_call_str_sv($fn, [$data]);
+}
+
+# md5_base64($data) - Compute MD5 digest as base64 string
+#
+# Returns the MD5 digest as a 22-character base64 string.
+# Note: This follows Perl's Digest::MD5 convention of NOT including
+# the trailing "==" padding characters.
+#
+# Example:
+#   my str $b64 = Digest::MD5::md5_base64("Hello, World!");
+#   say($b64);  # "ZajifYh5KDgxtmS9i38K1A"
+func md5_base64(str $data) str {
+    my int $lib = Digest::MD5::_get_lib();
+    if ($lib == 0) {
+        die("Failed to load Digest::MD5 library");
+    }
+    my int $fn = sys::dl_sym($lib, "strada_digest_md5_base64");
+    if ($fn == 0) {
+        die("Failed to find md5_base64 function");
+    }
+    return sys::dl_call_str_sv($fn, [$data]);
+}
