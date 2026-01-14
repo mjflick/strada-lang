@@ -296,7 +296,8 @@ StradaValue* strada_bool(StradaValue *sv);   /* Convert to boolean */
 int strada_scalar(StradaValue *sv);          /* Scalar context evaluation */
 
 /* Reference system */
-StradaValue* strada_ref_create(StradaValue *sv);      /* Create reference */
+StradaValue* strada_ref_create(StradaValue *sv);      /* Create reference (shared ownership) */
+StradaValue* strada_ref_create_take(StradaValue *sv); /* Create reference (take ownership) */
 StradaValue* strada_ref_deref(StradaValue *ref);      /* Dereference */
 int strada_is_ref(StradaValue *sv);                   /* Check if reference */
 const char* strada_reftype(StradaValue *ref);         /* Get type of referent */

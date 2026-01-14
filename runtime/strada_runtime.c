@@ -1,19 +1,19 @@
 /*
- * This file is part of the Strada Language (https://github.com/mjflick/strada-lang).
- * Copyright (c) 2026 Michael J. Flickinger
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 2.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- */
+ This file is part of the Strada Language (https://github.com/mjflick/strada-lang).
+ Copyright (c) 2026 Michael J. Flickinger
+ 
+ This program is free software: you can redistribute it and/or modify  
+ it under the terms of the GNU General Public License as published by  
+ the Free Software Foundation, version 2.
+
+ This program is distributed in the hope that it will be useful, but 
+ WITHOUT ANY WARRANTY; without even the implied warranty of 
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
+ General Public License for more details.
+
+ You should have received a copy of the GNU General Public License 
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /* strada_runtime.c - Strada Runtime Implementation */
 #define _POSIX_C_SOURCE 200809L
@@ -461,8 +461,7 @@ StradaValue* strada_array_get(StradaArray *av, int64_t idx) {
     /* Check bounds */
     if (idx < 0 || (size_t)idx >= av->size) return strada_new_undef();
 
-    // Incref before returning so caller owns a reference
-    strada_incref(av->elements[idx]);
+    // Return borrowed reference - caller must incref if storing
     return av->elements[idx];
 }
 
@@ -772,7 +771,7 @@ void strada_hash_set(StradaHash *hv, const char *key, StradaValue *sv) {
         entry = entry->next;
     }
     
-    /* Add new entry */
+    /* Add new entry - incref the value for shared ownership */
     entry = malloc(sizeof(StradaHashEntry));
     entry->key = strdup(key);
     entry->value = sv;
@@ -796,8 +795,7 @@ StradaValue* strada_hash_get(StradaHash *hv, const char *key) {
     StradaHashEntry *entry = hv->buckets[bucket];
     while (entry) {
         if (strcmp(entry->key, key) == 0) {
-            // Incref before returning so caller owns a reference
-            strada_incref(entry->value);
+            // Return borrowed reference - caller must incref if storing
             return entry->value;
         }
         entry = entry->next;
@@ -2799,6 +2797,12 @@ void strada_free_value(StradaValue *sv) {
         case STRADA_HASH:
             strada_free_hash(sv->value.hv);
             break;
+        case STRADA_REF:
+            /* Decrement reference count on the referent */
+            if (sv->value.rv) {
+                strada_decref(sv->value.rv);
+            }
+            break;
         case STRADA_FILEHANDLE:
             if (sv->value.fh) {
                 fclose(sv->value.fh);
@@ -2853,24 +2857,24 @@ void strada_free_value(StradaValue *sv) {
 
 void strada_free_array(StradaArray *av) {
     if (!av) return;
-    
+
     av->refcount--;
     if (av->refcount > 0) return;
-    
+
     for (size_t i = 0; i < av->size; i++) {
         strada_decref(av->elements[i]);
     }
-    
+
     free(av->elements);
     free(av);
 }
 
 void strada_free_hash(StradaHash *hv) {
     if (!hv) return;
-    
+
     hv->refcount--;
     if (hv->refcount > 0) return;
-    
+
     for (size_t i = 0; i < hv->num_buckets; i++) {
         StradaHashEntry *entry = hv->buckets[i];
         while (entry) {
@@ -2881,7 +2885,7 @@ void strada_free_hash(StradaHash *hv) {
             entry = next;
         }
     }
-    
+
     free(hv->buckets);
     free(hv);
 }
@@ -4486,7 +4490,7 @@ int strada_scalar(StradaValue *sv) {
 /* ===== REFERENCE SYSTEM ===== */
 
 StradaValue* strada_ref_create(StradaValue *sv) {
-    /* Create a reference to a value */
+    /* Create a reference to a value (shared ownership - increfs target) */
     if (!sv) return strada_new_undef();
 
     StradaValue *ref = malloc(sizeof(StradaValue));
@@ -4498,6 +4502,21 @@ StradaValue* strada_ref_create(StradaValue *sv) {
     /* Increment refcount of referenced value */
     strada_incref(sv);
 
+    return ref;
+}
+
+StradaValue* strada_ref_create_take(StradaValue *sv) {
+    /* Create a reference taking ownership (no incref - caller donates refcount) */
+    /* Use for wrapping newly created values like in strada_anon_array */
+    if (!sv) return strada_new_undef();
+
+    StradaValue *ref = malloc(sizeof(StradaValue));
+    ref->type = STRADA_REF;
+    ref->refcount = 1;
+    ref->value.rv = sv;
+    ref->blessed_package = NULL;
+
+    /* No incref - caller donates their refcount */
     return ref;
 }
 
@@ -4577,10 +4596,14 @@ StradaValue* strada_new_ref(StradaValue *target, char ref_type) {
 
 StradaValue* strada_deref(StradaValue *ref) {
     /* $$ref - dereference a scalar reference */
+    /* Returns an owned reference (increfs the value) */
     if (!ref) return strada_new_undef();
     if (ref->type == STRADA_REF) {
-        return ref->value.rv;
+        StradaValue *result = ref->value.rv;
+        strada_incref(result);
+        return result;
     }
+    strada_incref(ref);
     return ref;
 }
 
@@ -4696,38 +4719,38 @@ StradaValue* strada_deref_array_value(StradaValue *ref) {
 StradaValue* strada_anon_hash(int count, ...) {
     /* Create anonymous hash: { key => val, ... } */
     StradaValue *sv = strada_new_hash();
-    
+
     va_list args;
     va_start(args, count);
-    
+
     for (int i = 0; i < count; i++) {
         const char *key = va_arg(args, const char*);
         StradaValue *val = va_arg(args, StradaValue*);
         strada_hash_set(sv->value.hv, key, val);
     }
-    
+
     va_end(args);
-    
-    /* Return as reference */
-    return strada_ref_create(sv);
+
+    /* Return as reference - take ownership since we just created the hash */
+    return strada_ref_create_take(sv);
 }
 
 StradaValue* strada_anon_array(int count, ...) {
     /* Create anonymous array: [ elem, ... ] */
     StradaValue *sv = strada_new_array();
-    
+
     va_list args;
     va_start(args, count);
-    
+
     for (int i = 0; i < count; i++) {
         StradaValue *elem = va_arg(args, StradaValue*);
         strada_array_push(sv->value.av, elem);
     }
-    
+
     va_end(args);
-    
-    /* Return as reference */
-    return strada_ref_create(sv);
+
+    /* Return as reference - take ownership since we just created the array */
+    return strada_ref_create_take(sv);
 }
 
 StradaValue* strada_array_from_ref(StradaValue *ref) {
