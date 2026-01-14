@@ -1004,9 +1004,37 @@ func needs_temp_cleanup(scalar $expr) int {
         return 0;
     }
 
-    # Function calls: be conservative, don't assume needs cleanup
-    # (some functions return const char*, not StradaValue*)
+    # Function calls: check if it's a known function that returns owned StradaValue*
     if ($type == NODE_CALL()) {
+        my str $name = $expr->{"name"};
+        # Built-in functions that return owned StradaValue*
+        if ($name eq "chr" || $name eq "ord" ||
+            $name eq "sys::base64_encode" || $name eq "sys::base64_decode" ||
+            $name eq "sys::pack" || $name eq "sys::unpack" ||
+            $name eq "sys::ord_byte" || $name eq "sys::get_byte" ||
+            $name eq "sys::byte_length" || $name eq "sys::byte_substr" ||
+            $name eq "sys::set_byte" ||
+            $name eq "substr" || $name eq "length" || $name eq "index" ||
+            $name eq "uc" || $name eq "lc" || $name eq "ucfirst" || $name eq "lcfirst" ||
+            $name eq "trim" || $name eq "ltrim" || $name eq "rtrim" ||
+            $name eq "chomp" || $name eq "chop" ||
+            $name eq "sprintf" || $name eq "join" || $name eq "reverse" ||
+            $name eq "split" || $name eq "keys" || $name eq "values" ||
+            $name eq "defined" || $name eq "exists" ||
+            $name eq "ref" || $name eq "bless" ||
+            $name eq "size" || $name eq "scalar" ||
+            $name eq "push" || $name eq "pop" || $name eq "shift" || $name eq "unshift" ||
+            $name eq "delete" ||
+            $name eq "abs" || $name eq "int" || $name eq "rand" || $name eq "srand" ||
+            $name eq "time" || $name eq "localtime" || $name eq "gmtime" ||
+            $name eq "math::sin" || $name eq "math::cos" || $name eq "math::tan" ||
+            $name eq "math::sqrt" || $name eq "math::pow" || $name eq "math::log" ||
+            $name eq "math::exp" || $name eq "math::floor" || $name eq "math::ceil" ||
+            $name eq "math::abs" || $name eq "math::round") {
+            return 1;
+        }
+        # User-defined functions (non-sys::, non-math::) usually return owned values
+        # But be conservative for now
         return 0;
     }
 
@@ -3411,10 +3439,11 @@ func gen_expression(scalar $cg, scalar $expr) void {
         
         if ($name eq "chr") {
             # Use strada_chr_sv for binary-safe chr that handles NUL bytes
-            emit($cg, "strada_chr_sv(strada_to_int(");
+            # Use emit_int_operand to avoid leaking memoria for integer literals
+            emit($cg, "strada_chr_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, "))");
+            emit_int_operand($cg, $args->[0]);
+            emit($cg, ")");
             return;
         }
         
@@ -3440,9 +3469,9 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, "strada_new_int(strada_get_byte(");
             my scalar $args = $expr->{"args"};
             gen_expression($cg, $args->[0]);
-            emit($cg, ", strada_to_int(");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")))");
+            emit($cg, ", ");
+            emit_int_operand($cg, $args->[1]);
+            emit($cg, "))");
             return;
         }
 
@@ -3451,11 +3480,11 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, "strada_set_byte(");
             my scalar $args = $expr->{"args"};
             gen_expression($cg, $args->[0]);
-            emit($cg, ", strada_to_int(");
-            gen_expression($cg, $args->[1]);
-            emit($cg, "), strada_to_int(");
-            gen_expression($cg, $args->[2]);
-            emit($cg, "))");
+            emit($cg, ", ");
+            emit_int_operand($cg, $args->[1]);
+            emit($cg, ", ");
+            emit_int_operand($cg, $args->[2]);
+            emit($cg, ")");
             return;
         }
 

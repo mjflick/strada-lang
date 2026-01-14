@@ -5048,15 +5048,29 @@ StradaValue* strada_base64_encode(StradaValue *sv) {
     }
 
     result[out_len] = '\0';
-    return strada_new_str(result);
+    StradaValue *ret = strada_new_str(result);
+    free(result);
+    return ret;
 }
 
 /* Base64 decode - decodes base64 string to binary data */
 StradaValue* strada_base64_decode(StradaValue *sv) {
     if (!sv) return strada_new_str("");
 
-    const char *str = strada_to_str(sv);
-    if (!str || !str[0]) return strada_new_str("");
+    const char *str = NULL;
+    char *to_free = NULL;
+
+    if (sv->type == STRADA_STR && sv->value.pv) {
+        str = sv->value.pv;
+    } else {
+        to_free = strada_to_str(sv);
+        str = to_free;
+    }
+
+    if (!str || !str[0]) {
+        if (to_free) free(to_free);
+        return strada_new_str("");
+    }
 
     size_t len = strlen(str);
 
@@ -5094,7 +5108,10 @@ StradaValue* strada_base64_decode(StradaValue *sv) {
     }
 
     result[out_len] = '\0';
-    return strada_new_str_len((char *)result, out_len);
+    StradaValue *ret = strada_new_str_len((char *)result, out_len);
+    free(result);
+    if (to_free) free(to_free);
+    return ret;
 }
 
 char* strada_chomp(const char *str) {
