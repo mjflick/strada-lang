@@ -4633,6 +4633,18 @@ func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) sca
             ast_add_function($program, $fn);
         } elsif (parser_check($parser, "EXTERN")) {
             my scalar $fn = parse_extern_function($parser);
+            # Auto-prefix extern function names with package name (same as regular functions)
+            my str $pkg = $program->{"package"};
+            my str $fn_name = $fn->{"name"};
+            $fn->{"package"} = $pkg;
+            my int $pkg_colon_idx = index($pkg, "::");
+            if (length($pkg) > 0 && $pkg ne "main" && $fn_name ne "main" && $pkg_colon_idx < 0) {
+                my str $prefix = $pkg . "_";
+                my int $prefix_len = length($prefix);
+                if (length($fn_name) < $prefix_len || substr($fn_name, 0, $prefix_len) ne $prefix) {
+                    $fn->{"name"} = $pkg . "_" . $fn_name;
+                }
+            }
             ast_add_function($program, $fn);
         } elsif (parser_check($parser, "STRUCT")) {
             my scalar $st = parse_struct($parser);
@@ -5992,6 +6004,7 @@ func codegen_new(str $filename, int $debug_info, int $enable_profiling) scalar {
     $cg{"last_line"} = 0;  # Track last emitted line to avoid duplicates
     $cg{"functions"} = {};  # Map function name -> function info
     $cg{"in_extern"} = 0;   # Track if we're inside an extern function
+    $cg{"extern_params"} = {};  # Map param name -> type for extern functions
     $cg{"in_main"} = 0;     # Track if we're inside main function
     $cg{"package"} = "";    # Current package name
     $cg{"filename"} = $filename;  # Source file name for __FILE__
@@ -6806,6 +6819,64 @@ func emit_bool_operand(scalar $cg, scalar $expr) void {
     }
 }
 
+# Helper: emit an expression as a C string in extern mode
+# Converts non-string types (int, num) to strings using helper functions
+func emit_extern_str_operand(scalar $cg, scalar $expr) void {
+    my int $type = $expr->{"type"};
+
+    # String literals - emit as raw C string
+    if ($type == NODE_STR_LITERAL()) {
+        gen_expression($cg, $expr);
+        return;
+    }
+
+    # Integer literals - convert to string
+    if ($type == NODE_INT_LITERAL()) {
+        emit($cg, "strada_int_to_cstr(" . $expr->{"value"} . ")");
+        return;
+    }
+
+    # Number literals - convert to string
+    if ($type == NODE_NUM_LITERAL()) {
+        emit($cg, "strada_num_to_cstr(" . $expr->{"value"} . ")");
+        return;
+    }
+
+    # Variables - check extern_params for type and convert if needed
+    if ($type == NODE_VARIABLE()) {
+        my str $var_name = $expr->{"name"};
+        my scalar $extern_params = $cg->{"extern_params"};
+        if ($extern_params) {
+            my scalar $param_type = $extern_params->{$var_name};
+            if ($param_type) {
+                if ($param_type == TYPE_INT()) {
+                    emit($cg, "strada_int_to_cstr(" . $var_name . ")");
+                    return;
+                } elsif ($param_type == TYPE_NUM()) {
+                    emit($cg, "strada_num_to_cstr(" . $var_name . ")");
+                    return;
+                }
+            }
+        }
+        # String type or unknown - emit as-is
+        emit($cg, $var_name);
+        return;
+    }
+
+    # Binary op (nested concatenation) - recurse
+    if ($type == NODE_BINARY_OP() && $expr->{"op"} eq ".") {
+        emit($cg, "strada_cstr_concat(");
+        emit_extern_str_operand($cg, $expr->{"left"});
+        emit($cg, ", ");
+        emit_extern_str_operand($cg, $expr->{"right"});
+        emit($cg, ")");
+        return;
+    }
+
+    # Other expressions - just emit (assume they return char*)
+    gen_expression($cg, $expr);
+}
+
 # Helper: emit a condition as raw C boolean (avoids strada_new_int allocation)
 # Used for while/for/if conditions to prevent memory leaks
 func emit_condition(scalar $cg, scalar $expr) void {
@@ -7340,10 +7411,11 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 emit($cg, ")");
             } elsif ($op eq ".") {
                 # String concatenation in extern mode - use strada_cstr_concat helper
+                # Need to convert non-string types to strings
                 emit($cg, "strada_cstr_concat(");
-                gen_expression($cg, $expr->{"left"});
+                emit_extern_str_operand($cg, $expr->{"left"});
                 emit($cg, ", ");
-                gen_expression($cg, $expr->{"right"});
+                emit_extern_str_operand($cg, $expr->{"right"});
                 emit($cg, ")");
             } else {
                 # Fallback for other ops
@@ -14751,8 +14823,18 @@ func gen_extern_function(scalar $cg, scalar $fn) void {
 
     emit($cg, ") ");
     $cg->{"in_extern"} = 1;  # Enable raw C code generation
+    # Track extern function parameter types for string interpolation conversion
+    my hash %extern_params = ();
+    my int $p = 0;
+    while ($p < $fn->{"param_count"}) {
+        my scalar $param = $params->[$p];
+        $extern_params{$param->{"name"}} = $param->{"param_type"};
+        $p = $p + 1;
+    }
+    $cg->{"extern_params"} = \%extern_params;
     gen_block($cg, $fn->{"body"});
     $cg->{"in_extern"} = 0;  # Disable raw C code generation
+    $cg->{"extern_params"} = {};
     emit($cg, "\n\n");
 }
 

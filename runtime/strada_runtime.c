@@ -6332,6 +6332,20 @@ char* strada_cstr_concat(const char *a, const char *b) {
     return result;
 }
 
+/* Convert int to C string, returns newly allocated string (caller must free) */
+char* strada_int_to_cstr(int64_t n) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%ld", (long)n);
+    return strdup(buf);
+}
+
+/* Convert double to C string, returns newly allocated string (caller must free) */
+char* strada_num_to_cstr(double n) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", n);
+    return strdup(buf);
+}
+
 /* ===== PROCESS CONTROL ===== */
 
 StradaValue* strada_fork(void) {

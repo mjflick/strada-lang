@@ -2500,6 +2500,18 @@ func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) sca
             ast_add_function($program, $fn);
         } elsif (parser_check($parser, "EXTERN")) {
             my scalar $fn = parse_extern_function($parser);
+            # Auto-prefix extern function names with package name (same as regular functions)
+            my str $pkg = $program->{"package"};
+            my str $fn_name = $fn->{"name"};
+            $fn->{"package"} = $pkg;
+            my int $pkg_colon_idx = index($pkg, "::");
+            if (length($pkg) > 0 && $pkg ne "main" && $fn_name ne "main" && $pkg_colon_idx < 0) {
+                my str $prefix = $pkg . "_";
+                my int $prefix_len = length($prefix);
+                if (length($fn_name) < $prefix_len || substr($fn_name, 0, $prefix_len) ne $prefix) {
+                    $fn->{"name"} = $pkg . "_" . $fn_name;
+                }
+            }
             ast_add_function($program, $fn);
         } elsif (parser_check($parser, "STRUCT")) {
             my scalar $st = parse_struct($parser);
