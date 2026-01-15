@@ -6317,6 +6317,21 @@ double strada_cstruct_get_double(StradaValue *sv, const char *field, size_t offs
     return *((double*)(ptr + offset));
 }
 
+/* ===== C STRING HELPERS FOR EXTERN FUNCTIONS ===== */
+
+/* Concatenate two C strings, returns newly allocated string (caller must free) */
+char* strada_cstr_concat(const char *a, const char *b) {
+    if (!a) a = "";
+    if (!b) b = "";
+    size_t len_a = strlen(a);
+    size_t len_b = strlen(b);
+    char *result = malloc(len_a + len_b + 1);
+    if (!result) return strdup("");
+    memcpy(result, a, len_a);
+    memcpy(result + len_a, b, len_b + 1);  /* +1 includes null terminator */
+    return result;
+}
+
 /* ===== PROCESS CONTROL ===== */
 
 StradaValue* strada_fork(void) {

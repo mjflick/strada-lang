@@ -543,6 +543,9 @@ double strada_cstruct_get_double(StradaValue *sv, const char *field, size_t offs
 char* strada_cstruct_get_string(StradaValue *sv, const char *field, size_t offset);
 double strada_cstruct_get_double(StradaValue *sv, const char *field, size_t offset);
 
+/* C string helper for extern functions */
+char* strada_cstr_concat(const char *a, const char *b);  /* Concatenate two C strings, returns malloc'd string */
+
 /* Process control functions */
 StradaValue* strada_sleep(StradaValue *seconds);
 StradaValue* strada_usleep(StradaValue *microseconds);

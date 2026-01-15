@@ -281,6 +281,12 @@ func codegen_register_function(scalar $cg, scalar $fn) void {
     $info{"param_count"} = $fn->{"param_count"};
     $info{"params"} = $fn->{"params"};
     $info{"return_type"} = $fn->{"return_type"};
+    # Track if this is an extern function for call site conversion
+    if ($fn->{"type"} == NODE_EXTERN_FUNC()) {
+        $info{"is_extern"} = 1;
+    } else {
+        $info{"is_extern"} = 0;
+    }
     $cg->{"functions"}->{$name} = \%info;
 }
 
@@ -1267,7 +1273,12 @@ func gen_expression(scalar $cg, scalar $expr) void {
     
     # String literal - use byte-level operations for proper UTF-8 handling
     if ($type == NODE_STR_LITERAL()) {
-        emit($cg, "strada_new_str(\"");
+        # In extern mode, emit raw C string literal
+        if ($in_extern) {
+            emit($cg, "\"");
+        } else {
+            emit($cg, "strada_new_str(\"");
+        }
         my str $val = $expr->{"value"};
         my int $i = 0;
         my int $len = bytes($val);
@@ -1305,7 +1316,11 @@ func gen_expression(scalar $cg, scalar $expr) void {
             }
             $i = $i + 1;
         }
-        emit($cg, "\")");
+        if ($in_extern) {
+            emit($cg, "\"");
+        } else {
+            emit($cg, "\")");
+        }
         return;
     }
 
@@ -1387,6 +1402,13 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 emit($cg, "(");
                 gen_expression($cg, $expr->{"left"});
                 emit($cg, " " . $op . " ");
+                gen_expression($cg, $expr->{"right"});
+                emit($cg, ")");
+            } elsif ($op eq ".") {
+                # String concatenation in extern mode - use strada_cstr_concat helper
+                emit($cg, "strada_cstr_concat(");
+                gen_expression($cg, $expr->{"left"});
+                emit($cg, ", ");
                 gen_expression($cg, $expr->{"right"});
                 emit($cg, ")");
             } else {
@@ -6184,6 +6206,88 @@ func gen_expression(scalar $cg, scalar $expr) void {
         my scalar $args = $expr->{"args"};
         my int $arg_count = $expr->{"arg_count"};
 
+        # Handle extern function calls - convert between StradaValue* and raw C types
+        if ($func_info && $func_info->{"is_extern"} == 1) {
+            my int $ret_type = $func_info->{"return_type"};
+            my int $param_count = $func_info->{"param_count"};
+            my scalar $params = $func_info->{"params"};
+
+            # Generate block for extern call with conversion
+            emit($cg, "({ ");
+
+            # Create temps for args and convert from StradaValue* to raw C types
+            my int $t = 0;
+            while ($t < $arg_count) {
+                my int $param_type = TYPE_SCALAR();
+                if ($t < $param_count) {
+                    $param_type = $params->[$t]->{"param_type"};
+                }
+                emit($cg, "StradaValue *__sv_arg" . $t . " = ");
+                gen_expression($cg, $args->[$t]);
+                emit($cg, "; ");
+                $t = $t + 1;
+            }
+
+            # Call the extern function with converted args
+            if ($ret_type == TYPE_VOID()) {
+                emit($cg, $c_name . "(");
+            } elsif ($ret_type == TYPE_STR()) {
+                emit($cg, "char *__ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_INT()) {
+                emit($cg, "int __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_NUM()) {
+                emit($cg, "double __ext_ret = " . $c_name . "(");
+            } else {
+                emit($cg, "void *__ext_ret = " . $c_name . "(");
+            }
+
+            # Pass converted arguments
+            my int $a = 0;
+            while ($a < $arg_count) {
+                if ($a > 0) {
+                    emit($cg, ", ");
+                }
+                my int $param_type = TYPE_SCALAR();
+                if ($a < $param_count) {
+                    $param_type = $params->[$a]->{"param_type"};
+                }
+                if ($param_type == TYPE_STR()) {
+                    emit($cg, "strada_to_str(__sv_arg" . $a . ")");
+                } elsif ($param_type == TYPE_INT()) {
+                    emit($cg, "strada_to_int(__sv_arg" . $a . ")");
+                } elsif ($param_type == TYPE_NUM()) {
+                    emit($cg, "strada_to_num(__sv_arg" . $a . ")");
+                } else {
+                    emit($cg, "strada_to_str(__sv_arg" . $a . ")");
+                }
+                $a = $a + 1;
+            }
+            emit($cg, "); ");
+
+            # Decref the temp StradaValue args
+            my int $d = 0;
+            while ($d < $arg_count) {
+                if (needs_temp_cleanup($args->[$d]) == 1) {
+                    emit($cg, "strada_decref(__sv_arg" . $d . "); ");
+                }
+                $d = $d + 1;
+            }
+
+            # Convert return value back to StradaValue*
+            if ($ret_type == TYPE_VOID()) {
+                emit($cg, "strada_new_undef(); })");
+            } elsif ($ret_type == TYPE_STR()) {
+                emit($cg, "strada_new_str(__ext_ret); })");
+            } elsif ($ret_type == TYPE_INT()) {
+                emit($cg, "strada_new_int(__ext_ret); })");
+            } elsif ($ret_type == TYPE_NUM()) {
+                emit($cg, "strada_new_num(__ext_ret); })");
+            } else {
+                emit($cg, "strada_new_undef(); })");
+            }
+            return;
+        }
+
         # Check if any arguments need temp cleanup (anonymous values)
         my int $needs_temps = 0;
         my int $check_i = 0;
@@ -7514,6 +7618,19 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         my int $cleanup_enabled = $cg->{"cleanup_enabled"};
         my int $profiling = $cg->{"enable_profiling"};
         my str $func_name = $cg->{"current_func_name"};
+        my int $in_extern = $cg->{"in_extern"};
+
+        # extern functions - simple return with raw C types
+        if ($in_extern == 1) {
+            emit_indent($cg);
+            emit($cg, "return");
+            if ($stmt->{"value"}) {
+                emit($cg, " ");
+                gen_expression($cg, $stmt->{"value"});
+            }
+            emit($cg, ";\n");
+            return;
+        }
 
         # main() and struct-returning functions - evaluate return value, cleanup, then return
         if ($in_main == 1 || $returns_struct == 1) {
