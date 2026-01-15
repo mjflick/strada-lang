@@ -86,6 +86,12 @@ func TYPE_VOID() int { return 7; }
 func TYPE_STRUCT() int { return 8; }
 func TYPE_FUNCPTR() int { return 9; }
 
+# Explicit sized types for extern functions (C interop)
+func TYPE_INT32() int { return 10; }    # int32_t / int
+func TYPE_INT64() int { return 11; }    # int64_t / long long
+func TYPE_FLOAT32() int { return 12; }  # float (32-bit)
+func TYPE_FLOAT64() int { return 13; }  # double (64-bit)
+
 # ============================================================
 # Node Constructors
 # ============================================================
@@ -798,6 +804,10 @@ func ast_data_type_name(int $type) str {
     if ($type == TYPE_HASH()) { return "hash"; }
     if ($type == TYPE_SCALAR()) { return "scalar"; }
     if ($type == TYPE_VOID()) { return "void"; }
+    if ($type == TYPE_INT32()) { return "int32"; }
+    if ($type == TYPE_INT64()) { return "int64"; }
+    if ($type == TYPE_FLOAT32()) { return "float32"; }
+    if ($type == TYPE_FLOAT64()) { return "float64"; }
     return "unknown";
 }
 /*
@@ -1648,6 +1658,11 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "hash") { return "TYPE_HASH"; }
     if ($text eq "scalar") { return "TYPE_SCALAR"; }
     if ($text eq "void") { return "TYPE_VOID"; }
+    # Explicit sized types for extern functions (C interop)
+    if ($text eq "int32") { return "TYPE_INT32"; }
+    if ($text eq "int64") { return "TYPE_INT64"; }
+    if ($text eq "float32") { return "TYPE_FLOAT32"; }
+    if ($text eq "float64") { return "TYPE_FLOAT64"; }
     
     # Built-ins that need special token types
     # undef is a keyword, not a function call
@@ -2268,6 +2283,23 @@ func parse_var_name(scalar $parser) str {
         parser_advance($parser);
         return "void";
     }
+    # Explicit sized types for extern functions (C interop)
+    if ($type_str eq "TYPE_INT32") {
+        parser_advance($parser);
+        return "int32";
+    }
+    if ($type_str eq "TYPE_INT64") {
+        parser_advance($parser);
+        return "int64";
+    }
+    if ($type_str eq "TYPE_FLOAT32") {
+        parser_advance($parser);
+        return "float32";
+    }
+    if ($type_str eq "TYPE_FLOAT64") {
+        parser_advance($parser);
+        return "float64";
+    }
 
     # Other keywords that can be used as variable names
     if ($type_str eq "VERSION") {
@@ -2317,7 +2349,24 @@ func parse_type(scalar $parser) int {
         parser_advance($parser);
         return TYPE_VOID();
     }
-    
+    # Explicit sized types for extern functions (C interop)
+    if ($type_str eq "TYPE_INT32") {
+        parser_advance($parser);
+        return TYPE_INT32();
+    }
+    if ($type_str eq "TYPE_INT64") {
+        parser_advance($parser);
+        return TYPE_INT64();
+    }
+    if ($type_str eq "TYPE_FLOAT32") {
+        parser_advance($parser);
+        return TYPE_FLOAT32();
+    }
+    if ($type_str eq "TYPE_FLOAT64") {
+        parser_advance($parser);
+        return TYPE_FLOAT64();
+    }
+
     # Struct name (IDENT) - return TYPE_STRUCT and store name
     if ($type_str eq "IDENT") {
         $parser->{"last_type_name"} = $tok->{"value"};
@@ -2427,6 +2476,18 @@ func parse_anon_func(scalar $parser, int $line) scalar {
     } elsif (parser_check($parser, "TYPE_VOID")) {
         parser_advance($parser);
         $anon->{"return_type"} = TYPE_VOID();
+    } elsif (parser_check($parser, "TYPE_INT32")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_INT32();
+    } elsif (parser_check($parser, "TYPE_INT64")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_INT64();
+    } elsif (parser_check($parser, "TYPE_FLOAT32")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_FLOAT32();
+    } elsif (parser_check($parser, "TYPE_FLOAT64")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_FLOAT64();
     }
 
     # Parse body
@@ -4592,6 +4653,11 @@ func export_str_to_type(str $type_str) int {
     if ($type_str eq "hash") { return TYPE_HASH(); }
     if ($type_str eq "scalar") { return TYPE_SCALAR(); }
     if ($type_str eq "void") { return TYPE_VOID(); }
+    # Explicit sized types for extern functions (C interop)
+    if ($type_str eq "int32") { return TYPE_INT32(); }
+    if ($type_str eq "int64") { return TYPE_INT64(); }
+    if ($type_str eq "float32") { return TYPE_FLOAT32(); }
+    if ($type_str eq "float64") { return TYPE_FLOAT64(); }
     return TYPE_SCALAR();
 }
 
@@ -6849,10 +6915,10 @@ func emit_extern_str_operand(scalar $cg, scalar $expr) void {
         if ($extern_params) {
             my scalar $param_type = $extern_params->{$var_name};
             if ($param_type) {
-                if ($param_type == TYPE_INT()) {
+                if ($param_type == TYPE_INT() || $param_type == TYPE_INT32() || $param_type == TYPE_INT64()) {
                     emit($cg, "strada_int_to_cstr(" . $var_name . ")");
                     return;
-                } elsif ($param_type == TYPE_NUM()) {
+                } elsif ($param_type == TYPE_NUM() || $param_type == TYPE_FLOAT32() || $param_type == TYPE_FLOAT64()) {
                     emit($cg, "strada_num_to_cstr(" . $var_name . ")");
                     return;
                 }
@@ -12243,6 +12309,14 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 emit($cg, "int __ext_ret = " . $c_name . "(");
             } elsif ($ret_type == TYPE_NUM()) {
                 emit($cg, "double __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_INT32()) {
+                emit($cg, "int32_t __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_INT64()) {
+                emit($cg, "int64_t __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_FLOAT32()) {
+                emit($cg, "float __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_FLOAT64()) {
+                emit($cg, "double __ext_ret = " . $c_name . "(");
             } else {
                 emit($cg, "void *__ext_ret = " . $c_name . "(");
             }
@@ -12260,9 +12334,15 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 if ($param_type == TYPE_STR()) {
                     emit($cg, "strada_to_str(__sv_arg" . $a . ")");
                 } elsif ($param_type == TYPE_INT()) {
+                    emit($cg, "(int)strada_to_int(__sv_arg" . $a . ")");
+                } elsif ($param_type == TYPE_INT32()) {
+                    emit($cg, "(int32_t)strada_to_int(__sv_arg" . $a . ")");
+                } elsif ($param_type == TYPE_INT64()) {
                     emit($cg, "strada_to_int(__sv_arg" . $a . ")");
-                } elsif ($param_type == TYPE_NUM()) {
+                } elsif ($param_type == TYPE_NUM() || $param_type == TYPE_FLOAT64()) {
                     emit($cg, "strada_to_num(__sv_arg" . $a . ")");
+                } elsif ($param_type == TYPE_FLOAT32()) {
+                    emit($cg, "(float)strada_to_num(__sv_arg" . $a . ")");
                 } else {
                     emit($cg, "strada_to_str(__sv_arg" . $a . ")");
                 }
@@ -12284,9 +12364,9 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 emit($cg, "strada_new_undef(); })");
             } elsif ($ret_type == TYPE_STR()) {
                 emit($cg, "strada_new_str(__ext_ret); })");
-            } elsif ($ret_type == TYPE_INT()) {
+            } elsif ($ret_type == TYPE_INT() || $ret_type == TYPE_INT32() || $ret_type == TYPE_INT64()) {
                 emit($cg, "strada_new_int(__ext_ret); })");
-            } elsif ($ret_type == TYPE_NUM()) {
+            } elsif ($ret_type == TYPE_NUM() || $ret_type == TYPE_FLOAT32() || $ret_type == TYPE_FLOAT64()) {
                 emit($cg, "strada_new_num(__ext_ret); })");
             } else {
                 emit($cg, "strada_new_undef(); })");
@@ -14867,6 +14947,11 @@ func type_to_c_raw(int $type) str {
     if ($type == TYPE_NUM()) { return "double"; }
     if ($type == TYPE_STR()) { return "char*"; }
     if ($type == TYPE_VOID()) { return "void"; }
+    # Explicit sized types
+    if ($type == TYPE_INT32()) { return "int32_t"; }
+    if ($type == TYPE_INT64()) { return "int64_t"; }
+    if ($type == TYPE_FLOAT32()) { return "float"; }
+    if ($type == TYPE_FLOAT64()) { return "double"; }
     return "void*";
 }
 

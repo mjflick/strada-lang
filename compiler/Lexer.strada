@@ -846,6 +846,11 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "hash") { return "TYPE_HASH"; }
     if ($text eq "scalar") { return "TYPE_SCALAR"; }
     if ($text eq "void") { return "TYPE_VOID"; }
+    # Explicit sized types for extern functions (C interop)
+    if ($text eq "int32") { return "TYPE_INT32"; }
+    if ($text eq "int64") { return "TYPE_INT64"; }
+    if ($text eq "float32") { return "TYPE_FLOAT32"; }
+    if ($text eq "float64") { return "TYPE_FLOAT64"; }
     
     # Built-ins that need special token types
     # undef is a keyword, not a function call

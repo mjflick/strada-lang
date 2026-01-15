@@ -903,10 +903,10 @@ func emit_extern_str_operand(scalar $cg, scalar $expr) void {
         if ($extern_params) {
             my scalar $param_type = $extern_params->{$var_name};
             if ($param_type) {
-                if ($param_type == TYPE_INT()) {
+                if ($param_type == TYPE_INT() || $param_type == TYPE_INT32() || $param_type == TYPE_INT64()) {
                     emit($cg, "strada_int_to_cstr(" . $var_name . ")");
                     return;
-                } elsif ($param_type == TYPE_NUM()) {
+                } elsif ($param_type == TYPE_NUM() || $param_type == TYPE_FLOAT32() || $param_type == TYPE_FLOAT64()) {
                     emit($cg, "strada_num_to_cstr(" . $var_name . ")");
                     return;
                 }
@@ -6297,6 +6297,14 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 emit($cg, "int __ext_ret = " . $c_name . "(");
             } elsif ($ret_type == TYPE_NUM()) {
                 emit($cg, "double __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_INT32()) {
+                emit($cg, "int32_t __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_INT64()) {
+                emit($cg, "int64_t __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_FLOAT32()) {
+                emit($cg, "float __ext_ret = " . $c_name . "(");
+            } elsif ($ret_type == TYPE_FLOAT64()) {
+                emit($cg, "double __ext_ret = " . $c_name . "(");
             } else {
                 emit($cg, "void *__ext_ret = " . $c_name . "(");
             }
@@ -6314,9 +6322,15 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 if ($param_type == TYPE_STR()) {
                     emit($cg, "strada_to_str(__sv_arg" . $a . ")");
                 } elsif ($param_type == TYPE_INT()) {
+                    emit($cg, "(int)strada_to_int(__sv_arg" . $a . ")");
+                } elsif ($param_type == TYPE_INT32()) {
+                    emit($cg, "(int32_t)strada_to_int(__sv_arg" . $a . ")");
+                } elsif ($param_type == TYPE_INT64()) {
                     emit($cg, "strada_to_int(__sv_arg" . $a . ")");
-                } elsif ($param_type == TYPE_NUM()) {
+                } elsif ($param_type == TYPE_NUM() || $param_type == TYPE_FLOAT64()) {
                     emit($cg, "strada_to_num(__sv_arg" . $a . ")");
+                } elsif ($param_type == TYPE_FLOAT32()) {
+                    emit($cg, "(float)strada_to_num(__sv_arg" . $a . ")");
                 } else {
                     emit($cg, "strada_to_str(__sv_arg" . $a . ")");
                 }
@@ -6338,9 +6352,9 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 emit($cg, "strada_new_undef(); })");
             } elsif ($ret_type == TYPE_STR()) {
                 emit($cg, "strada_new_str(__ext_ret); })");
-            } elsif ($ret_type == TYPE_INT()) {
+            } elsif ($ret_type == TYPE_INT() || $ret_type == TYPE_INT32() || $ret_type == TYPE_INT64()) {
                 emit($cg, "strada_new_int(__ext_ret); })");
-            } elsif ($ret_type == TYPE_NUM()) {
+            } elsif ($ret_type == TYPE_NUM() || $ret_type == TYPE_FLOAT32() || $ret_type == TYPE_FLOAT64()) {
                 emit($cg, "strada_new_num(__ext_ret); })");
             } else {
                 emit($cg, "strada_new_undef(); })");
@@ -8921,6 +8935,11 @@ func type_to_c_raw(int $type) str {
     if ($type == TYPE_NUM()) { return "double"; }
     if ($type == TYPE_STR()) { return "char*"; }
     if ($type == TYPE_VOID()) { return "void"; }
+    # Explicit sized types
+    if ($type == TYPE_INT32()) { return "int32_t"; }
+    if ($type == TYPE_INT64()) { return "int64_t"; }
+    if ($type == TYPE_FLOAT32()) { return "float"; }
+    if ($type == TYPE_FLOAT64()) { return "double"; }
     return "void*";
 }
 

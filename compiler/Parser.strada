@@ -135,6 +135,23 @@ func parse_var_name(scalar $parser) str {
         parser_advance($parser);
         return "void";
     }
+    # Explicit sized types for extern functions (C interop)
+    if ($type_str eq "TYPE_INT32") {
+        parser_advance($parser);
+        return "int32";
+    }
+    if ($type_str eq "TYPE_INT64") {
+        parser_advance($parser);
+        return "int64";
+    }
+    if ($type_str eq "TYPE_FLOAT32") {
+        parser_advance($parser);
+        return "float32";
+    }
+    if ($type_str eq "TYPE_FLOAT64") {
+        parser_advance($parser);
+        return "float64";
+    }
 
     # Other keywords that can be used as variable names
     if ($type_str eq "VERSION") {
@@ -184,7 +201,24 @@ func parse_type(scalar $parser) int {
         parser_advance($parser);
         return TYPE_VOID();
     }
-    
+    # Explicit sized types for extern functions (C interop)
+    if ($type_str eq "TYPE_INT32") {
+        parser_advance($parser);
+        return TYPE_INT32();
+    }
+    if ($type_str eq "TYPE_INT64") {
+        parser_advance($parser);
+        return TYPE_INT64();
+    }
+    if ($type_str eq "TYPE_FLOAT32") {
+        parser_advance($parser);
+        return TYPE_FLOAT32();
+    }
+    if ($type_str eq "TYPE_FLOAT64") {
+        parser_advance($parser);
+        return TYPE_FLOAT64();
+    }
+
     # Struct name (IDENT) - return TYPE_STRUCT and store name
     if ($type_str eq "IDENT") {
         $parser->{"last_type_name"} = $tok->{"value"};
@@ -294,6 +328,18 @@ func parse_anon_func(scalar $parser, int $line) scalar {
     } elsif (parser_check($parser, "TYPE_VOID")) {
         parser_advance($parser);
         $anon->{"return_type"} = TYPE_VOID();
+    } elsif (parser_check($parser, "TYPE_INT32")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_INT32();
+    } elsif (parser_check($parser, "TYPE_INT64")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_INT64();
+    } elsif (parser_check($parser, "TYPE_FLOAT32")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_FLOAT32();
+    } elsif (parser_check($parser, "TYPE_FLOAT64")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_FLOAT64();
     }
 
     # Parse body
@@ -2459,6 +2505,11 @@ func export_str_to_type(str $type_str) int {
     if ($type_str eq "hash") { return TYPE_HASH(); }
     if ($type_str eq "scalar") { return TYPE_SCALAR(); }
     if ($type_str eq "void") { return TYPE_VOID(); }
+    # Explicit sized types for extern functions (C interop)
+    if ($type_str eq "int32") { return TYPE_INT32(); }
+    if ($type_str eq "int64") { return TYPE_INT64(); }
+    if ($type_str eq "float32") { return TYPE_FLOAT32(); }
+    if ($type_str eq "float64") { return TYPE_FLOAT64(); }
     return TYPE_SCALAR();
 }
 
