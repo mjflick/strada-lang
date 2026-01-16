@@ -45,6 +45,50 @@ func sanitize_name(str $name) str {
     return $result;
 }
 
+# Escape C keywords used as variable names by prefixing with v_
+func escape_c_keyword(str $name) str {
+    # C keywords that conflict with Strada variable names
+    if ($name eq "for") { return "v_for"; }
+    if ($name eq "while") { return "v_while"; }
+    if ($name eq "if") { return "v_if"; }
+    if ($name eq "else") { return "v_else"; }
+    if ($name eq "switch") { return "v_switch"; }
+    if ($name eq "case") { return "v_case"; }
+    if ($name eq "default") { return "v_default"; }
+    if ($name eq "break") { return "v_break"; }
+    if ($name eq "continue") { return "v_continue"; }
+    if ($name eq "return") { return "v_return"; }
+    if ($name eq "goto") { return "v_goto"; }
+    if ($name eq "do") { return "v_do"; }
+    if ($name eq "int") { return "v_int"; }
+    if ($name eq "char") { return "v_char"; }
+    if ($name eq "float") { return "v_float"; }
+    if ($name eq "double") { return "v_double"; }
+    if ($name eq "void") { return "v_void"; }
+    if ($name eq "long") { return "v_long"; }
+    if ($name eq "short") { return "v_short"; }
+    if ($name eq "unsigned") { return "v_unsigned"; }
+    if ($name eq "signed") { return "v_signed"; }
+    if ($name eq "const") { return "v_const"; }
+    if ($name eq "static") { return "v_static"; }
+    if ($name eq "extern") { return "v_extern"; }
+    if ($name eq "register") { return "v_register"; }
+    if ($name eq "volatile") { return "v_volatile"; }
+    if ($name eq "auto") { return "v_auto"; }
+    if ($name eq "struct") { return "v_struct"; }
+    if ($name eq "union") { return "v_union"; }
+    if ($name eq "enum") { return "v_enum"; }
+    if ($name eq "typedef") { return "v_typedef"; }
+    if ($name eq "sizeof") { return "v_sizeof"; }
+    # C99/C11 keywords
+    if ($name eq "inline") { return "v_inline"; }
+    if ($name eq "restrict") { return "v_restrict"; }
+    if ($name eq "_Bool") { return "v_Bool"; }
+    if ($name eq "_Complex") { return "v_Complex"; }
+    if ($name eq "_Imaginary") { return "v_Imaginary"; }
+    return $name;
+}
+
 func codegen_new(str $filename, int $debug_info, int $enable_profiling) scalar {
     my hash %cg = ();
     # StringBuilder for O(1) amortized append (no O(n^2) string concat)
@@ -1392,6 +1436,8 @@ func gen_expression(scalar $cg, scalar $expr) void {
     # Variable
     if ($type == NODE_VARIABLE()) {
         my str $var_name = $expr->{"name"};
+        # Escape C keywords in variable names
+        my str $c_var_name = escape_c_keyword($var_name);
         # Handle magic variables for map/sort/grep blocks (only when in those contexts)
         if ($var_name eq "_" && ($cg->{"in_map_block"} || $cg->{"in_grep_block"})) {
             emit($cg, "__elem_");
@@ -1405,11 +1451,11 @@ func gen_expression(scalar $cg, scalar $expr) void {
             my str $local_str = $cg->{"anon_local_str"};
             my str $capture_str = $cg->{"anon_capture_str"};
             if (str_contains_name($param_str, $var_name)) {
-                # It's a parameter - use directly
-                emit($cg, $var_name);
+                # It's a parameter - use directly (escaped for C)
+                emit($cg, $c_var_name);
             } elsif (str_contains_name($local_str, $var_name)) {
-                # It's a local variable - use directly
-                emit($cg, $var_name);
+                # It's a local variable - use directly (escaped for C)
+                emit($cg, $c_var_name);
             } else {
                 # It's a capture - get or add index
                 my int $idx = get_capture_index($capture_str, $var_name);
@@ -1427,7 +1473,7 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 emit($cg, "(*__captures[" . $idx . "])");
             }
         } else {
-            emit($cg, $var_name);
+            emit($cg, $c_var_name);
         }
         return;
     }
@@ -7349,18 +7395,20 @@ func gen_statement(scalar $cg, scalar $stmt) void {
 
         my str $sigil = $stmt->{"sigil"};
         my int $var_type = $stmt->{"var_type"};
-        
+        # Escape C keywords in variable names (e.g., $for -> v_for)
+        my str $c_name = escape_c_keyword($stmt->{"name"});
+
         # Struct type
         if ($var_type == TYPE_STRUCT()) {
             my str $type_name = $stmt->{"type_name"};
             # Register this variable as a struct type for function pointer detection
             $cg->{"struct_vars"}->{$stmt->{"name"}} = $type_name;
-            emit($cg, $type_name . " *" . $stmt->{"name"});
+            emit($cg, $type_name . " *" . $c_name);
             if ($stmt->{"init"}) {
                 my scalar $init = $stmt->{"init"};
                 # Handle clone() for structs specially
                 if ($init->{"type"} == NODE_CALL() && $init->{"name"} eq "clone") {
-                    emit($cg, " = malloc(sizeof(" . $type_name . ")); memcpy(" . $stmt->{"name"} . ", ");
+                    emit($cg, " = malloc(sizeof(" . $type_name . ")); memcpy(" . $c_name . ", ");
                     my scalar $args = $init->{"args"};
                     gen_expression($cg, $args->[0]);
                     emit($cg, ", sizeof(" . $type_name . "))");
@@ -7372,7 +7420,7 @@ func gen_statement(scalar $cg, scalar $stmt) void {
                 emit($cg, " = malloc(sizeof(" . $type_name . "))");
             }
         } elsif ($sigil eq "%" || $var_type == TYPE_HASH()) {
-            emit($cg, "StradaValue *" . $stmt->{"name"});
+            emit($cg, "StradaValue *" . $c_name);
             if ($stmt->{"init"}) {
                 emit($cg, " = ");
                 # Handle empty () which parser returns as anon_hash
@@ -7384,10 +7432,10 @@ func gen_statement(scalar $cg, scalar $stmt) void {
                     # If initializing from a variable or deref, incref to share ownership properly
                     my int $init_type = $init->{"type"};
                     if ($init_type == NODE_VARIABLE()) {
-                        emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                        emit($cg, "; strada_incref(" . $c_name . ")");
                     } elsif ($init_type == NODE_DEREF_SCALAR() && $init->{"sigil"} eq "%") {
                         # Hash deref like %{$ref} returns borrowed reference - need to incref
-                        emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                        emit($cg, "; strada_incref(" . $c_name . ")");
                     }
                 }
             } else {
@@ -7395,12 +7443,12 @@ func gen_statement(scalar $cg, scalar $stmt) void {
             }
             # Handle initial capacity: my hash %name{size};
             if ($stmt->{"initial_capacity"}) {
-                emit($cg, "; strada_hash_reserve_sv(" . $stmt->{"name"} . ", strada_to_int(");
+                emit($cg, "; strada_hash_reserve_sv(" . $c_name . ", strada_to_int(");
                 gen_expression($cg, $stmt->{"initial_capacity"});
                 emit($cg, "))");
             }
         } elsif ($sigil eq "@" || $var_type == TYPE_ARRAY()) {
-            emit($cg, "StradaValue *" . $stmt->{"name"});
+            emit($cg, "StradaValue *" . $c_name);
             if ($stmt->{"init"}) {
                 emit($cg, " = ");
                 # Handle empty () which parser returns as anon_hash
@@ -7414,7 +7462,7 @@ func gen_statement(scalar $cg, scalar $stmt) void {
                 } elsif (is_scalar_expr($init)) {
                     # Single scalar expression like ($x) - wrap in array
                     # Create array and push the element
-                    emit($cg, "strada_new_array(); strada_array_push(" . $stmt->{"name"} . "->value.av, ");
+                    emit($cg, "strada_new_array(); strada_array_push(" . $c_name . "->value.av, ");
                     gen_expression($cg, $init);
                     emit($cg, ")");
                 } else {
@@ -7423,10 +7471,10 @@ func gen_statement(scalar $cg, scalar $stmt) void {
                     # If initializing from a variable or deref, incref to share ownership properly
                     # This is needed because the local variable will be decref'd at end of scope
                     if ($init_type == NODE_VARIABLE()) {
-                        emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                        emit($cg, "; strada_incref(" . $c_name . ")");
                     } elsif ($init_type == NODE_DEREF_SCALAR() && $init->{"sigil"} eq "@") {
                         # Array deref like @{$ref} returns borrowed reference - need to incref
-                        emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                        emit($cg, "; strada_incref(" . $c_name . ")");
                     }
                 }
             } else {
@@ -7434,12 +7482,12 @@ func gen_statement(scalar $cg, scalar $stmt) void {
             }
             # Handle initial capacity: my array @name[size];
             if ($stmt->{"initial_capacity"}) {
-                emit($cg, "; strada_reserve_sv(" . $stmt->{"name"} . ", strada_to_int(");
+                emit($cg, "; strada_reserve_sv(" . $c_name . ", strada_to_int(");
                 gen_expression($cg, $stmt->{"initial_capacity"});
                 emit($cg, "))");
             }
         } else {
-            emit($cg, "StradaValue *" . $stmt->{"name"});
+            emit($cg, "StradaValue *" . $c_name);
             if ($stmt->{"init"}) {
                 emit($cg, " = ");
                 gen_expression($cg, $stmt->{"init"});
@@ -7448,19 +7496,19 @@ func gen_statement(scalar $cg, scalar $stmt) void {
                 my scalar $init = $stmt->{"init"};
                 my int $init_type = $init->{"type"};
                 if ($init_type == NODE_VARIABLE()) {
-                    emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                    emit($cg, "; strada_incref(" . $c_name . ")");
                 } elsif ($init_type == NODE_HASH_ACCESS()) {
                     # Hash access returns borrowed reference - need to incref
-                    emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                    emit($cg, "; strada_incref(" . $c_name . ")");
                 } elsif ($init_type == NODE_SUBSCRIPT()) {
                     # Array subscript also returns borrowed reference
-                    emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                    emit($cg, "; strada_incref(" . $c_name . ")");
                 } elsif ($init_type == NODE_DEREF_ARRAY()) {
                     # Arrow array dereference $ref->[idx] returns borrowed reference
-                    emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                    emit($cg, "; strada_incref(" . $c_name . ")");
                 } elsif ($init_type == NODE_DEREF_HASH()) {
                     # Arrow hash dereference $ref->{key} returns borrowed reference
-                    emit($cg, "; strada_incref(" . $stmt->{"name"} . ")");
+                    emit($cg, "; strada_incref(" . $c_name . ")");
                 }
             } else {
                 emit($cg, " = strada_new_undef()");
@@ -7468,8 +7516,9 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         }
         emit($cg, ";\n");
         # Track variable for scope cleanup (only StradaValue*, not structs)
+        # Use escaped name for C code generation
         if ($var_type != TYPE_STRUCT()) {
-            scope_track_var($cg, $stmt->{"name"});
+            scope_track_var($cg, $c_name);
         }
         return;
     }
@@ -7554,7 +7603,7 @@ func gen_statement(scalar $cg, scalar $stmt) void {
             my scalar $init = $stmt->{"init"};
             if ($init->{"type"} == NODE_VAR_DECL()) {
                 $has_var_decl = 1;
-                $loop_var_name = $init->{"name"};
+                $loop_var_name = escape_c_keyword($init->{"name"});
                 # Wrap in a block for proper scoping
                 emit_indent($cg);
                 emit($cg, "{\n");
@@ -7641,7 +7690,7 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     if ($type == NODE_FOREACH_STMT()) {
         my str $label = $stmt->{"label"};
         my scalar $var_decl = $stmt->{"var_decl"};
-        my str $var_name = $stmt->{"var_name"};
+        my str $var_name = escape_c_keyword($stmt->{"var_name"});
         my scalar $array_expr = $stmt->{"array"};
         my scalar $body = $stmt->{"body"};
 
@@ -8232,12 +8281,13 @@ func gen_function(scalar $cg, scalar $fn) void {
             }
             my scalar $param = $params->[$i];
             my int $ptype = $param->{"param_type"};
+            my str $c_param_name = escape_c_keyword($param->{"name"});
             if ($ptype == TYPE_STRUCT()) {
                 # Register struct-typed parameter for function pointer detection
                 $cg->{"struct_vars"}->{$param->{"name"}} = $param->{"type_name"};
-                emit($cg, $param->{"type_name"} . " *" . $param->{"name"});
+                emit($cg, $param->{"type_name"} . " *" . $c_param_name);
             } else {
-                emit($cg, type_to_c($ptype) . " " . $param->{"name"});
+                emit($cg, type_to_c($ptype) . " " . $c_param_name);
             }
             $i = $i + 1;
         }
@@ -8531,7 +8581,7 @@ func gen_program(scalar $cg, scalar $program) void {
                     }
                     my scalar $param = $params->[$p];
                     my int $ptype = $param->{"param_type"};
-                    emit($cg, type_to_c($ptype) . " " . $param->{"name"});
+                    emit($cg, type_to_c($ptype) . " " . escape_c_keyword($param->{"name"}));
                     $p = $p + 1;
                 }
 
@@ -8577,18 +8627,19 @@ func gen_program(scalar $cg, scalar $program) void {
                 }
                 my scalar $param = $params->[$j];
                 my int $ptype = $param->{"param_type"};
+                my str $c_pname = escape_c_keyword($param->{"name"});
                 if ($ptype == TYPE_STRUCT()) {
-                    emit($cg, $param->{"type_name"} . " *" . $param->{"name"});
+                    emit($cg, $param->{"type_name"} . " *" . $c_pname);
                 } else {
-                    emit($cg, type_to_c($ptype) . " " . $param->{"name"});
+                    emit($cg, type_to_c($ptype) . " " . $c_pname);
                 }
                 $j = $j + 1;
             }
-            
+
             if ($fn->{"param_count"} == 0) {
                 emit($cg, "void");
             }
-            
+
             emit($cg, ");\n");
         }
         $i = $i + 1;
@@ -8689,7 +8740,7 @@ func gen_program(scalar $cg, scalar $program) void {
                     }
                     my scalar $param = $params->[$p];
                     my int $ptype = $param->{"param_type"};
-                    emit($cg, type_to_c($ptype) . " " . $param->{"name"});
+                    emit($cg, type_to_c($ptype) . " " . escape_c_keyword($param->{"name"}));
                     $p = $p + 1;
                 }
 
@@ -8745,7 +8796,7 @@ func gen_program(scalar $cg, scalar $program) void {
                         emit($cg, ", ");
                     }
                     my scalar $param = $params->[$p];
-                    emit($cg, $param->{"name"});
+                    emit($cg, escape_c_keyword($param->{"name"}));
                     $p = $p + 1;
                 }
                 emit($cg, ");\n");
@@ -8803,10 +8854,11 @@ func gen_program(scalar $cg, scalar $program) void {
                     }
                     my scalar $param = $params->[$j];
                     my int $ptype = $param->{"param_type"};
+                    my str $c_pname = escape_c_keyword($param->{"name"});
                     if ($ptype == TYPE_STRUCT()) {
-                        emit($cg, $param->{"type_name"} . " *" . $param->{"name"});
+                        emit($cg, $param->{"type_name"} . " *" . $c_pname);
                     } else {
-                        emit($cg, type_to_c($ptype) . " " . $param->{"name"});
+                        emit($cg, type_to_c($ptype) . " " . $c_pname);
                     }
                     $j = $j + 1;
                 }
@@ -8814,13 +8866,13 @@ func gen_program(scalar $cg, scalar $program) void {
                     emit($cg, "void");
                 }
                 emit($cg, ") { return " . $name . "(");
-                
+
                 $j = 0;
                 while ($j < $fn->{"param_count"}) {
                     if ($j > 0) {
                         emit($cg, ", ");
                     }
-                    emit($cg, $params->[$j]->{"name"});
+                    emit($cg, escape_c_keyword($params->[$j]->{"name"}));
                     $j = $j + 1;
                 }
                 emit($cg, "); }\n");
@@ -8920,7 +8972,7 @@ func gen_extern_function(scalar $cg, scalar $fn) void {
             emit($cg, ", ");
         }
         my scalar $param = $params->[$i];
-        emit($cg, type_to_c_raw($param->{"param_type"}) . " " . $param->{"name"});
+        emit($cg, type_to_c_raw($param->{"param_type"}) . " " . escape_c_keyword($param->{"name"}));
         $i = $i + 1;
     }
 
@@ -8931,11 +8983,13 @@ func gen_extern_function(scalar $cg, scalar $fn) void {
     emit($cg, ") ");
     $cg->{"in_extern"} = 1;  # Enable raw C code generation
     # Track extern function parameter types for string interpolation conversion
+    # Use escaped names to match variable references
     my hash %extern_params = ();
     my int $p = 0;
     while ($p < $fn->{"param_count"}) {
         my scalar $param = $params->[$p];
-        $extern_params{$param->{"name"}} = $param->{"param_type"};
+        my str $c_pname = escape_c_keyword($param->{"name"});
+        $extern_params{$c_pname} = $param->{"param_type"};
         $p = $p + 1;
     }
     $cg->{"extern_params"} = \%extern_params;
@@ -8949,7 +9003,7 @@ func gen_extern_function(scalar $cg, scalar $fn) void {
 func gen_extern_decl(scalar $cg, scalar $fn) void {
     my str $ret_type = type_to_c_raw($fn->{"return_type"});
     emit($cg, $ret_type . " " . sanitize_name($fn->{"name"}) . "(");
-    
+
     my scalar $params = $fn->{"params"};
     my int $i = 0;
     while ($i < $fn->{"param_count"}) {
@@ -8957,10 +9011,10 @@ func gen_extern_decl(scalar $cg, scalar $fn) void {
             emit($cg, ", ");
         }
         my scalar $param = $params->[$i];
-        emit($cg, type_to_c_raw($param->{"param_type"}) . " " . $param->{"name"});
+        emit($cg, type_to_c_raw($param->{"param_type"}) . " " . escape_c_keyword($param->{"name"}));
         $i = $i + 1;
     }
-    
+
     if ($fn->{"param_count"} == 0) {
         emit($cg, "void");
     }
