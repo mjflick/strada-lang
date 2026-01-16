@@ -357,7 +357,8 @@ StradaValue* strada_postincr(StradaValue **pv) {
     StradaValue *old = *pv;
     strada_incref(old);  /* keep old alive to return it */
     *pv = strada_new_num(strada_to_num(old) + 1);
-    return old;
+    strada_decref(old);  /* pv no longer references old */
+    return old;          /* refcount 1 for return value, caller owns it */
 }
 
 StradaValue* strada_postdecr(StradaValue **pv) {
@@ -365,7 +366,8 @@ StradaValue* strada_postdecr(StradaValue **pv) {
     StradaValue *old = *pv;
     strada_incref(old);  /* keep old alive to return it */
     *pv = strada_new_num(strada_to_num(old) - 1);
-    return old;
+    strada_decref(old);  /* pv no longer references old */
+    return old;          /* refcount 1 for return value, caller owns it */
 }
 
 StradaValue* strada_preincr(StradaValue **pv) {
@@ -373,7 +375,9 @@ StradaValue* strada_preincr(StradaValue **pv) {
         if (pv) *pv = strada_new_num(1);
         return pv ? *pv : strada_new_undef();
     }
-    *pv = strada_new_num(strada_to_num(*pv) + 1);
+    StradaValue *old = *pv;
+    *pv = strada_new_num(strada_to_num(old) + 1);
+    strada_decref(old);  /* pv no longer references old */
     return *pv;
 }
 
@@ -382,7 +386,9 @@ StradaValue* strada_predecr(StradaValue **pv) {
         if (pv) *pv = strada_new_num(-1);
         return pv ? *pv : strada_new_undef();
     }
-    *pv = strada_new_num(strada_to_num(*pv) - 1);
+    StradaValue *old = *pv;
+    *pv = strada_new_num(strada_to_num(old) - 1);
+    strada_decref(old);  /* pv no longer references old */
     return *pv;
 }
 

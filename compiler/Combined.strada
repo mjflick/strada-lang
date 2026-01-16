@@ -13559,21 +13559,35 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # For statement
     if ($type == NODE_FOR_STMT()) {
         my str $label = $stmt->{"label"};
-        emit_indent($cg);
-        emit($cg, "for (");
+        my str $loop_var_name = "";
+        my int $has_var_decl = 0;
 
+        # Check if init declares a variable that needs cleanup
         if ($stmt->{"init"}) {
             my scalar $init = $stmt->{"init"};
             if ($init->{"type"} == NODE_VAR_DECL()) {
-                emit($cg, "StradaValue *" . $init->{"name"} . " = ");
+                $has_var_decl = 1;
+                $loop_var_name = $init->{"name"};
+                # Wrap in a block for proper scoping
+                emit_indent($cg);
+                emit($cg, "{\n");
+                indent($cg);
+                emit_indent($cg);
+                emit($cg, "StradaValue *" . $loop_var_name . " = ");
                 if ($init->{"init"}) {
                     gen_expression($cg, $init->{"init"});
                 } else {
                     emit($cg, "strada_new_undef()");
                 }
-            } else {
-                gen_expression($cg, $init);
+                emit($cg, ";\n");
             }
+        }
+
+        emit_indent($cg);
+        emit($cg, "for (");
+
+        if ($stmt->{"init"} && $has_var_decl == 0) {
+            gen_expression($cg, $stmt->{"init"});
         }
         emit($cg, "; ");
 
@@ -13583,7 +13597,15 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         emit($cg, "; ");
 
         if ($stmt->{"update"}) {
-            gen_expression($cg, $stmt->{"update"});
+            my scalar $update = $stmt->{"update"};
+            # Check if update is an increment/decrement - its return value must be freed
+            if ($update->{"type"} == NODE_INCREMENT()) {
+                emit($cg, "({ StradaValue *__upd_tmp = ");
+                gen_expression($cg, $update);
+                emit($cg, "; strada_decref(__upd_tmp); })");
+            } else {
+                gen_expression($cg, $update);
+            }
         }
 
         emit($cg, ") {\n");
@@ -13609,6 +13631,15 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         dedent($cg);
         emit_indent($cg);
         emit($cg, "}\n");
+
+        # Clean up loop variable if we declared one
+        if ($has_var_decl == 1) {
+            emit_indent($cg);
+            emit($cg, "strada_decref(" . $loop_var_name . ");\n");
+            dedent($cg);
+            emit_indent($cg);
+            emit($cg, "}\n");
+        }
 
         # Add break label after loop if labeled
         if (length($label) > 0) {
@@ -13844,8 +13875,16 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # Expression statement
     if ($type == NODE_EXPR_STMT()) {
         emit_indent($cg);
-        gen_expression($cg, $stmt->{"expr"});
-        emit($cg, ";\n");
+        my scalar $expr = $stmt->{"expr"};
+        # Check if expression is an increment/decrement - its return value must be freed
+        if ($expr->{"type"} == NODE_INCREMENT()) {
+            emit($cg, "({ StradaValue *__expr_tmp = ");
+            gen_expression($cg, $expr);
+            emit($cg, "; strada_decref(__expr_tmp); });\n");
+        } else {
+            gen_expression($cg, $expr);
+            emit($cg, ";\n");
+        }
         return;
     }
     
