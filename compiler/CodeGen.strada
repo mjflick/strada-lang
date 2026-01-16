@@ -4528,18 +4528,9 @@ func gen_expression(scalar $cg, scalar $expr) void {
             return;
         }
 
-        # free - explicitly decrement refcount and free if zero
-        if ($name eq "sys::free") {
-            emit($cg, "(strada_free(");
-            my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, "), strada_new_undef())");
-            return;
-        }
-
-        # release - free value and set variable to undef (safe free)
-        # release(\$var) -> frees $var's value and sets $var = undef
-        if ($name eq "sys::release") {
+        # free - explicitly decrement refcount, free if zero, and set variable to undef
+        # free(\$var) -> frees $var's value and sets $var = undef (same as release)
+        if ($name eq "free" || $name eq "sys::free" || $name eq "sys::release") {
             my scalar $args = $expr->{"args"};
             my scalar $ref_arg = $args->[0];
 
