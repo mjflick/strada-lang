@@ -38,8 +38,14 @@ ldconfig -p | grep -E "(libdl|libm|libpthread)"
 git clone https://github.com/yourusername/strada.git
 cd strada
 
+# Detect system dependencies (MySQL, PostgreSQL, OpenSSL, etc.)
+./configure
+
 # Build the compiler
 make
+
+# Build libraries (DBI, crypt, ssl, readline)
+make libs
 
 # Verify it works
 ./strada -r examples/test_simple.strada
@@ -47,7 +53,46 @@ make
 
 ## Detailed Build Process
 
-### Step 1: Build the Self-Hosting Compiler
+### Step 1: Configure (Recommended)
+
+Run the configure script to detect available libraries:
+
+```bash
+./configure
+```
+
+This detects:
+- **Database drivers**: MySQL, SQLite, PostgreSQL
+- **Cryptography**: libcrypt, OpenSSL
+- **Other**: readline, zlib, libusb
+
+Output:
+```
+Configuring Strada...
+
+Checking for dependencies...
+
+  Checking for MySQL... yes (mysql_config)
+  Checking for SQLite... yes
+  Checking for PostgreSQL... no
+  Checking for libcrypt... yes
+  Checking for readline... yes
+  Checking for OpenSSL... yes
+  Checking for zlib... yes
+  Checking for libusb... yes
+
+Configuration complete!
+```
+
+Configure options:
+```bash
+./configure --help              # Show all options
+./configure --with-mysql        # Require MySQL (fail if not found)
+./configure --without-postgres  # Skip PostgreSQL detection
+./configure --prefix=/opt/strada # Set installation prefix
+```
+
+### Step 2: Build the Self-Hosting Compiler
 
 The Makefile handles the full bootstrap process:
 
@@ -60,7 +105,29 @@ This does the following:
 2. Uses bootstrap to compile the self-hosting compiler (`compiler/*.strada`)
 3. Produces `./stradac` - the Strada compiler
 
-### Step 2: Verify the Build
+### Step 3: Build Libraries (Optional)
+
+Build the standard libraries with detected dependencies:
+
+```bash
+make libs
+```
+
+This builds:
+- `lib/DBI.so` - Database interface (MySQL/SQLite/PostgreSQL based on configure)
+- `lib/crypt.so` - Password hashing
+- `lib/ssl.so` - SSL/TLS support
+- `lib/readline/readline.so` - Line editing for REPL
+
+Individual library targets:
+```bash
+make lib-dbi       # Build DBI only
+make lib-crypt     # Build crypt only
+make lib-ssl       # Build ssl only
+make lib-readline  # Build readline only
+```
+
+### Step 4: Verify the Build
 
 ```bash
 # Run the test suite
@@ -73,7 +140,7 @@ make test-selfhost
 make examples
 ```
 
-### Step 3: Install (Optional)
+### Step 5: Install (Optional)
 
 For system-wide installation:
 
@@ -101,11 +168,20 @@ export STRADA_HOME="/usr/local/lib/strada"
 
 | Target | Description |
 |--------|-------------|
+| `./configure` | Detect system dependencies |
 | `make` | Build the self-hosting compiler |
+| `make libs` | Build all shared libraries (DBI, crypt, ssl, readline) |
+| `make lib-dbi` | Build DBI library with detected database drivers |
+| `make lib-crypt` | Build crypt library |
+| `make lib-ssl` | Build SSL library |
+| `make lib-readline` | Build readline library |
+| `make tools` | Build tools (stradadoc, strada-soinfo, etc.) |
 | `make run PROG=name` | Compile and run `examples/name.strada` |
 | `make test` | Run runtime tests |
 | `make test-selfhost` | Verify compiler can compile itself |
+| `make test-suite` | Run comprehensive test suite |
 | `make examples` | Build all example programs |
+| `make install` | Install to system (default: /usr/local) |
 | `make clean` | Remove all build artifacts |
 | `make help` | Show all available targets |
 
@@ -266,6 +342,26 @@ gcc -o program output.c runtime/strada_runtime.c -Iruntime -ldl -lm
 
 ## Building Optional Components
 
+The `./configure` script detects available libraries automatically. After running configure, use `make libs` to build all detected libraries.
+
+### Database Support (DBI)
+
+```bash
+# Install database development files
+sudo apt-get install libmysqlclient-dev  # MySQL
+sudo apt-get install libsqlite3-dev      # SQLite (usually pre-installed)
+sudo apt-get install libpq-dev           # PostgreSQL
+
+# Run configure to detect databases
+./configure
+
+# Build the DBI library with detected drivers
+make lib-dbi
+
+# Check which drivers were enabled
+# (shown during make lib-dbi output)
+```
+
 ### Perl 5 Integration
 
 ```bash
@@ -287,13 +383,33 @@ cd ../..
 # Install OpenSSL development files
 sudo apt-get install libssl-dev  # Debian/Ubuntu
 
+# Run configure (detects OpenSSL)
+./configure
+
 # Build the SSL library
-cd lib/ssl
-make
+make lib-ssl
 
 # Test
-cd ../..
 ./strada -r examples/test_ssl.strada
+```
+
+### Password Hashing (crypt)
+
+```bash
+# Usually available by default on Linux
+# Build the crypt library
+make lib-crypt
+```
+
+### Readline (for REPL)
+
+```bash
+# Install readline development files
+sudo apt-get install libreadline-dev  # Debian/Ubuntu
+
+# Run configure and build
+./configure
+make lib-readline
 ```
 
 ## Verifying Installation

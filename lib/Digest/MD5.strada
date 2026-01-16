@@ -15,47 +15,105 @@
  along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-# Digest::MD5 - MD5 Message-Digest Algorithm for Strada
-#
-# Provides MD5 hashing functions compatible with Perl's Digest::MD5 module.
-#
-# Usage:
-#   use lib "lib";
-#   use Digest::MD5;
-#
-#   # Get raw 16-byte MD5 digest
-#   my str $digest = Digest::MD5::md5("Hello, World!");
-#
-#   # Get 32-character hex string
-#   my str $hex = Digest::MD5::md5_hex("Hello, World!");
-#   # Returns: "65a8e27d8879283831b664bd8b7f0ad4"
-#
-#   # Get base64-encoded digest (22 chars, no padding - Perl-compatible)
-#   my str $b64 = Digest::MD5::md5_base64("Hello, World!");
-#   # Returns: "ZajifYh5KDgxtmS9i38K1A"
-#
-# Note: MD5 is considered cryptographically broken and should NOT be used
-# for security purposes (passwords, digital signatures, etc.). Use SHA-256
-# or better for security applications. MD5 is still useful for:
-#   - Checksums and data integrity verification
-#   - Cache keys and deduplication
-#   - Non-security hash tables
-#
-# Requires: lib/Digest/libstrada_md5.so (build with: cd lib/Digest && make)
+=head1 NAME
+
+Digest::MD5 - MD5 Message-Digest Algorithm for Strada
+
+=head1 SYNOPSIS
+
+    use lib "lib";
+    use Digest::MD5;
+
+    # Get 32-character hex string (most common)
+    my str $hex = Digest::MD5::md5_hex("Hello, World!");
+    # "65a8e27d8879283831b664bd8b7f0ad4"
+
+    # Get raw 16-byte binary digest
+    my str $raw = Digest::MD5::md5("Hello, World!");
+
+    # Get base64-encoded digest (22 chars, no padding)
+    my str $b64 = Digest::MD5::md5_base64("Hello, World!");
+    # "ZajifYh5KDgxtmS9i38K1A"
+
+=head1 DESCRIPTION
+
+Digest::MD5 provides MD5 hashing functions compatible with Perl's
+Digest::MD5 module. It supports raw binary, hexadecimal, and base64 output.
+
+B<Security Warning:> MD5 is considered cryptographically broken and should
+NOT be used for security purposes (passwords, digital signatures, etc.).
+Use SHA-256 or better for security applications.
+
+B<Valid uses for MD5:>
+
+=over 4
+
+=item * Checksums and data integrity verification
+
+=item * Cache keys and deduplication
+
+=item * Non-security hash tables
+
+=back
+
+B<Compile with:>
+
+    ./stradac myapp.strada myapp.c
+    gcc -o myapp myapp.c lib/Digest/strada_md5.c runtime/strada_runtime.c \
+        -Iruntime -ldl -lm
+
+=head1 FUNCTIONS
+
+=head2 md5($data)
+
+Compute raw MD5 digest. Returns a 16-byte binary string.
+
+    my str $raw = Digest::MD5::md5("test");
+    my int $len = sys::byte_length($raw);  # 16
+
+=head2 md5_hex($data)
+
+Compute MD5 digest as a 32-character lowercase hexadecimal string.
+This is the most common format for displaying MD5 hashes.
+
+    my str $hex = Digest::MD5::md5_hex("test");
+    # "098f6bcd4621d373cade4e832627b4f6"
+
+=head2 md5_base64($data)
+
+Compute MD5 digest as a 22-character base64 string. Follows Perl's
+convention of NOT including trailing "==" padding.
+
+    my str $b64 = Digest::MD5::md5_base64("test");
+    # "CY9rzUYh03PK3k6DJie09g"
+
+=head1 EXAMPLE
+
+    use lib "lib";
+    use Digest::MD5;
+
+    # Verify file integrity
+    my str $content = slurp("myfile.txt");
+    my str $hash = Digest::MD5::md5_hex($content);
+    say("MD5: " . $hash);
+
+    # Generate cache key
+    my str $key = Digest::MD5::md5_hex($url . $params);
+
+=head1 SEE ALSO
+
+L<crypt> for password hashing
+
+=cut
 
 package Digest::MD5;
 version "1.0.0";
 
-# Load the library - tries multiple paths
-func _get_lib() int {
-    my int $lib = sys::dl_open("lib/Digest/libstrada_md5.so");
-    if ($lib == 0) {
-        $lib = sys::dl_open("./lib/Digest/libstrada_md5.so");
-    }
-    if ($lib == 0) {
-        $lib = sys::dl_open("libstrada_md5.so");
-    }
-    return $lib;
+# External C function declarations
+extern "C" {
+    func strada_digest_md5(ptr $data, int $len) ptr;
+    func strada_digest_md5_hex(ptr $data, int $len) ptr;
+    func strada_digest_md5_base64(ptr $data, int $len) ptr;
 }
 
 # md5($data) - Compute raw MD5 digest
@@ -68,15 +126,18 @@ func _get_lib() int {
 #   my str $raw = Digest::MD5::md5("test");
 #   my int $len = sys::byte_length($raw);  # Returns 16
 func md5(str $data) str {
-    my int $lib = Digest::MD5::_get_lib();
-    if ($lib == 0) {
-        die("Failed to load Digest::MD5 library");
+    my int $len = sys::byte_length($data);
+    my ptr $data_ptr = c::str_to_ptr($data);
+    my ptr $result_ptr = strada_digest_md5($data_ptr, $len);
+    c::free($data_ptr);
+
+    if (c::is_null($result_ptr)) {
+        return "";
     }
-    my int $fn = sys::dl_sym($lib, "strada_digest_md5");
-    if ($fn == 0) {
-        die("Failed to find md5 function");
-    }
-    return sys::dl_call_sv($fn, [$data]);
+
+    # MD5 digest is always 16 bytes - returns static buffer, don't free
+    my str $result = c::ptr_to_str_n($result_ptr, 16);
+    return $result;
 }
 
 # md5_hex($data) - Compute MD5 digest as hex string
@@ -88,15 +149,13 @@ func md5(str $data) str {
 #   my str $hex = Digest::MD5::md5_hex("Hello, World!");
 #   say($hex);  # "65a8e27d8879283831b664bd8b7f0ad4"
 func md5_hex(str $data) str {
-    my int $lib = Digest::MD5::_get_lib();
-    if ($lib == 0) {
-        die("Failed to load Digest::MD5 library");
-    }
-    my int $fn = sys::dl_sym($lib, "strada_digest_md5_hex");
-    if ($fn == 0) {
-        die("Failed to find md5_hex function");
-    }
-    return sys::dl_call_str_sv($fn, [$data]);
+    my int $len = sys::byte_length($data);
+    my ptr $data_ptr = c::str_to_ptr($data);
+    my ptr $result_ptr = strada_digest_md5_hex($data_ptr, $len);
+    c::free($data_ptr);
+
+    # Returns static buffer, don't free
+    return c::ptr_to_str($result_ptr);
 }
 
 # md5_base64($data) - Compute MD5 digest as base64 string
@@ -109,13 +168,11 @@ func md5_hex(str $data) str {
 #   my str $b64 = Digest::MD5::md5_base64("Hello, World!");
 #   say($b64);  # "ZajifYh5KDgxtmS9i38K1A"
 func md5_base64(str $data) str {
-    my int $lib = Digest::MD5::_get_lib();
-    if ($lib == 0) {
-        die("Failed to load Digest::MD5 library");
-    }
-    my int $fn = sys::dl_sym($lib, "strada_digest_md5_base64");
-    if ($fn == 0) {
-        die("Failed to find md5_base64 function");
-    }
-    return sys::dl_call_str_sv($fn, [$data]);
+    my int $len = sys::byte_length($data);
+    my ptr $data_ptr = c::str_to_ptr($data);
+    my ptr $result_ptr = strada_digest_md5_base64($data_ptr, $len);
+    c::free($data_ptr);
+
+    # Returns static buffer, don't free
+    return c::ptr_to_str($result_ptr);
 }

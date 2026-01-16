@@ -19,7 +19,7 @@
 # This imports MathLib.so as if it were a normal module
 
 use lib "lib";
-import_lib "MathLib";
+import_lib "MathLib.so";
 
 func main() int {
     say("Testing import_lib feature...");

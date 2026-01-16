@@ -293,23 +293,39 @@ OUTER: foreach my int $i (@rows) {
 
 ### Switch Statement
 
+Strada's switch uses braces for each case (no fall-through, no break needed):
+
 ```strada
 my str $day = "Monday";
 
 switch ($day) {
-    case "Monday":
-    case "Tuesday":
-    case "Wednesday":
-    case "Thursday":
-    case "Friday":
-        say("Weekday");
-        break;
-    case "Saturday":
-    case "Sunday":
-        say("Weekend");
-        break;
-    default:
-        say("Unknown");
+    case "Monday" {
+        say("Monday!");
+    }
+    case "Tuesday" {
+        say("Tuesday!");
+    }
+    case "Wednesday" {
+        say("Wednesday!");
+    }
+    default {
+        say("Other day");
+    }
+}
+```
+
+For grouping multiple values, use if/elsif or a hash dispatch table:
+
+```strada
+my hash %day_type = {
+    "Monday" => "Weekday",
+    "Tuesday" => "Weekday",
+    "Saturday" => "Weekend",
+    "Sunday" => "Weekend"
+};
+
+if (exists(%day_type, $day)) {
+    say($day_type{$day});
 }
 ```
 

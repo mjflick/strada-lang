@@ -15,10 +15,53 @@
  along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-# Math::Utils - Mathematical utility functions
+=head1 NAME
+
+Math::Utils - Mathematical utility functions for Strada
+
+=head1 SYNOPSIS
+
+    use lib "lib";
+    use Math::Utils;
+
+    my int $sum = Math::Utils::add(10, 20);
+    my int $sq = Math::Utils::square(5);
+    my int $prod = Math::Utils::multiply(3, 4);
+
+=head1 DESCRIPTION
+
+Math::Utils provides basic mathematical utility functions.
+
+=head1 FUNCTIONS
+
+=head2 add($a, $b)
+
+Returns the sum of two integers.
+
+=head2 subtract($a, $b)
+
+Returns the difference of two integers.
+
+=head2 multiply($a, $b)
+
+Returns the product of two integers.
+
+=head2 divide($a, $b)
+
+Returns the integer division result.
+
+=head2 square($x)
+
+Returns the square of a number.
+
+=head1 SEE ALSO
+
+L<MathLib>
+
+=cut
+
 package Math::Utils;
 
-# Add two numbers
 func add(int $a, int $b) int {
     return $a + $b;
 }

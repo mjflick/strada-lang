@@ -124,6 +124,94 @@ func lex_skip_block_comment(scalar $lexer) void {
     }
 }
 
+# Check if current position starts a POD directive
+# POD directives: =head1, =head2, =head3, =head4, =over, =item, =back, =pod, =cut, =begin, =end, =for
+func lex_is_pod_start(scalar $lexer) int {
+    my str $source = $lexer->{"source"};
+    my int $pos = $lexer->{"pos"};
+    my int $len = length($source);
+
+    # Must start with '=' (61)
+    if (char_at($source, $pos) != 61) {
+        return 0;
+    }
+
+    # Check for POD keywords after '='
+    # We need at least 4 chars for shortest: =pod, =for, =cut
+    if ($pos + 4 > $len) {
+        return 0;
+    }
+
+    my str $word = substr($source, $pos + 1, 5);
+
+    # Check prefixes using substr comparison
+    if (substr($word, 0, 4) eq "head") { return 1; }
+    if (substr($word, 0, 4) eq "over") { return 1; }
+    if (substr($word, 0, 4) eq "item") { return 1; }
+    if (substr($word, 0, 4) eq "back") { return 1; }
+    if (substr($word, 0, 3) eq "pod") { return 1; }
+    if (substr($word, 0, 3) eq "cut") { return 1; }
+    if (substr($word, 0, 5) eq "begin") { return 1; }
+    if (substr($word, 0, 3) eq "end") { return 1; }
+    if (substr($word, 0, 3) eq "for") { return 1; }
+
+    return 0;
+}
+
+# Skip POD block (from =pod/=head/etc to =cut)
+func lex_skip_pod(scalar $lexer) void {
+    my str $source = $lexer->{"source"};
+    my int $len = length($source);
+
+    # Skip until we find =cut at start of line
+    while (1) {
+        my int $code = lex_current_code($lexer);
+
+        if ($code == 0) {
+            # EOF - POD extends to end of file (valid in Perl)
+            return;
+        }
+
+        # Check for =cut at start of line
+        if ($code == 61) {  # '='
+            my int $pos = $lexer->{"pos"};
+            if ($pos + 4 <= $len) {
+                my str $word = substr($source, $pos + 1, 3);
+                if ($word eq "cut") {
+                    # Skip "=cut" and rest of line
+                    lex_advance($lexer);  # =
+                    lex_advance($lexer);  # c
+                    lex_advance($lexer);  # u
+                    lex_advance($lexer);  # t
+                    # Skip to end of line
+                    while (1) {
+                        $code = lex_current_code($lexer);
+                        if ($code == 0 || $code == 10) {
+                            if ($code == 10) {
+                                lex_advance($lexer);
+                            }
+                            return;
+                        }
+                        lex_advance($lexer);
+                    }
+                }
+            }
+        }
+
+        # Skip to next line
+        while (1) {
+            $code = lex_current_code($lexer);
+            if ($code == 0) {
+                return;
+            }
+            lex_advance($lexer);
+            if ($code == 10) {  # newline
+                last;
+            }
+        }
+    }
+}
+
 # Helper to check if char code is alphanumeric or underscore
 func lex_is_ident_char(int $code) int {
     # a-z: 97-122, A-Z: 65-90, 0-9: 48-57, _: 95
@@ -800,6 +888,154 @@ func lex_read_q_string(scalar $lexer, int $token_line, int $is_qq) scalar {
     die("Unterminated q/qq string at line " . $token_line);
 }
 
+# Read a raw C code block __C__ { ... }
+# Handles nested braces, C strings, and C comments properly
+func lex_read_c_block(scalar $lexer, int $token_line) scalar {
+    lex_skip_whitespace($lexer);
+
+    # Expect opening brace  {=123
+    my int $code = lex_current_code($lexer);
+    if ($code != 123) {
+        die("Expected '{' after __C__ at line " . $token_line);
+    }
+    lex_advance($lexer);  # Skip opening {
+
+    my str $result = "";
+    my int $depth = 1;
+
+    while (!lex_at_end($lexer) && $depth > 0) {
+        my int $ch = lex_current_code($lexer);
+
+        # Track line numbers for better error messages
+        if ($ch == 10) {
+            $lexer->{"line"} = $lexer->{"line"} + 1;
+        }
+
+        # Handle C-style strings - don't count braces inside strings
+        # "=34
+        if ($ch == 34) {
+            $result = $result . lex_current_char($lexer);
+            lex_advance($lexer);
+            while (!lex_at_end($lexer)) {
+                my int $sch = lex_current_code($lexer);
+                $result = $result . lex_current_char($lexer);
+                if ($sch == 10) {
+                    $lexer->{"line"} = $lexer->{"line"} + 1;
+                }
+                lex_advance($lexer);
+                # End of string  "=34
+                if ($sch == 34) {
+                    last;
+                }
+                # Escape sequence \=92
+                if ($sch == 92) {
+                    if (!lex_at_end($lexer)) {
+                        $result = $result . lex_current_char($lexer);
+                        lex_advance($lexer);
+                    }
+                }
+            }
+        # Handle C-style char literals - don't count braces inside
+        # '=39
+        } elsif ($ch == 39) {
+            $result = $result . lex_current_char($lexer);
+            lex_advance($lexer);
+            while (!lex_at_end($lexer)) {
+                my int $sch = lex_current_code($lexer);
+                $result = $result . lex_current_char($lexer);
+                lex_advance($lexer);
+                # End of char '=39
+                if ($sch == 39) {
+                    last;
+                }
+                # Escape \=92
+                if ($sch == 92) {
+                    if (!lex_at_end($lexer)) {
+                        $result = $result . lex_current_char($lexer);
+                        lex_advance($lexer);
+                    }
+                }
+            }
+        # Handle C block comments /* */
+        # /=47, *=42
+        } elsif ($ch == 47) {
+            my int $nxt = char_at($lexer->{"source"}, $lexer->{"pos"} + 1);
+            # Block comment
+            if ($nxt == 42) {
+                $result = $result . "/*";
+                lex_advance($lexer);
+                lex_advance($lexer);
+                while (!lex_at_end($lexer)) {
+                    my int $c1 = lex_current_code($lexer);
+                    if ($c1 == 10) {
+                        $lexer->{"line"} = $lexer->{"line"} + 1;
+                    }
+                    # *=42
+                    if ($c1 == 42) {
+                        my int $c2 = char_at($lexer->{"source"}, $lexer->{"pos"} + 1);
+                        # /=47
+                        if ($c2 == 47) {
+                            $result = $result . "*/";
+                            lex_advance($lexer);
+                            lex_advance($lexer);
+                            last;
+                        }
+                    }
+                    $result = $result . lex_current_char($lexer);
+                    lex_advance($lexer);
+                }
+            # Line comment //
+            } elsif ($nxt == 47) {
+                $result = $result . "//";
+                lex_advance($lexer);
+                lex_advance($lexer);
+                while (!lex_at_end($lexer)) {
+                    my int $lc = lex_current_code($lexer);
+                    # newline=10
+                    if ($lc == 10) {
+                        $result = $result . "\n";
+                        $lexer->{"line"} = $lexer->{"line"} + 1;
+                        lex_advance($lexer);
+                        last;
+                    }
+                    $result = $result . lex_current_char($lexer);
+                    lex_advance($lexer);
+                }
+            } else {
+                # Just a /
+                $result = $result . "/";
+                lex_advance($lexer);
+            }
+        # Opening brace {=123
+        } elsif ($ch == 123) {
+            $depth = $depth + 1;
+            $result = $result . "{";
+            lex_advance($lexer);
+        # Closing brace }=125
+        } elsif ($ch == 125) {
+            $depth = $depth - 1;
+            if ($depth > 0) {
+                $result = $result . "}";
+            }
+            lex_advance($lexer);
+        } else {
+            # Regular character
+            $result = $result . lex_current_char($lexer);
+            lex_advance($lexer);
+        }
+    }
+
+    if ($depth > 0) {
+        die("Unterminated __C__ block at line " . $token_line);
+    }
+
+    my hash %token = ();
+    $token{"type"} = "C_BLOCK";
+    $token{"value"} = $result;
+    $token{"line"} = $token_line;
+    return \%token;
+}
+
 func lex_keyword_or_ident(str $text) str {
     if ($text eq "func") { return "FUNC"; }
     if ($text eq "my") { return "MY"; }
@@ -811,13 +1047,20 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "foreach") { return "FOREACH"; }
     if ($text eq "return") { return "RETURN"; }
     if ($text eq "last") { return "LAST"; }
+    if ($text eq "break") { return "LAST"; }
     if ($text eq "next") { return "NEXT"; }
     if ($text eq "extern") { return "EXTERN"; }
+    if ($text eq "private") { return "PRIVATE"; }
+    if ($text eq "async") { return "ASYNC"; }
+    if ($text eq "await") { return "AWAIT"; }
     if ($text eq "struct") { return "STRUCT"; }
+    if ($text eq "enum") { return "ENUM"; }
     if ($text eq "package") { return "PACKAGE"; }
     if ($text eq "version") { return "VERSION"; }
     if ($text eq "use") { return "USE"; }
     if ($text eq "import_lib") { return "IMPORT_LIB"; }
+    if ($text eq "import_object") { return "IMPORT_OBJECT"; }
+    if ($text eq "import_archive") { return "IMPORT_ARCHIVE"; }
     if ($text eq "inherit") { return "INHERIT"; }
     if ($text eq "try") { return "TRY"; }
     if ($text eq "catch") { return "CATCH"; }
@@ -829,6 +1072,7 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "__PACKAGE__") { return "DUNDER_PACKAGE"; }
     if ($text eq "__FILE__") { return "DUNDER_FILE"; }
     if ($text eq "__LINE__") { return "DUNDER_LINE"; }
+    if ($text eq "__C__") { return "C_BLOCK"; }
 
     # String comparison operators
     if ($text eq "eq") { return "STR_EQ"; }
@@ -842,6 +1086,7 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "int") { return "TYPE_INT"; }
     if ($text eq "num") { return "TYPE_NUM"; }
     if ($text eq "str") { return "TYPE_STR"; }
+    if ($text eq "bool") { return "TYPE_BOOL"; }
     if ($text eq "array") { return "TYPE_ARRAY"; }
     if ($text eq "hash") { return "TYPE_HASH"; }
     if ($text eq "scalar") { return "TYPE_SCALAR"; }
@@ -851,7 +1096,19 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "int64") { return "TYPE_INT64"; }
     if ($text eq "float32") { return "TYPE_FLOAT32"; }
     if ($text eq "float64") { return "TYPE_FLOAT64"; }
-    
+    if ($text eq "int8") { return "TYPE_INT8"; }
+    if ($text eq "int16") { return "TYPE_INT16"; }
+    if ($text eq "uint8") { return "TYPE_UINT8"; }
+    if ($text eq "byte") { return "TYPE_UINT8"; }
+    if ($text eq "uint16") { return "TYPE_UINT16"; }
+    if ($text eq "uint32") { return "TYPE_UINT32"; }
+    if ($text eq "uint64") { return "TYPE_UINT64"; }
+    if ($text eq "size_t") { return "TYPE_SIZE_T"; }
+    if ($text eq "char") { return "TYPE_CHAR"; }
+    if ($text eq "float") { return "TYPE_FLOAT32"; }
+    if ($text eq "double") { return "TYPE_FLOAT64"; }
+    if ($text eq "long_double") { return "TYPE_LONG_DOUBLE"; }
+
     # Built-ins that need special token types
     # undef is a keyword, not a function call
     if ($text eq "undef") { return "UNDEF"; }
@@ -908,6 +1165,26 @@ func lex_next_token(scalar $lexer) scalar {
         }
     }
 
+    # Skip POD blocks (=head1, =pod, etc. at start of line)
+    # '=' = 61
+    if ($code == 61) {
+        # Check if we're at start of line (pos 0 or prev char was newline)
+        my int $pos = $lexer->{"pos"};
+        my int $at_line_start = 0;
+        if ($pos == 0) {
+            $at_line_start = 1;
+        } else {
+            my int $prev = char_at($lexer->{"source"}, $pos - 1);
+            if ($prev == 10) {  # newline
+                $at_line_start = 1;
+            }
+        }
+        if ($at_line_start == 1 && lex_is_pod_start($lexer) == 1) {
+            lex_skip_pod($lexer);
+            return lex_next_token($lexer);
+        }
+    }
+
     # Check for regex/substitution after =~ or !~ BEFORE identifier check
     if ($lexer->{"expect_regex"} == 1) {
         # /=47
@@ -956,6 +1233,11 @@ func lex_next_token(scalar $lexer) scalar {
             if ($delim == 40 || $delim == 91 || $delim == 123 || $delim == 60 || $delim == 47 || $delim == 33 || $delim == 124) {
                 return lex_read_q_string($lexer, $token_line, 1);
             }
+        }
+
+        # __C__ { ... } - raw C code block
+        if ($text eq "__C__") {
+            return lex_read_c_block($lexer, $token_line);
         }
 
         my str $type = lex_keyword_or_ident($text);
@@ -1018,6 +1300,26 @@ func lex_next_token(scalar $lexer) scalar {
         my hash %token = ();
         $token{"type"} = "NE";
         $token{"value"} = "!=";
+        $token{"line"} = $token_line;
+        return \%token;
+    }
+
+    # Diamond operator <$fh> for reading from filehandle (<60, $36)
+    if ($code == 60 && $code2 == 36) {
+        lex_advance($lexer);  # Skip <
+        lex_advance($lexer);  # Skip $
+        my str $varname = lex_read_identifier($lexer);
+        if ($varname eq "") {
+            die("Expected variable name in diamond operator at line " . $token_line);
+        }
+        my int $close = lex_current_code($lexer);
+        if ($close != 62) {  # >
+            die("Expected '>' to close diamond operator at line " . $token_line);
+        }
+        lex_advance($lexer);  # Skip >
+        my hash %token = ();
+        $token{"type"} = "DIAMOND";
+        $token{"value"} = $varname;  # Just the variable name without $
         $token{"line"} = $token_line;
         return \%token;
     }

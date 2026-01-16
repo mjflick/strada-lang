@@ -2,6 +2,22 @@
 #ifndef STRADA_RUNTIME_H
 #define STRADA_RUNTIME_H
 
+/* Feature test macros - must be defined before any system headers */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#ifdef __APPLE__
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +36,7 @@
 #include <pthread.h>
 #include <termios.h>
 #include <fcntl.h>
+#include <time.h>
 
 /* Forward declarations */
 typedef struct StradaValue StradaValue;
@@ -40,7 +57,10 @@ typedef enum {
     STRADA_SOCKET,
     STRADA_CSTRUCT,    /* C struct wrapper */
     STRADA_CPOINTER,   /* Generic C pointer */
-    STRADA_CLOSURE     /* Anonymous function with captured environment */
+    STRADA_CLOSURE,    /* Anonymous function with captured environment */
+    STRADA_FUTURE,     /* Async future for await */
+    STRADA_CHANNEL,    /* Thread-safe communication channel */
+    STRADA_ATOMIC      /* Atomic integer for lock-free operations */
 } StradaType;
 
 /* Closure structure */
@@ -66,12 +86,160 @@ typedef struct StradaCond {
     pthread_cond_t cond;
 } StradaCond;
 
+/* ============================================================
+ * Async/Await Support - Thread Pool Model
+ * ============================================================ */
+
+/* Forward declarations */
+typedef struct StradaFuture StradaFuture;
+typedef struct StradaTask StradaTask;
+typedef struct StradaThreadPool StradaThreadPool;
+
+/* Task for thread pool queue */
+struct StradaTask {
+    StradaValue *closure;           /* Closure to execute */
+    StradaFuture *future;           /* Associated future */
+    struct StradaTask *next;        /* Next task in queue */
+};
+
+/* Thread pool for async operations */
+struct StradaThreadPool {
+    pthread_t *workers;             /* Worker threads */
+    int worker_count;               /* Number of workers */
+    int running;                    /* 1 if pool is active */
+
+    /* Task queue */
+    StradaTask *queue_head;
+    StradaTask *queue_tail;
+    int queue_size;
+
+    /* Synchronization */
+    pthread_mutex_t queue_mutex;
+    pthread_cond_t queue_cond;      /* Workers wait on this */
+    pthread_cond_t empty_cond;      /* For shutdown wait */
+};
+
+/* Future states */
+typedef enum {
+    FUTURE_PENDING = 0,
+    FUTURE_RUNNING = 1,
+    FUTURE_COMPLETED = 2,
+    FUTURE_CANCELLED = 3,
+    FUTURE_TIMEOUT = 4
+} StradaFutureState;
+
+/* Future/Promise for async operations */
+struct StradaFuture {
+    pthread_mutex_t mutex;          /* Protects all fields */
+    pthread_cond_t cond;            /* For waiting on completion */
+
+    StradaValue *result;            /* Result value */
+    StradaValue *error;             /* Error value (if failed) */
+    StradaValue *closure;           /* The closure to run */
+
+    StradaFutureState state;        /* Current state */
+    int cancel_requested;           /* 1 if cancellation requested */
+
+    /* For timeout support */
+    struct timespec deadline;       /* Absolute deadline (0 = no timeout) */
+    int has_deadline;
+};
+
+/* Global thread pool */
+extern StradaThreadPool *strada_thread_pool;
+
+/* Pool management */
+void strada_pool_init(int num_workers);
+void strada_pool_shutdown(void);
+void strada_pool_submit(StradaFuture *future);
+
+/* Future creation and operations */
+StradaValue* strada_future_new(StradaValue *closure);
+StradaValue* strada_future_await(StradaValue *future);
+StradaValue* strada_future_await_timeout(StradaValue *future, int64_t timeout_ms);
+int strada_future_is_done(StradaValue *future);
+StradaValue* strada_future_try_get(StradaValue *future);
+void strada_future_cancel(StradaValue *future);
+int strada_future_is_cancelled(StradaValue *future);
+
+/* Combinators */
+StradaValue* strada_future_all(StradaValue *futures_array);
+StradaValue* strada_future_race(StradaValue *futures_array);
+
+/* Timeout wrapper for Strada */
+StradaValue* strada_async_timeout(StradaValue *future, StradaValue *timeout_ms);
+
+/* ============================================================
+ * Channel - Thread-safe Communication
+ * ============================================================ */
+
+/* Channel node for linked list queue */
+typedef struct StradaChannelNode {
+    StradaValue *value;
+    struct StradaChannelNode *next;
+} StradaChannelNode;
+
+/* Thread-safe channel for inter-thread communication */
+typedef struct StradaChannel {
+    pthread_mutex_t mutex;          /* Protects all fields */
+    pthread_cond_t not_empty;       /* Signaled when items added */
+    pthread_cond_t not_full;        /* Signaled when items removed */
+
+    StradaChannelNode *head;        /* Front of queue */
+    StradaChannelNode *tail;        /* Back of queue */
+    int size;                       /* Current number of items */
+    int capacity;                   /* Max items (0 = unbounded) */
+    int closed;                     /* 1 if channel is closed */
+} StradaChannel;
+
+/* Channel operations */
+StradaValue* strada_channel_new(int capacity);
+void strada_channel_send(StradaValue *channel, StradaValue *value);
+StradaValue* strada_channel_recv(StradaValue *channel);
+int strada_channel_try_send(StradaValue *channel, StradaValue *value);
+StradaValue* strada_channel_try_recv(StradaValue *channel);
+void strada_channel_close(StradaValue *channel);
+int strada_channel_is_closed(StradaValue *channel);
+int strada_channel_len(StradaValue *channel);
+
+/* ============================================================
+ * Atomic - Lock-free Integer Operations
+ * ============================================================ */
+
+/* Atomic integer */
+typedef struct StradaAtomicValue {
+    volatile int64_t value;
+} StradaAtomicValue;
+
+/* Atomic operations */
+StradaValue* strada_atomic_new(int64_t initial);
+int64_t strada_atomic_load(StradaValue *atomic);
+void strada_atomic_store(StradaValue *atomic, int64_t value);
+int64_t strada_atomic_add(StradaValue *atomic, int64_t delta);
+int64_t strada_atomic_sub(StradaValue *atomic, int64_t delta);
+int strada_atomic_cas(StradaValue *atomic, int64_t expected, int64_t desired);
+int64_t strada_atomic_inc(StradaValue *atomic);
+int64_t strada_atomic_dec(StradaValue *atomic);
+
 /* StringBuilder for efficient string building (O(1) amortized append) */
 typedef struct StradaStringBuilder {
     char *buffer;       /* Pre-allocated buffer */
     size_t length;      /* Current string length */
     size_t capacity;    /* Total buffer capacity */
 } StradaStringBuilder;
+
+/* Buffered socket for efficient I/O */
+#define STRADA_SOCKET_BUFSIZE 8192
+typedef struct StradaSocketBuffer {
+    int fd;                              /* Socket file descriptor */
+    /* Read buffer */
+    char read_buf[STRADA_SOCKET_BUFSIZE];
+    size_t read_pos;                     /* Current position in read buffer */
+    size_t read_len;                     /* Amount of valid data in read buffer */
+    /* Write buffer */
+    char write_buf[STRADA_SOCKET_BUFSIZE];
+    size_t write_len;                    /* Amount of data in write buffer */
+} StradaSocketBuffer;
 
 /* Main value structure - like Perl's SV */
 struct StradaValue {
@@ -86,7 +254,7 @@ struct StradaValue {
         StradaValue *rv; /* Generic reference */
         FILE *fh;        /* File handle */
         regex_t *rx;     /* Compiled regex */
-        int sockfd;      /* Socket file descriptor */
+        StradaSocketBuffer *sock;  /* Buffered socket */
         void *ptr;       /* Generic C pointer */
     } value;
 
@@ -125,6 +293,8 @@ struct StradaHash {
 StradaValue* strada_new_undef(void);
 StradaValue* strada_new_int(int64_t i);
 StradaValue* strada_new_num(double n);
+StradaValue* strada_safe_div(double a, double b);      /* Returns undef if b==0 */
+StradaValue* strada_safe_mod(int64_t a, int64_t b);    /* Returns undef if b==0 */
 StradaValue* strada_new_str(const char *s);
 StradaValue* strada_new_str_take(char *s);  /* Take ownership of string */
 StradaValue* strada_new_str_len(const char *s, size_t len);  /* Binary-safe string */
@@ -143,6 +313,14 @@ double strada_to_num(StradaValue *sv);
 char* strada_to_str(StradaValue *sv);
 int strada_to_bool(StradaValue *sv);
 
+/* String comparison with C literals (no temporaries) */
+int strada_str_eq_lit(StradaValue *sv, const char *lit);
+int strada_str_ne_lit(StradaValue *sv, const char *lit);
+int strada_str_lt_lit(StradaValue *sv, const char *lit);
+int strada_str_gt_lit(StradaValue *sv, const char *lit);
+int strada_str_le_lit(StradaValue *sv, const char *lit);
+int strada_str_ge_lit(StradaValue *sv, const char *lit);
+
 /* Increment/decrement operations */
 StradaValue* strada_postincr(StradaValue **pv);  /* $i++ */
 StradaValue* strada_postdecr(StradaValue **pv);  /* $i-- */
@@ -152,10 +330,12 @@ StradaValue* strada_predecr(StradaValue **pv);   /* --$i */
 /* Array operations */
 StradaArray* strada_array_new(void);
 void strada_array_push(StradaArray *av, StradaValue *sv);
+void strada_array_push_take(StradaArray *av, StradaValue *sv);
 StradaValue* strada_array_pop(StradaArray *av);
 StradaValue* strada_array_shift(StradaArray *av);
 void strada_array_unshift(StradaArray *av, StradaValue *sv);
 StradaValue* strada_array_get(StradaArray *av, int64_t idx);
+StradaValue* strada_array_get_safe(StradaValue *arr, int64_t idx);  /* For destructuring */
 void strada_array_set(StradaArray *av, int64_t idx, StradaValue *sv);
 size_t strada_array_length(StradaArray *av);
 void strada_array_reverse(StradaArray *av);
@@ -238,9 +418,12 @@ void strada_sb_free(StradaValue *sb);                          /* Free StringBui
 /* I/O functions */
 void strada_print(StradaValue *sv);
 void strada_say(StradaValue *sv);
+void strada_print_fh(StradaValue *sv, StradaValue *fh);
+void strada_say_fh(StradaValue *sv, StradaValue *fh);
 StradaValue* strada_readline(void);
 void strada_printf(const char *format, ...);
 StradaValue* strada_sprintf(const char *format, ...);
+StradaValue* strada_sprintf_sv(StradaValue *format_sv, int arg_count, ...);
 void strada_warn(const char *format, ...);
 
 /* File I/O functions */
@@ -248,6 +431,7 @@ StradaValue* strada_open(const char *filename, const char *mode);
 void strada_close(StradaValue *fh);
 StradaValue* strada_read_file(StradaValue *fh);
 StradaValue* strada_read_line(StradaValue *fh);
+StradaValue* strada_read_all_lines(StradaValue *fh);
 void strada_write_file(StradaValue *fh, const char *content);
 int strada_file_exists(const char *filename);
 StradaValue* strada_slurp(const char *filename);  /* Read entire file */
@@ -262,6 +446,7 @@ void strada_dump(StradaValue *sv, int indent);
 void strada_dumper(StradaValue *sv);
 StradaValue* strada_dumper_str(StradaValue *sv);  /* Returns dump as string */
 StradaValue* strada_defined(StradaValue *sv);
+int strada_defined_bool(StradaValue *sv);  /* Non-allocating version */
 StradaValue* strada_ref(StradaValue *sv);
 
 /* Utility functions */
@@ -479,6 +664,7 @@ int strada_socket_send(StradaValue *sock, const char *data);
 int strada_socket_send_sv(StradaValue *sock, StradaValue *data);  /* Binary-safe version */
 StradaValue* strada_socket_recv(StradaValue *sock, int max_len);
 void strada_socket_close(StradaValue *sock);
+void strada_socket_flush(StradaValue *sock);  /* Flush write buffer */
 StradaValue* strada_socket_server(int port);
 StradaValue* strada_socket_server_backlog(int port, int backlog);
 StradaValue* strada_socket_client(const char *host, int port);
@@ -680,6 +866,12 @@ StradaValue* strada_mkdtemp(StradaValue *template);
 /* Command execution (popen) */
 StradaValue* strada_popen(StradaValue *cmd, StradaValue *mode);
 StradaValue* strada_pclose(StradaValue *fh);
+StradaValue* strada_qx(StradaValue *cmd);  /* Backtick/qx - run command and capture output */
+
+/* Aliases for bootstrap compiler compatibility (sys::foo -> sys_foo) */
+StradaValue* sys_system(StradaValue *cmd);
+StradaValue* sys_qx(StradaValue *cmd);
+StradaValue* sys_unlink(StradaValue *path);
 
 /* Additional file system */
 StradaValue* strada_truncate(StradaValue *path, StradaValue *length);
@@ -825,6 +1017,48 @@ StradaValue* strada_cond_wait(StradaValue *cond, StradaValue *mutex);
 StradaValue* strada_cond_signal(StradaValue *cond);
 StradaValue* strada_cond_broadcast(StradaValue *cond);
 StradaValue* strada_cond_destroy(StradaValue *cond);
+
+/* ============================================================
+ * C Interop Helper Functions (c:: namespace)
+ * For explicit memory management with extern "C" functions
+ * ============================================================ */
+StradaValue* strada_c_str_to_ptr(StradaValue *sv);           /* c::str_to_ptr - Strada string to C char* (allocs) */
+StradaValue* strada_c_ptr_to_str(StradaValue *ptr_sv);       /* c::ptr_to_str - C char* to Strada string (copies) */
+StradaValue* strada_c_ptr_to_str_n(StradaValue *ptr_sv, StradaValue *len_sv); /* c::ptr_to_str_n - with length */
+StradaValue* strada_c_free(StradaValue *ptr_sv);             /* c::free - Free C-allocated memory */
+StradaValue* strada_c_alloc(StradaValue *size_sv);           /* c::alloc - Allocate memory (malloc) */
+StradaValue* strada_c_realloc(StradaValue *ptr_sv, StradaValue *size_sv); /* c::realloc */
+StradaValue* strada_c_null(void);                            /* c::null - Return NULL pointer */
+StradaValue* strada_c_is_null(StradaValue *ptr_sv);          /* c::is_null - Check if NULL */
+StradaValue* strada_c_ptr_add(StradaValue *ptr_sv, StradaValue *offset_sv); /* c::ptr_add - Pointer arithmetic */
+
+/* c:: memory read functions */
+StradaValue* strada_c_read_int8(StradaValue *ptr_sv);
+StradaValue* strada_c_read_int16(StradaValue *ptr_sv);
+StradaValue* strada_c_read_int32(StradaValue *ptr_sv);
+StradaValue* strada_c_read_int64(StradaValue *ptr_sv);
+StradaValue* strada_c_read_ptr(StradaValue *ptr_sv);
+StradaValue* strada_c_read_float(StradaValue *ptr_sv);
+StradaValue* strada_c_read_double(StradaValue *ptr_sv);
+
+/* c:: memory write functions */
+StradaValue* strada_c_write_int8(StradaValue *ptr_sv, StradaValue *val_sv);
+StradaValue* strada_c_write_int16(StradaValue *ptr_sv, StradaValue *val_sv);
+StradaValue* strada_c_write_int32(StradaValue *ptr_sv, StradaValue *val_sv);
+StradaValue* strada_c_write_int64(StradaValue *ptr_sv, StradaValue *val_sv);
+StradaValue* strada_c_write_ptr(StradaValue *ptr_sv, StradaValue *val_sv);
+StradaValue* strada_c_write_float(StradaValue *ptr_sv, StradaValue *val_sv);
+StradaValue* strada_c_write_double(StradaValue *ptr_sv, StradaValue *val_sv);
+
+/* c:: size introspection */
+StradaValue* strada_c_sizeof_int(void);
+StradaValue* strada_c_sizeof_long(void);
+StradaValue* strada_c_sizeof_ptr(void);
+StradaValue* strada_c_sizeof_size_t(void);
+
+/* c:: memory operations */
+StradaValue* strada_c_memcpy(StradaValue *dest_sv, StradaValue *src_sv, StradaValue *n_sv);
+StradaValue* strada_c_memset(StradaValue *dest_sv, StradaValue *c_sv, StradaValue *n_sv);
 
 /* ============================================================
  * Profiling - Function timing and call counts

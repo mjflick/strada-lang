@@ -15,16 +15,152 @@
  along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-# LinkedList - simple singly linked list utilities (OOP)
-#
-# Usage:
-#   use lib "lib";
-#   use LinkedList;
-#
-#   my scalar $list = LinkedList::new();
-#   $list->add("a");
-#   $list->unshift("b");
-#   my scalar $v = $list->shift();
+=head1 NAME
+
+LinkedList - Singly linked list implementation for Strada
+
+=head1 SYNOPSIS
+
+    use lib "lib";
+    use LinkedList;
+
+    my scalar $list = LinkedList::new();
+    $list->push("first");
+    $list->push("second");
+    $list->unshift("zeroth");
+
+    say("Length: " . $list->len());
+
+    while (!$list->is_empty()) {
+        say($list->shift());
+    }
+
+=head1 DESCRIPTION
+
+LinkedList provides a simple singly-linked list with an OOP interface.
+Useful when you need efficient insertion/removal at both ends.
+
+=head1 CONSTRUCTOR
+
+=head2 new()
+
+Create a new empty linked list.
+
+    my scalar $list = LinkedList::new();
+
+=head2 from_array(@items)
+
+Create a linked list from an array.
+
+    my array @items = (1, 2, 3);
+    my scalar $list = LinkedList::from_array(@items);
+
+=head1 METHODS
+
+=head2 len()
+
+Get the number of elements.
+
+=head2 is_empty()
+
+Returns 1 if list is empty, 0 otherwise.
+
+=head2 push($value) / add($value)
+
+Add element to end of list.
+
+    $list->push("last");
+
+=head2 unshift($value)
+
+Add element to beginning of list.
+
+    $list->unshift("first");
+
+=head2 shift()
+
+Remove and return first element. Returns undef if empty.
+
+    my scalar $first = $list->shift();
+
+=head2 pop()
+
+Remove and return last element. Returns undef if empty.
+
+    my scalar $last = $list->pop();
+
+=head2 peek_head()
+
+Get first element without removing it.
+
+=head2 peek_tail()
+
+Get last element without removing it.
+
+=head2 get($index)
+
+Get element at index (0-based). Negative indices count from end.
+
+    my scalar $val = $list->get(0);    # First
+    my scalar $val = $list->get(-1);   # Last
+
+=head2 set($index, $value)
+
+Set element at index. Returns old value.
+
+    my scalar $old = $list->set(0, "new value");
+
+=head2 clear()
+
+Remove all elements.
+
+=head2 to_array()
+
+Convert list to array.
+
+    my array @arr = $list->to_array();
+
+=head2 each($func)
+
+Call function for each element.
+
+    $list->each(func (scalar $val) { say($val); });
+
+=head2 destroy()
+
+Clear list and return undef.
+
+=head1 EXAMPLE
+
+    use lib "lib";
+    use LinkedList;
+
+    # Use as a queue (FIFO)
+    my scalar $queue = LinkedList::new();
+    $queue->push("task1");
+    $queue->push("task2");
+    $queue->push("task3");
+
+    while (!$queue->is_empty()) {
+        my scalar $task = $queue->shift();
+        say("Processing: " . $task);
+    }
+
+    # Use as a stack (LIFO)
+    my scalar $stack = LinkedList::new();
+    $stack->push("bottom");
+    $stack->push("middle");
+    $stack->push("top");
+
+    while (!$stack->is_empty()) {
+        say("Popped: " . $stack->pop());
+    }
+
+=head1 SEE ALSO
+
+L<List::Util>
+
+=cut
 
 package LinkedList;
 version "1.0.0";

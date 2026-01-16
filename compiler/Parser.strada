@@ -28,6 +28,7 @@ func parser_new(scalar $tokens) scalar {
     $parser{"pos"} = 0;
     $parser{"token_count"} = size($tokens);
     $parser{"filename"} = "";
+    $parser{"current_package"} = "";
     return \%parser;
 }
 
@@ -119,6 +120,10 @@ func parse_var_name(scalar $parser) str {
         parser_advance($parser);
         return "str";
     }
+    if ($type_str eq "TYPE_BOOL") {
+        parser_advance($parser);
+        return "bool";
+    }
     if ($type_str eq "TYPE_ARRAY") {
         parser_advance($parser);
         return "array";
@@ -151,6 +156,42 @@ func parse_var_name(scalar $parser) str {
     if ($type_str eq "TYPE_FLOAT64") {
         parser_advance($parser);
         return "float64";
+    }
+    if ($type_str eq "TYPE_INT8") {
+        parser_advance($parser);
+        return "int8";
+    }
+    if ($type_str eq "TYPE_INT16") {
+        parser_advance($parser);
+        return "int16";
+    }
+    if ($type_str eq "TYPE_UINT8") {
+        parser_advance($parser);
+        return "uint8";
+    }
+    if ($type_str eq "TYPE_UINT16") {
+        parser_advance($parser);
+        return "uint16";
+    }
+    if ($type_str eq "TYPE_UINT32") {
+        parser_advance($parser);
+        return "uint32";
+    }
+    if ($type_str eq "TYPE_UINT64") {
+        parser_advance($parser);
+        return "uint64";
+    }
+    if ($type_str eq "TYPE_SIZE_T") {
+        parser_advance($parser);
+        return "size_t";
+    }
+    if ($type_str eq "TYPE_CHAR") {
+        parser_advance($parser);
+        return "char";
+    }
+    if ($type_str eq "TYPE_LONG_DOUBLE") {
+        parser_advance($parser);
+        return "long_double";
     }
 
     # Other keywords that can be used as variable names
@@ -282,6 +323,10 @@ func parse_var_name(scalar $parser) str {
         parser_advance($parser);
         return "import_lib";
     }
+    if ($type_str eq "IMPORT_OBJECT") {
+        parser_advance($parser);
+        return "import_object";
+    }
     if ($type_str eq "INHERIT") {
         parser_advance($parser);
         return "inherit";
@@ -303,6 +348,14 @@ func parse_var_name(scalar $parser) str {
     if ($type_str eq "GREP") {
         parser_advance($parser);
         return "grep";
+    }
+    if ($type_str eq "ASYNC") {
+        parser_advance($parser);
+        return "async";
+    }
+    if ($type_str eq "AWAIT") {
+        parser_advance($parser);
+        return "await";
     }
 
     parser_error($parser, "expected variable name, got " . $type_str);
@@ -330,6 +383,10 @@ func parse_type(scalar $parser) int {
     if ($type_str eq "TYPE_STR") {
         parser_advance($parser);
         return TYPE_STR();
+    }
+    if ($type_str eq "TYPE_BOOL") {
+        parser_advance($parser);
+        return TYPE_BOOL();
     }
     if ($type_str eq "TYPE_ARRAY") {
         parser_advance($parser);
@@ -363,6 +420,42 @@ func parse_type(scalar $parser) int {
     if ($type_str eq "TYPE_FLOAT64") {
         parser_advance($parser);
         return TYPE_FLOAT64();
+    }
+    if ($type_str eq "TYPE_INT8") {
+        parser_advance($parser);
+        return TYPE_INT8();
+    }
+    if ($type_str eq "TYPE_INT16") {
+        parser_advance($parser);
+        return TYPE_INT16();
+    }
+    if ($type_str eq "TYPE_UINT8") {
+        parser_advance($parser);
+        return TYPE_UINT8();
+    }
+    if ($type_str eq "TYPE_UINT16") {
+        parser_advance($parser);
+        return TYPE_UINT16();
+    }
+    if ($type_str eq "TYPE_UINT32") {
+        parser_advance($parser);
+        return TYPE_UINT32();
+    }
+    if ($type_str eq "TYPE_UINT64") {
+        parser_advance($parser);
+        return TYPE_UINT64();
+    }
+    if ($type_str eq "TYPE_SIZE_T") {
+        parser_advance($parser);
+        return TYPE_SIZE_T();
+    }
+    if ($type_str eq "TYPE_CHAR") {
+        parser_advance($parser);
+        return TYPE_CHAR();
+    }
+    if ($type_str eq "TYPE_LONG_DOUBLE") {
+        parser_advance($parser);
+        return TYPE_LONG_DOUBLE();
     }
 
     # Struct name (IDENT) - return TYPE_STRUCT and store name
@@ -468,6 +561,9 @@ func parse_anon_func(scalar $parser, int $line) scalar {
     } elsif (parser_check($parser, "TYPE_STR")) {
         parser_advance($parser);
         $anon->{"return_type"} = TYPE_STR();
+    } elsif (parser_check($parser, "TYPE_BOOL")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_BOOL();
     } elsif (parser_check($parser, "TYPE_SCALAR")) {
         parser_advance($parser);
         $anon->{"return_type"} = TYPE_SCALAR();
@@ -486,6 +582,33 @@ func parse_anon_func(scalar $parser, int $line) scalar {
     } elsif (parser_check($parser, "TYPE_FLOAT64")) {
         parser_advance($parser);
         $anon->{"return_type"} = TYPE_FLOAT64();
+    } elsif (parser_check($parser, "TYPE_INT8")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_INT8();
+    } elsif (parser_check($parser, "TYPE_INT16")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_INT16();
+    } elsif (parser_check($parser, "TYPE_UINT8")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_UINT8();
+    } elsif (parser_check($parser, "TYPE_UINT16")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_UINT16();
+    } elsif (parser_check($parser, "TYPE_UINT32")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_UINT32();
+    } elsif (parser_check($parser, "TYPE_UINT64")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_UINT64();
+    } elsif (parser_check($parser, "TYPE_SIZE_T")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_SIZE_T();
+    } elsif (parser_check($parser, "TYPE_CHAR")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_CHAR();
+    } elsif (parser_check($parser, "TYPE_LONG_DOUBLE")) {
+        parser_advance($parser);
+        $anon->{"return_type"} = TYPE_LONG_DOUBLE();
     }
 
     # Parse body
@@ -566,10 +689,225 @@ func parse_primary(scalar $parser) scalar {
         return ast_new_undef();
     }
 
-    # __PACKAGE__ - returns current package name
-    if ($type eq "DUNDER_PACKAGE") {
+    # Diamond operator <$fh> - reads line from filehandle
+    if ($type eq "DIAMOND") {
         parser_advance($parser);
+        my str $varname = $tok->{"value"};
+        return ast_new_readline($varname);
+    }
+
+    # __PACKAGE__ - returns current package name OR compile-time qualified call
+    if ($type eq "DUNDER_PACKAGE") {
+        my int $pkg_line = parser_current_line($parser);
+        parser_advance($parser);
+
+        # Check for __PACKAGE__::funcname - compile-time resolution
+        if (parser_check($parser, "DOUBLE_COLON")) {
+            parser_advance($parser);
+            my scalar $func_tok = parser_current($parser);
+            parser_expect($parser, "IDENT");
+            my str $func_name = $func_tok->{"value"};
+
+            # Build qualified name using compile-time package
+            my str $pkg = $parser->{"current_package"};
+            if (length($pkg) > 0) {
+                # Convert Package::Sub to Package_Sub for C function name
+                my str $sanitized = "";
+                my int $i = 0;
+                my int $plen = length($pkg);
+                while ($i < $plen) {
+                    my str $ch = substr($pkg, $i, 1);
+                    if ($ch eq ":" && $i + 1 < $plen && substr($pkg, $i + 1, 1) eq ":") {
+                        $sanitized = $sanitized . "_";
+                        $i = $i + 2;
+                    } else {
+                        $sanitized = $sanitized . $ch;
+                        $i = $i + 1;
+                    }
+                }
+                $func_name = $sanitized . "_" . $func_name;
+            }
+
+            # Must be followed by function call
+            if (!parser_check($parser, "LPAREN")) {
+                parser_error($parser, "expected ( after __PACKAGE__::" . $func_tok->{"value"});
+            }
+            parser_advance($parser);
+            my scalar $call = ast_new_call($func_name);
+            ast_set_line($call, $pkg_line);
+
+            # Parse arguments (with spread operator support)
+            if (!parser_check($parser, "RPAREN")) {
+                if (parser_check($parser, "ELLIPSIS")) {
+                    parser_advance($parser);
+                    my scalar $spread_target = parse_expression($parser);
+                    my scalar $spread = ast_new_spread($spread_target);
+                    ast_add_arg($call, $spread);
+                } else {
+                    my scalar $arg = parse_expression($parser);
+                    ast_add_arg($call, $arg);
+                }
+
+                while (parser_check($parser, "COMMA")) {
+                    parser_advance($parser);
+                    if (parser_check($parser, "ELLIPSIS")) {
+                        parser_advance($parser);
+                        my scalar $spread_target = parse_expression($parser);
+                        my scalar $spread = ast_new_spread($spread_target);
+                        ast_add_arg($call, $spread);
+                    } else {
+                        my scalar $next_arg = parse_expression($parser);
+                        ast_add_arg($call, $next_arg);
+                    }
+                }
+            }
+
+            parser_expect($parser, "RPAREN");
+            return $call;
+        }
+
+        # Plain __PACKAGE__ - runtime value
         return ast_new_dunder_package();
+    }
+
+    # ::func() - shorthand for __PACKAGE__::func()
+    if ($type eq "DOUBLE_COLON") {
+        my int $pkg_line = parser_current_line($parser);
+        parser_advance($parser);
+
+        my scalar $func_tok = parser_current($parser);
+        parser_expect($parser, "IDENT");
+        my str $func_name = $func_tok->{"value"};
+
+        # Build qualified name using compile-time package
+        my str $pkg = $parser->{"current_package"};
+        if (length($pkg) > 0) {
+            # Convert Package::Sub to Package_Sub for C function name
+            my str $sanitized = "";
+            my int $i = 0;
+            my int $plen = length($pkg);
+            while ($i < $plen) {
+                my str $ch = substr($pkg, $i, 1);
+                if ($ch eq ":" && $i + 1 < $plen && substr($pkg, $i + 1, 1) eq ":") {
+                    $sanitized = $sanitized . "_";
+                    $i = $i + 2;
+                } else {
+                    $sanitized = $sanitized . $ch;
+                    $i = $i + 1;
+                }
+            }
+            $func_name = $sanitized . "_" . $func_name;
+        }
+
+        # Must be followed by function call
+        if (!parser_check($parser, "LPAREN")) {
+            parser_error($parser, "expected ( after ::" . $func_tok->{"value"});
+        }
+        parser_advance($parser);
+        my scalar $call = ast_new_call($func_name);
+        ast_set_line($call, $pkg_line);
+
+        # Parse arguments (with spread operator support)
+        if (!parser_check($parser, "RPAREN")) {
+            if (parser_check($parser, "ELLIPSIS")) {
+                parser_advance($parser);
+                my scalar $spread_target = parse_expression($parser);
+                my scalar $spread = ast_new_spread($spread_target);
+                ast_add_arg($call, $spread);
+            } else {
+                my scalar $arg = parse_expression($parser);
+                ast_add_arg($call, $arg);
+            }
+
+            while (parser_check($parser, "COMMA")) {
+                parser_advance($parser);
+                if (parser_check($parser, "ELLIPSIS")) {
+                    parser_advance($parser);
+                    my scalar $spread_target = parse_expression($parser);
+                    my scalar $spread = ast_new_spread($spread_target);
+                    ast_add_arg($call, $spread);
+                } else {
+                    my scalar $next_arg = parse_expression($parser);
+                    ast_add_arg($call, $next_arg);
+                }
+            }
+        }
+
+        parser_expect($parser, "RPAREN");
+        return $call;
+    }
+
+    # .::func() - alternate shorthand for __PACKAGE__::func()
+    if ($type eq "DOT") {
+        # Peek ahead to see if this is .:: pattern
+        my scalar $peek_tok = parser_peek($parser);
+        my str $peek_type = $peek_tok->{"type"};
+        if ($peek_type eq "DOUBLE_COLON") {
+            my int $pkg_line = parser_current_line($parser);
+            parser_advance($parser);  # consume DOT
+            parser_advance($parser);  # consume DOUBLE_COLON
+
+            my scalar $func_tok = parser_current($parser);
+            parser_expect($parser, "IDENT");
+            my str $func_name = $func_tok->{"value"};
+
+            # Build qualified name using compile-time package
+            my str $pkg = $parser->{"current_package"};
+            if (length($pkg) > 0) {
+                # Convert Package::Sub to Package_Sub for C function name
+                my str $sanitized = "";
+                my int $i = 0;
+                my int $plen = length($pkg);
+                while ($i < $plen) {
+                    my str $ch = substr($pkg, $i, 1);
+                    if ($ch eq ":" && $i + 1 < $plen && substr($pkg, $i + 1, 1) eq ":") {
+                        $sanitized = $sanitized . "_";
+                        $i = $i + 2;
+                    } else {
+                        $sanitized = $sanitized . $ch;
+                        $i = $i + 1;
+                    }
+                }
+                $func_name = $sanitized . "_" . $func_name;
+            }
+
+            # Must be followed by function call
+            if (!parser_check($parser, "LPAREN")) {
+                parser_error($parser, "expected ( after .::" . $func_tok->{"value"});
+            }
+            parser_advance($parser);
+            my scalar $call = ast_new_call($func_name);
+            ast_set_line($call, $pkg_line);
+
+            # Parse arguments (with spread operator support)
+            if (!parser_check($parser, "RPAREN")) {
+                if (parser_check($parser, "ELLIPSIS")) {
+                    parser_advance($parser);
+                    my scalar $spread_target = parse_expression($parser);
+                    my scalar $spread = ast_new_spread($spread_target);
+                    ast_add_arg($call, $spread);
+                } else {
+                    my scalar $arg = parse_expression($parser);
+                    ast_add_arg($call, $arg);
+                }
+
+                while (parser_check($parser, "COMMA")) {
+                    parser_advance($parser);
+                    if (parser_check($parser, "ELLIPSIS")) {
+                        parser_advance($parser);
+                        my scalar $spread_target = parse_expression($parser);
+                        my scalar $spread = ast_new_spread($spread_target);
+                        ast_add_arg($call, $spread);
+                    } else {
+                        my scalar $next_arg = parse_expression($parser);
+                        ast_add_arg($call, $next_arg);
+                    }
+                }
+            }
+
+            parser_expect($parser, "RPAREN");
+            return $call;
+        }
     }
 
     # __FILE__ - returns current file name
@@ -815,6 +1153,64 @@ func parse_primary(scalar $parser) scalar {
         return $first;
     }
     
+    # Handle async:: namespace (async is a keyword, but async::func is a namespace call)
+    if ($type eq "ASYNC") {
+        # Check if next token is DOUBLE_COLON - if so, this is a namespace call
+        my scalar $next_tok = parser_peek($parser);
+        if ($next_tok->{"type"} eq "DOUBLE_COLON") {
+            my str $name = "async";
+            my int $call_line = $tok->{"line"};
+            parser_advance($parser);  # consume ASYNC
+
+            # Now handle like an IDENT with DOUBLE_COLON
+            while (parser_check($parser, "DOUBLE_COLON")) {
+                parser_advance($parser);
+                my scalar $part_tok = parser_current($parser);
+                parser_expect($parser, "IDENT");
+                $name = $name . "::" . $part_tok->{"value"};
+            }
+
+            # Should be followed by function call
+            if (parser_check($parser, "LPAREN")) {
+                parser_advance($parser);
+                my scalar $call = ast_new_call($name);
+                ast_set_line($call, $call_line);
+
+                if (!parser_check($parser, "RPAREN")) {
+                    if (parser_check($parser, "ELLIPSIS")) {
+                        parser_advance($parser);
+                        my scalar $spread_target = parse_expression($parser);
+                        my scalar $spread = ast_new_spread($spread_target);
+                        ast_add_arg($call, $spread);
+                    } else {
+                        my scalar $arg = parse_expression($parser);
+                        ast_add_arg($call, $arg);
+                    }
+
+                    while (parser_check($parser, "COMMA")) {
+                        parser_advance($parser);
+                        if (parser_check($parser, "ELLIPSIS")) {
+                            parser_advance($parser);
+                            my scalar $spread_target = parse_expression($parser);
+                            my scalar $spread = ast_new_spread($spread_target);
+                            ast_add_arg($call, $spread);
+                        } else {
+                            my scalar $next_arg = parse_expression($parser);
+                            ast_add_arg($call, $next_arg);
+                        }
+                    }
+                }
+
+                parser_expect($parser, "RPAREN");
+                return $call;
+            }
+
+            # async::something without () - treat as variable (shouldn't happen normally)
+            return ast_new_variable($name, "$");
+        }
+        # Fall through - ASYNC not followed by :: is handled elsewhere (in parse_unary for await, parse_program for async func)
+    }
+
     # Function call (bareword)
     if ($type eq "IDENT") {
         my str $name = $tok->{"value"};
@@ -827,15 +1223,31 @@ func parse_primary(scalar $parser) scalar {
             my scalar $call = ast_new_call($name);
             ast_set_line($call, $call_line);
 
-            # Parse arguments
+            # Parse arguments (with spread operator support)
             if (!parser_check($parser, "RPAREN")) {
-                my scalar $arg = parse_expression($parser);
-                ast_add_arg($call, $arg);
+                # Check for spread operator
+                if (parser_check($parser, "ELLIPSIS")) {
+                    parser_advance($parser);
+                    my scalar $spread_target = parse_expression($parser);
+                    my scalar $spread = ast_new_spread($spread_target);
+                    ast_add_arg($call, $spread);
+                } else {
+                    my scalar $arg = parse_expression($parser);
+                    ast_add_arg($call, $arg);
+                }
 
                 while (parser_check($parser, "COMMA")) {
                     parser_advance($parser);
-                    my scalar $next_arg = parse_expression($parser);
-                    ast_add_arg($call, $next_arg);
+                    # Check for spread operator
+                    if (parser_check($parser, "ELLIPSIS")) {
+                        parser_advance($parser);
+                        my scalar $spread_target = parse_expression($parser);
+                        my scalar $spread = ast_new_spread($spread_target);
+                        ast_add_arg($call, $spread);
+                    } else {
+                        my scalar $next_arg = parse_expression($parser);
+                        ast_add_arg($call, $next_arg);
+                    }
                 }
             }
 
@@ -858,15 +1270,31 @@ func parse_primary(scalar $parser) scalar {
             my scalar $super_call = ast_new_super_call($method_name);
             ast_set_line($super_call, $call_line);
 
-            # Parse arguments
+            # Parse arguments (with spread operator support)
             if (!parser_check($parser, "RPAREN")) {
-                my scalar $arg = parse_expression($parser);
-                ast_add_arg($super_call, $arg);
+                # Check for spread operator
+                if (parser_check($parser, "ELLIPSIS")) {
+                    parser_advance($parser);
+                    my scalar $spread_target = parse_expression($parser);
+                    my scalar $spread = ast_new_spread($spread_target);
+                    ast_add_arg($super_call, $spread);
+                } else {
+                    my scalar $arg = parse_expression($parser);
+                    ast_add_arg($super_call, $arg);
+                }
 
                 while (parser_check($parser, "COMMA")) {
                     parser_advance($parser);
-                    my scalar $next_arg = parse_expression($parser);
-                    ast_add_arg($super_call, $next_arg);
+                    # Check for spread operator
+                    if (parser_check($parser, "ELLIPSIS")) {
+                        parser_advance($parser);
+                        my scalar $spread_target = parse_expression($parser);
+                        my scalar $spread = ast_new_spread($spread_target);
+                        ast_add_arg($super_call, $spread);
+                    } else {
+                        my scalar $next_arg = parse_expression($parser);
+                        ast_add_arg($super_call, $next_arg);
+                    }
                 }
             }
 
@@ -889,14 +1317,31 @@ func parse_primary(scalar $parser) scalar {
                 my scalar $call = ast_new_call($name);
                 ast_set_line($call, $call_line);
 
+                # Parse arguments (with spread operator support)
                 if (!parser_check($parser, "RPAREN")) {
-                    my scalar $arg = parse_expression($parser);
-                    ast_add_arg($call, $arg);
+                    # Check for spread operator
+                    if (parser_check($parser, "ELLIPSIS")) {
+                        parser_advance($parser);
+                        my scalar $spread_target = parse_expression($parser);
+                        my scalar $spread = ast_new_spread($spread_target);
+                        ast_add_arg($call, $spread);
+                    } else {
+                        my scalar $arg = parse_expression($parser);
+                        ast_add_arg($call, $arg);
+                    }
 
                     while (parser_check($parser, "COMMA")) {
                         parser_advance($parser);
-                        my scalar $next_arg = parse_expression($parser);
-                        ast_add_arg($call, $next_arg);
+                        # Check for spread operator
+                        if (parser_check($parser, "ELLIPSIS")) {
+                            parser_advance($parser);
+                            my scalar $spread_target = parse_expression($parser);
+                            my scalar $spread = ast_new_spread($spread_target);
+                            ast_add_arg($call, $spread);
+                        } else {
+                            my scalar $next_arg = parse_expression($parser);
+                            ast_add_arg($call, $next_arg);
+                        }
                     }
                 }
 
@@ -904,8 +1349,12 @@ func parse_primary(scalar $parser) scalar {
                 return $call;
             }
 
-            # Just a qualified name
-            return ast_new_str_literal($name);
+            # Qualified name without parens - treat as constant (e.g., enum value)
+            # Create a 0-arg call node, codegen will handle it as a constant
+            my scalar $const_ref = ast_new_call($name);
+            $const_ref->{"is_constant"} = 1;
+            ast_set_line($const_ref, $call_line);
+            return $const_ref;
         }
 
         # Just an identifier (bareword string in some contexts)
@@ -1119,15 +1568,31 @@ func parse_postfix(scalar $parser, scalar $left) scalar {
                     my scalar $call = ast_new_method_call($field, $field_tok->{"value"});
                     $call->{"base_object"} = $left;
 
-                    # Parse arguments
+                    # Parse arguments (with spread operator support)
                     if (!parser_check($parser, "RPAREN")) {
-                        my scalar $arg = parse_expression($parser);
-                        ast_add_arg($call, $arg);
+                        # Check for spread operator
+                        if (parser_check($parser, "ELLIPSIS")) {
+                            parser_advance($parser);
+                            my scalar $spread_target = parse_expression($parser);
+                            my scalar $spread = ast_new_spread($spread_target);
+                            ast_add_arg($call, $spread);
+                        } else {
+                            my scalar $arg = parse_expression($parser);
+                            ast_add_arg($call, $arg);
+                        }
 
                         while (parser_check($parser, "COMMA")) {
                             parser_advance($parser);
-                            my scalar $next_arg = parse_expression($parser);
-                            ast_add_arg($call, $next_arg);
+                            # Check for spread operator
+                            if (parser_check($parser, "ELLIPSIS")) {
+                                parser_advance($parser);
+                                my scalar $spread_target = parse_expression($parser);
+                                my scalar $spread = ast_new_spread($spread_target);
+                                ast_add_arg($call, $spread);
+                            } else {
+                                my scalar $next_arg = parse_expression($parser);
+                                ast_add_arg($call, $next_arg);
+                            }
                         }
                     }
                     parser_expect($parser, "RPAREN");
@@ -1216,6 +1681,16 @@ func parse_unary(scalar $parser) scalar {
         parser_advance($parser);
         my scalar $operand = parse_unary($parser);
         return ast_new_increment("--", $operand, 1);
+    }
+
+    # await expression
+    if ($tok->{"type"} eq "AWAIT") {
+        my int $line = parser_current_line($parser);
+        parser_advance($parser);
+        my scalar $expr = parse_unary($parser);
+        my scalar $await = ast_new_await($expr);
+        ast_set_line($await, $line);
+        return $await;
     }
 
     my scalar $primary = parse_primary($parser);
@@ -1547,10 +2022,27 @@ func parse_case_value(scalar $parser) scalar {
         return $var;
     }
 
-    # Bareword/identifier
+    # Bareword/identifier or qualified name (e.g., enum value like Status::PENDING)
     if ($type eq "IDENT") {
         my str $name = $tok->{"value"};
+        my int $const_line = parser_current_line($parser);
         parser_advance($parser);
+
+        # Check for qualified name (Enum::VALUE)
+        if (parser_check($parser, "DOUBLE_COLON")) {
+            while (parser_check($parser, "DOUBLE_COLON")) {
+                parser_advance($parser);
+                my scalar $next_tok = parser_current($parser);
+                parser_expect($parser, "IDENT");
+                $name = $name . "::" . $next_tok->{"value"};
+            }
+            # Return as a constant reference (will be handled by codegen)
+            my scalar $const_ref = ast_new_call($name);
+            $const_ref->{"is_constant"} = 1;
+            ast_set_line($const_ref, $const_line);
+            return $const_ref;
+        }
+
         return ast_new_str_literal($name);
     }
 
@@ -1570,9 +2062,83 @@ func parse_block(scalar $parser) scalar {
     return $block;
 }
 
+# Parse destructuring declaration: my ($a, $b) = expr; or my (int $a, str $b) = expr;
+func parse_destructure_decl(scalar $parser, int $decl_line) scalar {
+    parser_expect($parser, "LPAREN");
+
+    my array @vars = ();
+    my int $var_count = 0;
+
+    while (!parser_check($parser, "RPAREN")) {
+        # Check if next token is a sigil (no explicit type)
+        my scalar $peek = parser_current($parser);
+        my str $peek_type = $peek->{"type"};
+
+        my int $var_type = TYPE_SCALAR();
+        my str $type_name = "";
+
+        # If not a sigil, parse type first
+        if ($peek_type ne "DOLLAR" && $peek_type ne "AT" && $peek_type ne "PERCENT") {
+            $var_type = parse_type($parser);
+            $type_name = $parser->{"last_type_name"};
+        }
+
+        # Get sigil
+        my scalar $sigil_tok = parser_current($parser);
+        my str $sigil = "$";
+
+        if ($sigil_tok->{"type"} eq "DOLLAR") {
+            $sigil = "$";
+            parser_advance($parser);
+        } elsif ($sigil_tok->{"type"} eq "AT") {
+            $sigil = "@";
+            parser_advance($parser);
+        } elsif ($sigil_tok->{"type"} eq "PERCENT") {
+            $sigil = "%";
+            parser_advance($parser);
+        } else {
+            parser_error($parser, "expected variable sigil ($, @, or %) in destructuring");
+        }
+
+        # Get variable name
+        my str $name = parse_var_name($parser);
+
+        # Store variable info
+        my hash %var_info = ();
+        $var_info{"name"} = $name;
+        $var_info{"sigil"} = $sigil;
+        $var_info{"var_type"} = $var_type;
+        $var_info{"type_name"} = $type_name;
+        push(@vars, \%var_info);
+        $var_count = $var_count + 1;
+
+        # Check for comma or end of list
+        if (parser_check($parser, "COMMA")) {
+            parser_advance($parser);
+        } elsif (!parser_check($parser, "RPAREN")) {
+            parser_error($parser, "expected ',' or ')' in destructuring");
+        }
+    }
+
+    parser_expect($parser, "RPAREN");
+    parser_expect($parser, "ASSIGN");
+
+    my scalar $init = parse_expression($parser);
+    parser_expect($parser, "SEMI");
+
+    my scalar $node = ast_new_destructure(\@vars, $var_count, $init, 1);
+    ast_set_line($node, $decl_line);
+    return $node;
+}
+
 func parse_var_decl(scalar $parser) scalar {
     my int $decl_line = parser_current_line($parser);
     parser_expect($parser, "MY");
+
+    # Check for destructuring: my ($a, $b, $c) = expr;
+    if (parser_check($parser, "LPAREN")) {
+        return parse_destructure_decl($parser, $decl_line);
+    }
 
     my int $var_type = parse_type($parser);
     my str $type_name = $parser->{"last_type_name"};
@@ -1897,21 +2463,60 @@ func parse_statement(scalar $parser) scalar {
     }
 
     # try { ... } catch ($e) { ... }
+    # try { ... } catch (TypeName $e) { ... } catch ($e) { ... }
     if ($type eq "TRY") {
         parser_advance($parser);
         my scalar $try_block = parse_block($parser);
 
-        parser_expect($parser, "CATCH");
-        parser_expect($parser, "LPAREN");
-        parser_expect($parser, "DOLLAR");
-        my scalar $name_tok = parser_current($parser);
-        parser_expect($parser, "IDENT");
-        my str $catch_var = $name_tok->{"value"};
-        parser_expect($parser, "RPAREN");
+        # Parse one or more catch clauses
+        my array @catch_clauses = ();
+        my int $has_catchall = 0;
 
-        my scalar $catch_block = parse_block($parser);
+        while (parser_check($parser, "CATCH")) {
+            parser_advance($parser);
+            parser_expect($parser, "LPAREN");
 
-        return ast_new_try_catch($try_block, $catch_var, $catch_block);
+            my str $catch_type = "";
+
+            # Check for typed catch: catch (TypeName $var)
+            # Look ahead: if we see IDENT followed by DOLLAR, it's a type name
+            if (parser_check($parser, "IDENT")) {
+                my scalar $peek = parser_peek($parser);
+                if ($peek->{"type"} eq "DOLLAR") {
+                    # It's a type name
+                    my scalar $type_tok = parser_current($parser);
+                    parser_advance($parser);
+                    $catch_type = $type_tok->{"value"};
+                }
+            }
+
+            # Now parse the variable: $var
+            parser_expect($parser, "DOLLAR");
+            my scalar $name_tok = parser_current($parser);
+            parser_expect($parser, "IDENT");
+            my str $catch_var = $name_tok->{"value"};
+            parser_expect($parser, "RPAREN");
+
+            my scalar $catch_block = parse_block($parser);
+
+            # Validate: catch-all must be last
+            if ($has_catchall == 1) {
+                parser_error($parser, "catch-all clause must be last; additional catch clauses are unreachable");
+            }
+
+            if (length($catch_type) == 0) {
+                $has_catchall = 1;
+            }
+
+            my scalar $clause = ast_new_catch_clause($catch_type, $catch_var, $catch_block);
+            push(@catch_clauses, $clause);
+        }
+
+        if (size(@catch_clauses) == 0) {
+            parser_error($parser, "try block requires at least one catch clause");
+        }
+
+        return ast_new_try_catch($try_block, \@catch_clauses);
     }
 
     # throw $expr;
@@ -1930,6 +2535,11 @@ func parse_statement(scalar $parser) scalar {
         parser_advance($parser);
         parser_expect($parser, "SEMI");
         return ast_new_goto($target);
+    }
+
+    # Bare block { ... }
+    if ($type eq "LBRACE") {
+        return parse_block($parser);
     }
 
     # switch ($expr) { case val { ... } default { ... } }
@@ -1963,6 +2573,13 @@ func parse_statement(scalar $parser) scalar {
 
         parser_expect($parser, "RBRACE");
         return $switch_node;
+    }
+
+    # __C__ { ... } - raw C code block
+    if ($type eq "C_BLOCK") {
+        my str $c_code = $tok->{"value"};
+        parser_advance($parser);
+        return ast_new_c_block($c_code);
     }
 
     # Expression statement
@@ -2086,17 +2703,18 @@ func parse_function(scalar $parser) scalar {
     # Parse parameters
     if (!parser_check($parser, "RPAREN")) {
         while (1) {
-            # Check for variadic parameter (...)
+            # Parse the type first
+            my int $param_type = parse_type($parser);
+            my str $param_type_name = $parser->{"last_type_name"};
+
+            # Check for variadic parameter (...) after the type
             my int $is_variadic = 0;
             if (parser_check($parser, "ELLIPSIS")) {
                 parser_advance($parser);
                 $is_variadic = 1;
                 $fn->{"is_variadic"} = 1;
             }
-            
-            my int $param_type = parse_type($parser);
-            my str $param_type_name = $parser->{"last_type_name"};
-            
+
             # Get sigil
             my scalar $sigil_tok = parser_current($parser);
             my str $sigil = "$";
@@ -2110,7 +2728,12 @@ func parse_function(scalar $parser) scalar {
                 $sigil = "%";
                 parser_advance($parser);
             }
-            
+
+            # Variadic parameter must use array sigil (@)
+            if ($is_variadic == 1 && $sigil ne "@") {
+                parser_error($parser, "variadic parameter must use array sigil (@), e.g., int ...@nums");
+            }
+
             my scalar $pname_tok = parser_current($parser);
             parser_expect($parser, "IDENT");
             
@@ -2133,7 +2756,12 @@ func parse_function(scalar $parser) scalar {
             }
             
             ast_add_param($fn, $param);
-            
+
+            # Variadic parameter must be the last parameter
+            if ($is_variadic == 1 && parser_check($parser, "COMMA")) {
+                parser_error($parser, "variadic parameter must be the last parameter");
+            }
+
             if (parser_check($parser, "COMMA")) {
                 parser_advance($parser);
             } else {
@@ -2184,12 +2812,11 @@ func parse_extern_function(scalar $parser) scalar {
                 parser_advance($parser);
             }
             
-            my scalar $pname_tok = parser_current($parser);
-            parser_expect($parser, "IDENT");
-            
-            my scalar $param = ast_new_param($pname_tok->{"value"}, $param_type, $sigil);
+            my str $pname = parse_var_name($parser);
+
+            my scalar $param = ast_new_param($pname, $param_type, $sigil);
             ast_add_param($fn, $param);
-            
+
             if (parser_check($parser, "COMMA")) {
                 parser_advance($parser);
             } else {
@@ -2200,11 +2827,11 @@ func parse_extern_function(scalar $parser) scalar {
     } else {
         parser_advance($parser);
     }
-    
+
     # Parse return type
     my int $ret_type = parse_type($parser);
     $fn->{"return_type"} = $ret_type;
-    
+
     # Check if this is a declaration (;) or definition ({...})
     if (parser_check($parser, "SEMI")) {
         parser_advance($parser);
@@ -2216,6 +2843,93 @@ func parse_extern_function(scalar $parser) scalar {
     }
     
     return $fn;
+}
+
+# Parse a single C-style extern function declaration (inside extern "C" block)
+# These use raw C types and generate direct C calls
+func parse_c_extern_func(scalar $parser) scalar {
+    parser_expect($parser, "FUNC");
+
+    my scalar $name_tok = parser_current($parser);
+    parser_expect($parser, "IDENT");
+
+    my scalar $fn = ast_new_extern_func($name_tok->{"value"});
+    $fn->{"is_c_extern"} = 1;  # Mark as raw C extern
+
+    parser_expect($parser, "LPAREN");
+
+    # Parse parameters
+    if (!parser_check($parser, "RPAREN")) {
+        while (1) {
+            my int $param_type = parse_type($parser);
+
+            # Get sigil
+            my str $sigil = "$";
+            if (parser_check($parser, "DOLLAR")) {
+                parser_advance($parser);
+            } elsif (parser_check($parser, "AT")) {
+                $sigil = "@";
+                parser_advance($parser);
+            } elsif (parser_check($parser, "PERCENT")) {
+                $sigil = "%";
+                parser_advance($parser);
+            }
+
+            my str $pname = parse_var_name($parser);
+
+            my scalar $param = ast_new_param($pname, $param_type, $sigil);
+            ast_add_param($fn, $param);
+
+            if (parser_check($parser, "COMMA")) {
+                parser_advance($parser);
+            } else {
+                parser_expect($parser, "RPAREN");
+                last;
+            }
+        }
+    } else {
+        parser_advance($parser);
+    }
+
+    # Parse return type
+    my int $ret_type = parse_type($parser);
+    $fn->{"return_type"} = $ret_type;
+
+    # C extern declarations must end with semicolon
+    parser_expect($parser, "SEMI");
+    $fn->{"has_body"} = 0;
+
+    return $fn;
+}
+
+# Parse extern "C" block: extern "C" { func declarations... }
+# Returns an array of extern function nodes
+func parse_extern_c_block(scalar $parser, scalar $program) void {
+    parser_expect($parser, "EXTERN");
+
+    # Expect string "C"
+    my scalar $str_tok = parser_current($parser);
+    if ($str_tok->{"type"} ne "STR_LITERAL") {
+        parser_error($parser, "expected \"C\" after extern");
+    }
+    if ($str_tok->{"value"} ne "C") {
+        parser_error($parser, "expected \"C\" after extern, got \"" . $str_tok->{"value"} . "\"");
+    }
+    parser_advance($parser);
+
+    parser_expect($parser, "LBRACE");
+
+    # Parse function declarations until we see }
+    while (!parser_check($parser, "RBRACE")) {
+        if (parser_check($parser, "FUNC")) {
+            my scalar $fn = parse_c_extern_func($parser);
+            ast_add_function($program, $fn);
+        } else {
+            parser_error($parser, "expected func declaration inside extern \"C\" block");
+        }
+    }
+
+    parser_expect($parser, "RBRACE");
 }
 
 # Parse struct definition
@@ -2244,8 +2958,65 @@ func parse_struct(scalar $parser) scalar {
     }
     
     parser_expect($parser, "RBRACE");
-    
+
     return $st;
+}
+
+# Parse enum declaration
+# enum Name { MEMBER1, MEMBER2 = 10, MEMBER3 }
+func parse_enum(scalar $parser) scalar {
+    my int $enum_line = parser_current_line($parser);
+    parser_expect($parser, "ENUM");
+
+    my scalar $name_tok = parser_current($parser);
+    parser_expect($parser, "IDENT");
+
+    my scalar $en = ast_new_enum($name_tok->{"value"});
+    ast_set_line($en, $enum_line);
+
+    parser_expect($parser, "LBRACE");
+
+    my int $next_value = 0;
+
+    while (!parser_check($parser, "RBRACE")) {
+        # Get member name
+        my scalar $member_tok = parser_current($parser);
+        parser_expect($parser, "IDENT");
+        my str $member_name = $member_tok->{"value"};
+
+        # Check for explicit value assignment
+        my int $value = $next_value;
+        if (parser_check($parser, "ASSIGN")) {
+            parser_advance($parser);
+            my int $is_negative = 0;
+            if (parser_check($parser, "MINUS")) {
+                parser_advance($parser);
+                $is_negative = 1;
+            }
+            my scalar $val_tok = parser_current($parser);
+            if (parser_check($parser, "INT_LITERAL")) {
+                parser_advance($parser);
+                $value = str_to_int($val_tok->{"value"});
+                if ($is_negative == 1) {
+                    $value = 0 - $value;
+                }
+            } else {
+                parser_error($parser, "expected integer value for enum member");
+            }
+        }
+
+        ast_add_enum_member($en, $member_name, $value);
+        $next_value = $value + 1;
+
+        # Optional comma between members
+        if (parser_check($parser, "COMMA")) {
+            parser_advance($parser);
+        }
+    }
+
+    parser_expect($parser, "RBRACE");
+
+    return $en;
 }
 
 # Parse package declaration
@@ -2268,6 +3039,7 @@ func parse_package(scalar $parser, scalar $program) void {
     parser_expect($parser, "SEMI");
 
     $program->{"package"} = $pkg_name;
+    $parser->{"current_package"} = $pkg_name;
 }
 
 # Parse version declaration: version "x.y.z";
@@ -2394,12 +3166,47 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
         } elsif (parser_check($mod_parser, "STRUCT")) {
             my scalar $st = parse_struct($mod_parser);
             ast_add_struct($mod_program, $st);
+        } elsif (parser_check($mod_parser, "ENUM")) {
+            my scalar $en = parse_enum($mod_parser);
+            ast_add_enum($mod_program, $en);
+        } elsif (parser_check($mod_parser, "MY")) {
+            # Parse module-level variable declarations
+            my scalar $var = parse_var_decl($mod_parser);
+            ast_add_global($mod_program, $var);
+        } elsif (parser_check($mod_parser, "EXTERN")) {
+            # Check if this is extern "C" { } or extern func
+            my scalar $next_tok = parser_peek($mod_parser);
+            if ($next_tok->{"type"} eq "STR_LITERAL") {
+                # extern "C" { ... } block
+                parse_extern_c_block($mod_parser, $mod_program);
+            } else {
+                # Traditional extern func declaration
+                my scalar $fn = parse_extern_function($mod_parser);
+                ast_add_function($mod_program, $fn);
+            }
+        } elsif (parser_check($mod_parser, "C_BLOCK")) {
+            # Top-level __C__ { ... } block - collect for transfer to main program
+            my scalar $tok = parser_current($mod_parser);
+            my str $c_code = $tok->{"value"};
+            parser_advance($mod_parser);
+            ast_add_c_block($mod_program, $c_code);
         } elsif (parser_check($mod_parser, "HASH")) {
             # Skip comments that look like hash
             parser_advance($mod_parser);
         } else {
             # Skip other tokens (comments, etc)
             parser_advance($mod_parser);
+        }
+    }
+
+    # Transfer C blocks from module to main program
+    my int $mod_c_block_count = $mod_program->{"c_block_count"};
+    if ($mod_c_block_count > 0) {
+        my scalar $mod_c_blocks = $mod_program->{"c_blocks"};
+        my int $cb = 0;
+        while ($cb < $mod_c_block_count) {
+            ast_add_c_block($program, $mod_c_blocks->[$cb]);
+            $cb = $cb + 1;
         }
     }
 
@@ -2422,10 +3229,16 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
         $fn->{"original_name"} = $fn_name;
         $fn->{"package"} = $pkg_name;
 
-        # Create qualified name version
-        $fn->{"name"} = $pkg_name . "::" . $fn_name;
+        # extern "C" functions keep their exact C symbol name (no package prefix)
+        if ($fn->{"is_c_extern"} == 1) {
+            # Keep original name for C linkage
+            $fn->{"name"} = $fn_name;
+        } else {
+            # Create qualified name version for Strada functions
+            $fn->{"name"} = $pkg_name . "::" . $fn_name;
+        }
 
-        # Add qualified version to main program
+        # Add to main program
         ast_add_function($program, $fn);
 
         $i = $i + 1;
@@ -2438,6 +3251,26 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
     while ($i < $count) {
         my scalar $st = $mod_structs->[$i];
         ast_add_struct($program, $st);
+        $i = $i + 1;
+    }
+
+    # Merge enums
+    my scalar $mod_enums = $mod_program->{"enums"};
+    $i = 0;
+    $count = $mod_program->{"enum_count"};
+    while ($i < $count) {
+        my scalar $en = $mod_enums->[$i];
+        ast_add_enum($program, $en);
+        $i = $i + 1;
+    }
+
+    # Merge global variables from module
+    my scalar $mod_globals = $mod_program->{"globals"};
+    $i = 0;
+    $count = $mod_program->{"global_count"};
+    while ($i < $count) {
+        my scalar $gvar = $mod_globals->[$i];
+        ast_add_global($program, $gvar);
         $i = $i + 1;
     }
 }
@@ -2517,24 +3350,30 @@ func parse_use(scalar $parser, scalar $program) void {
 }
 
 # Parse import_lib statement - import shared library as module
-# import_lib "libname";  -> loads libname.so and reads metadata from __strada_export_info()
+# import_lib "libname.so";  -> loads libname.so and reads metadata from __strada_export_info()
 func parse_import_lib(scalar $parser, scalar $program) void {
     parser_expect($parser, "IMPORT_LIB");
 
-    # Get the library name (must be a string)
+    # Get the library filename (must be a string, e.g., "MyLib.so")
     my scalar $tok = parser_current($parser);
     if ($tok->{"type"} ne "STR_LITERAL") {
-        parser_error($parser, "import_lib requires a string library name");
+        parser_error($parser, "import_lib requires a string library filename (e.g., \"MyLib.so\")");
     }
-    my str $lib_name = $tok->{"value"};
+    my str $lib_file = $tok->{"value"};
     parser_advance($parser);
 
     parser_expect($parser, "SEMI");
 
     # Find the .so file in lib paths
-    my str $so_path = find_so_file($program, $lib_name);
+    my str $so_path = find_so_file($program, $lib_file);
     if (length($so_path) == 0) {
-        parser_error($parser, "cannot find shared library: " . $lib_name . ".so");
+        parser_error($parser, "cannot find shared library: " . $lib_file);
+    }
+
+    # Extract package name by stripping .so extension
+    my str $lib_name = $lib_file;
+    if (length($lib_file) > 3 && substr($lib_file, length($lib_file) - 3, 3) eq ".so") {
+        $lib_name = substr($lib_file, 0, length($lib_file) - 3);
     }
 
     # Load the .so file and get metadata using runtime functions
@@ -2567,16 +3406,15 @@ func parse_import_lib(scalar $parser, scalar $program) void {
     ast_add_import_lib($program, $lib_info);
 }
 
-# Find .so file in lib paths
-func find_so_file(scalar $program, str $lib_name) str {
-    my str $so_name = $lib_name . ".so";
+# Find .so file in lib paths (lib_file is the full filename, e.g., "MyLib.so")
+func find_so_file(scalar $program, str $lib_file) str {
     my scalar $lib_paths = $program->{"lib_paths"};
     my int $i = 0;
     my int $count = $program->{"lib_path_count"};
 
     while ($i < $count) {
         my str $lib_path = $lib_paths->[$i];
-        my str $full_path = $lib_path . "/" . $so_name;
+        my str $full_path = $lib_path . "/" . $lib_file;
         # Try to open the file to check if it exists
         my int $fd = sys::open_fd($full_path, "r");
         if ($fd > 0) {
@@ -2634,7 +3472,7 @@ func parse_export_metadata(str $lib_name, str $so_path, str $metadata) scalar {
 }
 
 # Parse a single export metadata line
-# Format: func:name:return_type:param_count:param_types
+# Format: func:name:return_type:param_count:param_types:variadic_idx
 func parse_export_line(str $line) scalar {
     # Extract fields by finding colons
     my int $len = length($line);
@@ -2645,6 +3483,7 @@ func parse_export_line(str $line) scalar {
     my str $ret_str = "";
     my str $param_count_str = "";
     my str $param_types_str = "";
+    my str $variadic_idx_str = "";
 
     my str $current = "";
     while ($pos <= $len) {
@@ -2663,6 +3502,8 @@ func parse_export_line(str $line) scalar {
                 $param_count_str = $current;
             } elsif ($field_num == 4) {
                 $param_types_str = $current;
+            } elsif ($field_num == 5) {
+                $variadic_idx_str = $current;
             }
             $current = "";
             $field_num = $field_num + 1;
@@ -2682,12 +3523,28 @@ func parse_export_line(str $line) scalar {
         $param_count = str_to_int($param_count_str);
     }
 
+    # Parse variadic index
+    my int $variadic_idx = -1;
+    if (length($variadic_idx_str) > 0) {
+        # Handle negative index (str_to_int_signed needed)
+        if (substr($variadic_idx_str, 0, 1) eq "-") {
+            $variadic_idx = -1;
+        } else {
+            $variadic_idx = str_to_int($variadic_idx_str);
+        }
+    }
+
     my hash %fn_info = ();
     $fn_info{"name"} = $fn_name;
     $fn_info{"original_name"} = $fn_name;
     my int $ret_type = export_str_to_type($ret_str);
     $fn_info{"return_type"} = $ret_type;
     $fn_info{"param_count"} = $param_count;
+    $fn_info{"variadic_param_idx"} = $variadic_idx;
+    $fn_info{"is_variadic"} = 0;
+    if ($variadic_idx >= 0) {
+        $fn_info{"is_variadic"} = 1;
+    }
 
     # Parse parameter types
     my array @params = ();
@@ -2707,6 +3564,13 @@ func parse_export_line(str $line) scalar {
                 $param{"name"} = "arg" . $pnum;
                 $param{"param_type"} = export_str_to_type($ptype);
                 $param{"sigil"} = "$";
+                # Mark variadic parameter
+                if ($pnum == $variadic_idx) {
+                    $param{"is_variadic"} = 1;
+                    $param{"sigil"} = "@";
+                } else {
+                    $param{"is_variadic"} = 0;
+                }
                 push(@params, \%param);
                 $ptype = "";
                 $pnum = $pnum + 1;
@@ -2741,6 +3605,7 @@ func export_str_to_type(str $type_str) int {
     if ($type_str eq "int") { return TYPE_INT(); }
     if ($type_str eq "num") { return TYPE_NUM(); }
     if ($type_str eq "str") { return TYPE_STR(); }
+    if ($type_str eq "bool") { return TYPE_BOOL(); }
     if ($type_str eq "array") { return TYPE_ARRAY(); }
     if ($type_str eq "hash") { return TYPE_HASH(); }
     if ($type_str eq "scalar") { return TYPE_SCALAR(); }
@@ -2750,7 +3615,251 @@ func export_str_to_type(str $type_str) int {
     if ($type_str eq "int64") { return TYPE_INT64(); }
     if ($type_str eq "float32") { return TYPE_FLOAT32(); }
     if ($type_str eq "float64") { return TYPE_FLOAT64(); }
+    if ($type_str eq "int8") { return TYPE_INT8(); }
+    if ($type_str eq "int16") { return TYPE_INT16(); }
+    if ($type_str eq "uint8") { return TYPE_UINT8(); }
+    if ($type_str eq "byte") { return TYPE_UINT8(); }
+    if ($type_str eq "uint16") { return TYPE_UINT16(); }
+    if ($type_str eq "uint32") { return TYPE_UINT32(); }
+    if ($type_str eq "uint64") { return TYPE_UINT64(); }
+    if ($type_str eq "size_t") { return TYPE_SIZE_T(); }
+    if ($type_str eq "char") { return TYPE_CHAR(); }
+    if ($type_str eq "float") { return TYPE_FLOAT32(); }
+    if ($type_str eq "double") { return TYPE_FLOAT64(); }
+    if ($type_str eq "long_double") { return TYPE_LONG_DOUBLE(); }
     return TYPE_SCALAR();
+}
+
+# ============================================================
+# import_object support
+# ============================================================
+
+# Find .o file in lib paths (obj_file is the full filename, e.g., "MyLib.o")
+func find_o_file(scalar $program, str $obj_file) str {
+    my scalar $lib_paths = $program->{"lib_paths"};
+    my int $i = 0;
+    my int $count = $program->{"lib_path_count"};
+
+    while ($i < $count) {
+        my str $lib_path = $lib_paths->[$i];
+        my str $full_path = $lib_path . "/" . $obj_file;
+        # Try to open the file to check if it exists
+        my int $fd = sys::open_fd($full_path, "r");
+        if ($fd > 0) {
+            close_fd($fd);
+            return $full_path;
+        }
+        $i = $i + 1;
+    }
+
+    return "";
+}
+
+# Extract export metadata from object file by compiling and running a temp program
+# This allows import_object to work like import_lib - metadata comes from the .o file
+func extract_object_export_info(scalar $parser, str $obj_name, str $o_path) str {
+    # Get the compiler directory from STRADA_DIR environment variable
+    # (set by the 'strada' wrapper script) or fall back to current directory
+    my str $compiler_dir = sys::qx("echo -n \"$STRADA_DIR\"");
+    if (length($compiler_dir) == 0) {
+        # Fallback to current directory (works when running from repo root)
+        $compiler_dir = ".";
+    }
+    my str $runtime_path = $compiler_dir . "/runtime/strada_runtime.c";
+    my str $runtime_dir = $compiler_dir . "/runtime";
+
+    # Create temp C file that calls __strada_export_info from the object
+    my str $temp_c = "/tmp/strada_import_object_" . $obj_name . ".c";
+    my str $temp_exe = "/tmp/strada_import_object_" . $obj_name;
+
+    my str $c_code = "#include <stdio.h>\n";
+    $c_code = $c_code . "extern const char* __strada_export_info(void);\n";
+    $c_code = $c_code . "int main(void) {\n";
+    $c_code = $c_code . "    const char* info = __strada_export_info();\n";
+    $c_code = $c_code . "    if (info) printf(\"%s\", info);\n";
+    $c_code = $c_code . "    return 0;\n";
+    $c_code = $c_code . "}\n";
+
+    spew($temp_c, $c_code);
+
+    # Compile the temp program with the object file
+    # We need to link with the runtime for strada_* functions used in the object
+    my str $compile_cmd = "gcc -o " . $temp_exe . " " . $temp_c . " " . $o_path;
+    $compile_cmd = $compile_cmd . " " . $runtime_path . " -I" . $runtime_dir;
+    $compile_cmd = $compile_cmd . " -ldl -lm -lpthread";
+
+    # Run gcc and capture any error output, append exit code
+    my str $compile_output = sys::qx($compile_cmd . " 2>&1; echo __EXIT_CODE__$?");
+
+    # Check if compilation succeeded by looking for exit code 0
+    my int $success = index($compile_output, "__EXIT_CODE__0");
+    if ($success < 0) {
+        # Clean up
+        sys::unlink($temp_c);
+        parser_error($parser, "import_object: failed to extract metadata from " . $o_path . " (missing __strada_export_info?)");
+    }
+
+    # Run the temp program to get export info
+    my str $metadata = sys::qx($temp_exe);
+
+    # Clean up temp files
+    sys::unlink($temp_c);
+    sys::unlink($temp_exe);
+
+    if (length($metadata) == 0) {
+        parser_error($parser, "import_object: " . $o_path . " has no export metadata (was it compiled with a recent strada compiler?)");
+    }
+
+    return $metadata;
+}
+
+# Parse import_object statement - import object file for static linking
+# import_object "objname.o";  -> links objname.o and reads metadata from __strada_export_info()
+func parse_import_object(scalar $parser, scalar $program) void {
+    parser_expect($parser, "IMPORT_OBJECT");
+
+    # Get the object filename (must be a string, e.g., "MyLib.o")
+    my scalar $tok = parser_current($parser);
+    if ($tok->{"type"} ne "STR_LITERAL") {
+        parser_error($parser, "import_object requires a string object filename (e.g., \"MyLib.o\")");
+    }
+    my str $obj_file = $tok->{"value"};
+    parser_advance($parser);
+
+    parser_expect($parser, "SEMI");
+
+    # Find the .o file in lib paths
+    my str $o_path = find_o_file($program, $obj_file);
+    if (length($o_path) == 0) {
+        parser_error($parser, "cannot find object file: " . $obj_file);
+    }
+
+    # Extract package name by stripping .o extension
+    my str $obj_name = $obj_file;
+    if (length($obj_file) > 2 && substr($obj_file, length($obj_file) - 2, 2) eq ".o") {
+        $obj_name = substr($obj_file, 0, length($obj_file) - 2);
+    }
+
+    # Extract export metadata from the object file (like import_lib does with .so)
+    my str $metadata = extract_object_export_info($parser, $obj_name, $o_path);
+
+    # Parse the metadata using the same function as import_lib
+    # Note: parse_export_metadata expects so_path, but we pass o_path - works the same
+    my scalar $obj_info = parse_export_metadata($obj_name, $o_path, $metadata);
+
+    # Add o_path to the result (parse_export_metadata sets so_path, but we need o_path)
+    $obj_info->{"o_path"} = $o_path;
+
+    # Add to program
+    ast_add_import_object($program, $obj_info);
+}
+
+# ============================================================
+# import_archive support
+# ============================================================
+
+# Find .a file in lib paths (arch_file is the full filename, e.g., "MyLib.a")
+func find_a_file(scalar $program, str $arch_file) str {
+    my scalar $lib_paths = $program->{"lib_paths"};
+    my int $i = 0;
+    my int $count = $program->{"lib_path_count"};
+
+    while ($i < $count) {
+        my str $lib_path = $lib_paths->[$i];
+        my str $full_path = $lib_path . "/" . $arch_file;
+        # Try to open the file to check if it exists
+        my int $fd = sys::open_fd($full_path, "r");
+        if ($fd > 0) {
+            close_fd($fd);
+            return $full_path;
+        }
+        $i = $i + 1;
+    }
+
+    return "";
+}
+
+# Extract export metadata from archive file by compiling and running a temp program
+func extract_archive_export_info(scalar $parser, str $arch_name, str $a_path) str {
+    # Create temp C file that calls __strada_export_info from the archive
+    my str $temp_c = "/tmp/strada_import_archive_" . $arch_name . ".c";
+    my str $temp_exe = "/tmp/strada_import_archive_" . $arch_name;
+
+    my str $c_code = "#include <stdio.h>\n";
+    $c_code = $c_code . "extern const char* __strada_export_info(void);\n";
+    $c_code = $c_code . "int main(void) {\n";
+    $c_code = $c_code . "    const char* info = __strada_export_info();\n";
+    $c_code = $c_code . "    if (info) printf(\"%s\", info);\n";
+    $c_code = $c_code . "    return 0;\n";
+    $c_code = $c_code . "}\n";
+
+    spew($temp_c, $c_code);
+
+    # Compile the temp program with the archive file
+    # Note: The archive already includes the runtime (from --static-lib), so don't link it again
+    my str $compile_cmd = "gcc -o " . $temp_exe . " " . $temp_c . " " . $a_path;
+    $compile_cmd = $compile_cmd . " -ldl -lm -lpthread";
+
+    my str $compile_output = sys::qx($compile_cmd . " 2>&1; echo __EXIT_CODE__$?");
+
+    my int $success = index($compile_output, "__EXIT_CODE__0");
+    if ($success < 0) {
+        sys::unlink($temp_c);
+        parser_error($parser, "import_archive: failed to extract metadata from " . $a_path . " (missing __strada_export_info?)");
+    }
+
+    # Run the temp program to get export info
+    my str $metadata = sys::qx($temp_exe);
+
+    # Clean up temp files
+    sys::unlink($temp_c);
+    sys::unlink($temp_exe);
+
+    if (length($metadata) == 0) {
+        parser_error($parser, "import_archive: " . $a_path . " has no export metadata (was it compiled with a recent strada compiler?)");
+    }
+
+    return $metadata;
+}
+
+# Parse import_archive statement - import archive file for static linking
+# import_archive "archname.a";  -> links archname.a and reads metadata from __strada_export_info()
+func parse_import_archive(scalar $parser, scalar $program) void {
+    parser_expect($parser, "IMPORT_ARCHIVE");
+
+    # Get the archive filename (must be a string, e.g., "MyLib.a")
+    my scalar $tok = parser_current($parser);
+    if ($tok->{"type"} ne "STR_LITERAL") {
+        parser_error($parser, "import_archive requires a string archive filename (e.g., \"MyLib.a\")");
+    }
+    my str $arch_file = $tok->{"value"};
+    parser_advance($parser);
+
+    parser_expect($parser, "SEMI");
+
+    # Find the .a file in lib paths
+    my str $a_path = find_a_file($program, $arch_file);
+    if (length($a_path) == 0) {
+        parser_error($parser, "cannot find archive file: " . $arch_file);
+    }
+
+    # Extract package name by stripping .a extension
+    my str $arch_name = $arch_file;
+    if (length($arch_file) > 2 && substr($arch_file, length($arch_file) - 2, 2) eq ".a") {
+        $arch_name = substr($arch_file, 0, length($arch_file) - 2);
+    }
+
+    # Extract export metadata from the archive file
+    my str $metadata = extract_archive_export_info($parser, $arch_name, $a_path);
+
+    # Parse the metadata using the same function as import_lib/import_object
+    my scalar $arch_info = parse_export_metadata($arch_name, $a_path, $metadata);
+
+    # Add a_path to the result
+    $arch_info->{"a_path"} = $a_path;
+
+    # Add to program
+    ast_add_import_archive($program, $arch_info);
 }
 
 func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) scalar {
@@ -2769,8 +3878,30 @@ func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) sca
     my int $low_path_count = size($lib_paths_low);
 
     while (!parser_check($parser, "EOF")) {
+        # Check for private or async func
+        my int $is_private = 0;
+        my int $is_async = 0;
+        if (parser_check($parser, "PRIVATE")) {
+            parser_advance($parser);
+            $is_private = 1;
+            if (!parser_check($parser, "FUNC") && !parser_check($parser, "ASYNC")) {
+                parser_error($parser, "expected 'func' or 'async func' after 'private'");
+            }
+        }
+        if (parser_check($parser, "ASYNC")) {
+            parser_advance($parser);
+            $is_async = 1;
+            if (!parser_check($parser, "FUNC")) {
+                parser_error($parser, "expected 'func' after 'async'");
+            }
+        }
+
         if (parser_check($parser, "FUNC")) {
             my scalar $fn = parse_function($parser);
+            $fn->{"is_private"} = $is_private;
+            if ($is_async == 1) {
+                $fn->{"type"} = NODE_ASYNC_FUNC();
+            }
             # Auto-prefix function names with package name when inside a simple package
             # (single-word packages like "Animal", not module-style "Math::Utils")
             my str $pkg = $program->{"package"};
@@ -2790,15 +3921,27 @@ func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) sca
             }
             ast_add_function($program, $fn);
         } elsif (parser_check($parser, "EXTERN")) {
-            my scalar $fn = parse_extern_function($parser);
-            # Do NOT auto-prefix extern function names - they link to external C functions
-            # with specific names that must not be modified
-            my str $pkg = $program->{"package"};
-            $fn->{"package"} = $pkg;
-            ast_add_function($program, $fn);
+            # Check if this is extern "C" { } or extern func
+            # Peek ahead to see if next token is a string
+            my scalar $next_tok = parser_peek($parser);
+            if ($next_tok->{"type"} eq "STR_LITERAL") {
+                # extern "C" { ... } block
+                parse_extern_c_block($parser, $program);
+            } else {
+                # Traditional extern func declaration
+                my scalar $fn = parse_extern_function($parser);
+                # Do NOT auto-prefix extern function names - they link to external C functions
+                # with specific names that must not be modified
+                my str $pkg = $program->{"package"};
+                $fn->{"package"} = $pkg;
+                ast_add_function($program, $fn);
+            }
         } elsif (parser_check($parser, "STRUCT")) {
             my scalar $st = parse_struct($parser);
             ast_add_struct($program, $st);
+        } elsif (parser_check($parser, "ENUM")) {
+            my scalar $en = parse_enum($parser);
+            ast_add_enum($program, $en);
         } elsif (parser_check($parser, "PACKAGE")) {
             parse_package($parser, $program);
         } elsif (parser_check($parser, "VERSION")) {
@@ -2809,11 +3952,21 @@ func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) sca
             parse_use($parser, $program);
         } elsif (parser_check($parser, "IMPORT_LIB")) {
             parse_import_lib($parser, $program);
+        } elsif (parser_check($parser, "IMPORT_OBJECT")) {
+            parse_import_object($parser, $program);
+        } elsif (parser_check($parser, "IMPORT_ARCHIVE")) {
+            parse_import_archive($parser, $program);
         } elsif (parser_check($parser, "MY")) {
             my scalar $var = parse_var_decl($parser);
             ast_add_global($program, $var);
+        } elsif (parser_check($parser, "C_BLOCK")) {
+            # Top-level __C__ { ... } block
+            my scalar $tok = parser_current($parser);
+            my str $c_code = $tok->{"value"};
+            parser_advance($parser);
+            ast_add_c_block($program, $c_code);
         } else {
-            parser_error($parser, "expected function, extern, struct, package, inherit, use, import_lib, or variable declaration");
+            parser_error($parser, "expected function, extern, struct, enum, package, inherit, use, import_lib, import_object, import_archive, __C__, or variable declaration");
         }
     }
 

@@ -22,10 +22,11 @@ This is the complete technical reference for the Strada programming language. Fo
 16. [Object-Oriented Programming](#16-object-oriented-programming)
 17. [Closures](#17-closures)
 18. [Multithreading](#18-multithreading)
-19. [Foreign Function Interface](#19-foreign-function-interface)
-20. [Built-in Functions](#20-built-in-functions)
-21. [Magic Variables](#21-magic-variables)
-22. [Reserved Words](#22-reserved-words)
+19. [Async/Await](#19-asyncawait)
+20. [Foreign Function Interface](#20-foreign-function-interface)
+21. [Built-in Functions](#21-built-in-functions)
+22. [Magic Variables](#22-magic-variables)
+23. [Reserved Words](#23-reserved-words)
 
 ---
 
@@ -263,9 +264,12 @@ func get_count() int {
 | `$ARGC` | Argument count |
 | `$_` | Default variable (in map/grep/sort) |
 | `$a`, `$b` | Sort comparison variables |
-| `__PACKAGE__` | Current package name |
+| `__PACKAGE__` | Current package name (runtime) |
 | `__FILE__` | Current source file |
 | `__LINE__` | Current line number |
+| `::func()` | Call func in current package (compile-time) |
+| `.::func()` | Alternate syntax for above |
+| `__PACKAGE__::func()` | Explicit form of above |
 
 ---
 
@@ -836,17 +840,19 @@ if (CONDITION) {
 **switch/case:**
 ```strada
 switch (EXPR) {
-    case VALUE:
+    case VALUE {
         BODY
-        break;
-    case VALUE:
-    case VALUE:
+    }
+    case VALUE {
         BODY
-        break;
-    default:
+    }
+    default {
         BODY
+    }
 }
 ```
+
+Note: Unlike C/Java, Strada's switch uses braces for each case (no colons), and there's no fall-through behavior. Each case is self-contained, so `break` is not needed.
 
 ### 13.2 Loops
 
@@ -1063,16 +1069,176 @@ say($f->());  # 20
 
 ---
 
-## 19. Foreign Function Interface
+## 19. Async/Await
 
-### 19.1 Loading Libraries
+Strada provides async/await for concurrent programming with a thread pool backend.
+
+### 19.1 Async Functions
+
+```strada
+async func name(params) return_type {
+    # Function body runs in thread pool
+    return value;
+}
+```
+
+When called, async functions immediately return a Future while the work executes on a background thread.
+
+### 19.2 Await
+
+```strada
+my scalar $future = async_function(args);
+my type $result = await $future;  # Blocks until complete
+```
+
+### 19.3 Future Functions
+
+| Function | Description |
+|----------|-------------|
+| `async::all(\@futures)` | Wait for all, return array |
+| `async::race(\@futures)` | Wait for first, cancel others |
+| `async::timeout($f, $ms)` | Await with timeout |
+| `async::cancel($f)` | Request cancellation |
+| `async::is_done($f)` | Non-blocking check |
+| `async::is_cancelled($f)` | Check cancelled |
+| `async::pool_init($n)` | Init pool with N workers |
+| `async::pool_shutdown()` | Shutdown pool |
+
+### 19.4 Error Handling
+
+Exceptions in async functions propagate through await:
+
+```strada
+async func fail_async() int {
+    throw "async error";
+}
+
+try {
+    await fail_async();
+} catch ($e) {
+    say("Caught: " . $e);
+}
+```
+
+### 19.5 Examples
+
+```strada
+# Parallel execution
+my scalar $a = compute(10);
+my scalar $b = compute(20);
+my int $r1 = await $a;
+my int $r2 = await $b;
+
+# Wait for all
+my array @futures = (compute(1), compute(2), compute(3));
+my array @results = async::all(\@futures);
+
+# Race
+my str $winner = async::race(\@futures);
+
+# Timeout
+try {
+    my str $r = async::timeout($future, 100);
+} catch ($e) {
+    say("Timed out");
+}
+```
+
+### 19.6 Channels
+
+Channels provide thread-safe message passing between async tasks.
+
+```strada
+# Create channel (unbounded or bounded)
+my scalar $ch = async::channel();      # Unbounded
+my scalar $ch = async::channel(10);    # Capacity of 10
+
+# Send and receive
+async::send($ch, $value);              # Blocks if full
+my scalar $v = async::recv($ch);       # Blocks if empty
+
+# Non-blocking variants
+async::try_send($ch, $value);          # Returns 0/1
+my scalar $v = async::try_recv($ch);   # Returns undef if empty
+
+# Close and check
+async::close($ch);
+async::is_closed($ch);
+async::len($ch);
+```
+
+| Function | Description |
+|----------|-------------|
+| `async::channel()` | Create unbounded channel |
+| `async::channel($n)` | Create bounded channel |
+| `async::send($ch, $v)` | Send (blocks if full) |
+| `async::recv($ch)` | Receive (blocks if empty) |
+| `async::try_send($ch, $v)` | Non-blocking send |
+| `async::try_recv($ch)` | Non-blocking receive |
+| `async::close($ch)` | Close channel |
+| `async::is_closed($ch)` | Check if closed |
+| `async::len($ch)` | Get queue length |
+
+### 19.7 Mutexes
+
+Mutexes protect critical sections.
+
+```strada
+my scalar $m = async::mutex();
+async::lock($m);           # Acquire (blocking)
+# ... critical section ...
+async::unlock($m);         # Release
+
+async::try_lock($m);       # Non-blocking (0=success)
+async::mutex_destroy($m);  # Clean up
+```
+
+| Function | Description |
+|----------|-------------|
+| `async::mutex()` | Create mutex |
+| `async::lock($m)` | Acquire lock |
+| `async::unlock($m)` | Release lock |
+| `async::try_lock($m)` | Non-blocking lock |
+| `async::mutex_destroy($m)` | Destroy mutex |
+
+### 19.8 Atomics
+
+Lock-free integer operations.
+
+```strada
+my scalar $a = async::atomic(0);       # Create
+async::atomic_load($a);                # Read
+async::atomic_store($a, 100);          # Write
+async::atomic_add($a, 10);             # Add, returns OLD
+async::atomic_sub($a, 5);              # Sub, returns OLD
+async::atomic_inc($a);                 # Inc, returns NEW
+async::atomic_dec($a);                 # Dec, returns NEW
+async::atomic_cas($a, $exp, $new);     # CAS (returns 1 if swapped)
+```
+
+| Function | Description |
+|----------|-------------|
+| `async::atomic($n)` | Create atomic |
+| `async::atomic_load($a)` | Read value |
+| `async::atomic_store($a, $v)` | Write value |
+| `async::atomic_add($a, $d)` | Add, return OLD |
+| `async::atomic_sub($a, $d)` | Subtract, return OLD |
+| `async::atomic_inc($a)` | Increment, return NEW |
+| `async::atomic_dec($a)` | Decrement, return NEW |
+| `async::atomic_cas($a, $e, $n)` | Compare-and-swap |
+
+---
+
+## 20. Foreign Function Interface
+
+### 20.1 Loading Libraries
 
 ```strada
 my int $lib = sys::dl_open("libfoo.so");
 my int $func = sys::dl_sym($lib, "function_name");
 ```
 
-### 19.2 Calling Functions
+### 20.2 Calling Functions
 
 ```strada
 my int $result = sys::dl_call_int($func, [$arg1, $arg2]);
@@ -1081,7 +1247,7 @@ my str $result = sys::dl_call_str($func, $arg);
 sys::dl_call_void($func, [$args]);
 ```
 
-### 19.3 StradaValue Passthrough
+### 20.3 StradaValue Passthrough
 
 For C functions expecting StradaValue*:
 
@@ -1114,11 +1280,51 @@ my int $result = sys::dl_call_int_sv($func, [$sv1, $sv2]);
 ### 20.2 sys:: Namespace
 
 **Files:**
-- `sys::open($path, $mode)` - Open file
+- `sys::open($path, $mode)` - Open file, returns filehandle
 - `sys::close($fh)` - Close file
 - `sys::readline($fh)` - Read line
 - `sys::slurp($path)` - Read entire file
 - `sys::spew($path, $data)` - Write file
+
+**Diamond Operator and Filehandle I/O:**
+
+The diamond operator `<$fh>` reads a line from a filehandle (similar to Perl):
+
+```strada
+my scalar $fh = sys::open("input.txt", "r");
+my str $line = <$fh>;                    # Read one line
+while (defined($line)) {
+    say($line);
+    $line = <$fh>;
+}
+sys::close($fh);
+```
+
+Print and say work with filehandles as the first argument:
+
+```strada
+my scalar $out = sys::open("output.txt", "w");
+say($out, "Line with newline");          # Writes text + \n
+print($out, "No automatic newline");     # Writes text only
+sys::close($out);
+```
+
+Both diamond operator and print/say also work with sockets:
+
+```strada
+my scalar $sock = sys::socket_client("localhost", 80);
+say($sock, "GET / HTTP/1.0");
+say($sock, "Host: localhost");
+say($sock, "");
+my str $line = <$sock>;                  # Read response line by line
+while (defined($line)) {
+    say($line);
+    $line = <$sock>;
+}
+sys::socket_close($sock);
+```
+
+Socket readline automatically strips `\r` characters for clean CRLF handling.
 
 **Process:**
 - `sys::fork()` - Fork process
@@ -1168,9 +1374,12 @@ See [Multithreading](#18-multithreading).
 | `$ARGC` | Argument count |
 | `$_` | Default variable in map/grep |
 | `$a`, `$b` | Sort comparison variables |
-| `__PACKAGE__` | Current package name |
+| `__PACKAGE__` | Current package name (runtime) |
 | `__FILE__` | Current file name |
 | `__LINE__` | Current line number |
+| `::func()` | Call func in current package (compile-time) |
+| `.::func()` | Alternate syntax for above |
+| `__PACKAGE__::func()` | Explicit form of above |
 
 ---
 

@@ -33,6 +33,7 @@ Built-in functions are organized into namespaces:
 | `math::` | Math functions | `math::sin()`, `math::sqrt()` |
 | `sys::` | System/libc | `sys::open()`, `sys::fork()` |
 | `thread::` | Multithreading | `thread::create()`, `thread::mutex_new()` |
+| `async::` | Async, channels, mutex, atomics | `async::all()`, `async::channel()`, `async::mutex()` |
 | *(none)* | Core language | `say()`, `push()`, `keys()` |
 
 ## Basic Structure
@@ -194,6 +195,22 @@ func add(int $a, int $b) int {
 func greet(str $name, str $greeting = "Hello") void {
     say($greeting . ", " . $name);
 }
+
+# Variadic function - collects extra args into array
+func sum(int ...@nums) int {
+    my int $total = 0;
+    foreach my int $n (@nums) { $total = $total + $n; }
+    return $total;
+}
+sum(1, 2, 3, 4, 5);              # 15
+
+# Fixed params + variadic
+func format(str $prefix, int ...@nums) str { ... }
+
+# Spread operator - unpack array into args
+my array @vals = (10, 20, 30);
+sum(...@vals);                   # 60
+sum(1, ...@vals, 99);            # Mixed: 160
 ```
 
 ## Anonymous Functions (Closures)
@@ -275,6 +292,89 @@ thread::join($waiter);
 **Mutex functions:** `thread::mutex_new`, `thread::mutex_lock`, `thread::mutex_trylock`, `thread::mutex_unlock`, `thread::mutex_destroy`
 
 **Condition vars:** `thread::cond_new`, `thread::cond_wait`, `thread::cond_signal`, `thread::cond_broadcast`, `thread::cond_destroy`
+
+## Async/Await
+
+```strada
+# Define async function
+async func compute(int $n) int {
+    sys::usleep(50000);
+    return $n * 2;
+}
+
+# Call returns a Future
+my scalar $future = compute(21);
+
+# Await blocks until complete
+my int $result = await $future;  # 42
+
+# Parallel execution
+my scalar $a = compute(10);
+my scalar $b = compute(20);
+my int $r1 = await $a;  # 20
+my int $r2 = await $b;  # 40
+
+# Wait for all
+my array @futures = (compute(1), compute(2), compute(3));
+my array @results = async::all(\@futures);  # [2, 4, 6]
+
+# Race - first to complete
+my str $winner = async::race(\@futures);
+
+# Timeout
+try {
+    my str $r = async::timeout($future, 100);  # 100ms
+} catch ($e) {
+    say("Timed out");
+}
+
+# Cancellation
+async::cancel($future);
+if (async::is_cancelled($future)) { ... }
+```
+
+**Futures:** `async::all`, `async::race`, `async::timeout`, `async::cancel`, `async::is_done`, `async::is_cancelled`, `async::pool_init`, `async::pool_shutdown`
+
+## Channels
+
+```strada
+my scalar $ch = async::channel();      # Unbounded
+my scalar $ch = async::channel(10);    # Bounded (capacity 10)
+
+async::send($ch, $value);              # Send (blocks if full)
+my scalar $v = async::recv($ch);       # Receive (blocks if empty)
+
+# Non-blocking variants
+if (async::try_send($ch, $value)) { }  # Returns 0/1
+my scalar $v = async::try_recv($ch);   # Returns undef if empty
+
+async::close($ch);                     # Close channel
+async::is_closed($ch);                 # Check if closed
+async::len($ch);                       # Items in queue
+```
+
+## Mutexes
+
+```strada
+my scalar $m = async::mutex();
+async::lock($m);                       # Acquire (blocking)
+async::unlock($m);                     # Release
+async::try_lock($m);                   # Non-blocking (0=success)
+async::mutex_destroy($m);              # Clean up
+```
+
+## Atomics
+
+```strada
+my scalar $a = async::atomic(0);       # Create with initial value
+async::atomic_load($a);                # Read
+async::atomic_store($a, 100);          # Write
+async::atomic_add($a, 10);             # Add, returns OLD value
+async::atomic_sub($a, 5);              # Subtract, returns OLD value
+async::atomic_inc($a);                 # Increment, returns NEW value
+async::atomic_dec($a);                 # Decrement, returns NEW value
+async::atomic_cas($a, $exp, $new);     # Compare-and-swap (returns 1 if swapped)
+```
 
 ## Arrays
 
@@ -417,6 +517,27 @@ sys::spew("file.txt", $data);                 # Write entire file
 my scalar $fh = sys::open("file.txt", "r");
 my str $line = sys::readline($fh);
 sys::close($fh);
+
+# Diamond operator <$fh> - read line from filehandle
+my scalar $fh = sys::open("file.txt", "r");
+my str $line = <$fh>;                         # Read one line
+while (defined($line)) {
+    say($line);
+    $line = <$fh>;
+}
+sys::close($fh);
+
+# Print/say to filehandle
+my scalar $out = sys::open("output.txt", "w");
+say($out, "Line with newline");               # say($fh, $text)
+print($out, "No newline");                    # print($fh, $text)
+sys::close($out);
+
+# Works with sockets too!
+my scalar $sock = sys::socket_client("localhost", 80);
+say($sock, "GET / HTTP/1.0");
+my str $resp = <$sock>;                       # Read response
+sys::socket_close($sock);
 ```
 
 ## Regex
@@ -455,11 +576,27 @@ func add(int $a, int $b) int {
     return $a + $b;
 }
 
-# Runtime shared library loading
+# Library Import Options
 use lib "lib";
-import_lib "JSON";            # Loads lib/JSON.so + lib/JSON.strada for signatures
-my str $json = JSON::encode(\%data);  # Namespace syntax works after import_lib
+
+# Shared library (runtime loading via dlopen)
+import_lib "JSON.so";              # Loads lib/JSON.so at runtime
+my str $json = JSON::encode(\%data);
+
+# Object file (static linking)
+import_object "MathLib.o";         # Links lib/MathLib.o into executable
+
+# Archive file (static linking, includes runtime)
+import_archive "FullLib.a";        # Links lib/FullLib.a into executable
 ```
+
+**Library Import Comparison:**
+
+| Statement | File | Linking | Use Case |
+|-----------|------|---------|----------|
+| `import_lib "X.so"` | .so | Runtime (dlopen) | Plugins, optional features |
+| `import_object "X.o"` | .o | Compile time | Single-file static linking |
+| `import_archive "X.a"` | .a | Compile time | Multi-file archives with bundled runtime |
 
 ## Object-Oriented Programming
 
@@ -526,7 +663,13 @@ if ($dog->can("speak")) { ... }   # Check if method exists
 my str $pkg = blessed($dog);      # "Dog"
 
 # Current package
-say(__PACKAGE__);                 # Returns current package name
+say(__PACKAGE__);                 # Returns current package name at runtime
+
+# Call function in current package (compile-time resolution)
+::helper("arg");                  # Preferred shorthand
+.::helper("arg");                 # Alternate shorthand
+__PACKAGE__::helper("arg");       # Explicit form
+# All three resolve to PackageName_helper("arg") at compile time
 
 # Runtime package control (for multi-package files)
 inherit("Dog", "Animal");         # Explicit child and parent
@@ -549,7 +692,10 @@ inherit("Duck", "Flyable");       # Multiple inheritance
 | `SUPER::method($self, ...)` | Call parent method |
 | `Pkg_DESTROY($self)` | Destructor (auto-called on free) |
 | `set_package("Pkg")` | Set current package |
-| `__PACKAGE__` | Get current package name |
+| `__PACKAGE__` | Get current package name (runtime) |
+| `::func()` | Call func in current package (compile-time) |
+| `.::func()` | Alternate syntax for above |
+| `__PACKAGE__::func()` | Explicit form of above |
 
 ## Common Functions
 
@@ -766,6 +912,29 @@ int64_t my_func(StradaValue *str_sv, StradaValue *int_sv) {
 ```
 Build with: `gcc -shared -fPIC -o lib.so mylib.c -Iruntime`
 
+## Raw C Code Blocks
+
+```strada
+# Embed raw C code directly
+__C__ {
+    printf("Hello from C!\n");
+    int x = 42;
+    printf("x = %d\n", x);
+}
+
+# Access Strada variables (they're StradaValue*)
+my int $val = 10;
+__C__ {
+    long long v = strada_to_int(val);
+    printf("val = %lld\n", v);
+    strada_decref(val);
+    val = strada_new_int(v * 2);
+}
+say($val);  # 20
+```
+
+Key functions: `strada_to_int()`, `strada_to_str()`, `strada_new_int()`, `strada_new_str()`, `strada_decref()`, `strada_incref()`
+
 ## Calling Strada from C
 
 ```bash
@@ -784,9 +953,7 @@ gcc -o prog main.c mylib.c runtime/strada_runtime.c \
 StradaValue *ARGV = NULL, *ARGC = NULL;
 StradaValue* add(StradaValue*, StradaValue*);
 
-int main() {
-    ARGV = strada_new_array();
-    ARGC = strada_new_int(0);
+int main((int $argc, array @argv) {
     StradaValue *r = add(strada_new_int(5), strada_new_int(3));
     printf("%ld\n", strada_to_int(r));
 }

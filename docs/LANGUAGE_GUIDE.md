@@ -21,12 +21,13 @@
 16. [Process Control](#process-control)
 17. [Inter-Process Communication](#inter-process-communication)
 18. [Multithreading](#multithreading)
-19. [Packages and Modules](#packages-and-modules)
+19. [Async/Await](#asyncawait)
+20. [Packages and Modules](#packages-and-modules)
     - [Object-Oriented Programming](#object-oriented-programming)
-20. [C Interoperability](#c-interoperability)
-21. [Perl Integration](#perl-integration)
-22. [Built-in Functions](#built-in-functions)
-23. [Best Practices](#best-practices)
+21. [C Interoperability](#c-interoperability)
+22. [Perl Integration](#perl-integration)
+23. [Built-in Functions](#built-in-functions)
+24. [Best Practices](#best-practices)
 
 ---
 
@@ -177,7 +178,7 @@ while ($running) {
 | `hash` | Key-value pairs | `%` |
 | `scalar` | Single value or reference | `$` |
 
-### Extended C Types (for `extern` functions)
+### Extended C Types (for C interop via `__C__` blocks)
 
 | Type | C Equivalent |
 |------|--------------|
@@ -189,7 +190,8 @@ while ($running) {
 | `i8`, `i16`, `i32`, `i64` | `int8_t`, etc. |
 | `u8`, `u16`, `u32`, `u64` | `uint8_t`, etc. |
 | `sizet` | `size_t` |
-| `ptr` | `void*` |
+
+**Note:** Use `int` to store C pointers (64-bit), not a special pointer type.
 
 ---
 
@@ -620,6 +622,61 @@ func greet(str $name, str $greeting = "Hello") void {
 
 greet("Alice");           # "Hello, Alice!"
 greet("Bob", "Hi");       # "Hi, Bob!"
+```
+
+### Variadic Functions
+
+Variadic functions accept a variable number of arguments. The variadic parameter must be the last parameter and uses array sigil `@` with ellipsis prefix `...`:
+
+```strada
+# Basic variadic function
+func sum(int ...@nums) int {
+    my int $total = 0;
+    foreach my int $n (@nums) {
+        $total = $total + $n;
+    }
+    return $total;
+}
+
+# Call with any number of arguments
+say(sum(1, 2, 3));           # 6
+say(sum(10, 20, 30, 40));    # 100
+say(sum());                  # 0 (empty is valid)
+```
+
+#### Fixed Parameters Before Variadic
+
+You can have fixed parameters before the variadic one:
+
+```strada
+func format_nums(str $prefix, str $sep, int ...@nums) str {
+    my str $result = $prefix;
+    my int $first = 1;
+    foreach my int $n (@nums) {
+        if ($first == 0) { $result = $result . $sep; }
+        $result = $result . $n;
+        $first = 0;
+    }
+    return $result;
+}
+
+say(format_nums("Values: ", ", ", 1, 2, 3));  # "Values: 1, 2, 3"
+```
+
+#### Spread Operator
+
+Use the spread operator `...@array` to unpack an array into individual arguments:
+
+```strada
+my array @values = (10, 20, 30);
+say(sum(...@values));                    # 60
+
+# Mix individual args and spread
+say(sum(1, ...@values, 99));             # 160 (1 + 10 + 20 + 30 + 99)
+
+# Multiple spreads
+my array @more = (100, 200);
+say(sum(...@values, ...@more));          # 360
 ```
 
 ### Recursion
@@ -1692,6 +1749,160 @@ thread::mutex_destroy($mutex);
 
 ---
 
+## Async/Await
+
+Strada provides first-class async/await support with a thread pool backend, offering a higher-level abstraction than raw threads.
+
+### Defining Async Functions
+
+Use `async func` to define functions that run asynchronously:
+
+```strada
+async func fetch_data(str $url) str {
+    # This runs in the thread pool
+    my str $response = http_get($url);
+    return $response;
+}
+```
+
+When called, async functions immediately return a Future while the work executes on a background thread.
+
+### Awaiting Futures
+
+Use `await` to block until a Future completes:
+
+```strada
+my scalar $future = fetch_data("http://example.com");
+say("Request started...");
+my str $result = await $future;  # Blocks until complete
+say("Got: " . $result);
+```
+
+### Parallel Execution
+
+Launch multiple async operations concurrently:
+
+```strada
+async func compute(int $n) int {
+    sys::usleep(50000);  # 50ms work
+    return $n * 2;
+}
+
+func main() int {
+    # Start three operations in parallel
+    my scalar $a = compute(10);
+    my scalar $b = compute(20);
+    my scalar $c = compute(30);
+
+    # Wait for all results (total time ~50ms, not 150ms)
+    my int $r1 = await $a;  # 20
+    my int $r2 = await $b;  # 40
+    my int $r3 = await $c;  # 60
+
+    return 0;
+}
+```
+
+### async:: Namespace Functions
+
+| Function | Description |
+|----------|-------------|
+| `async::all(\@futures)` | Wait for all futures, return array of results |
+| `async::race(\@futures)` | Wait for first to complete, cancel others |
+| `async::timeout($future, $ms)` | Await with timeout (throws on timeout) |
+| `async::cancel($future)` | Request cancellation |
+| `async::is_done($future)` | Non-blocking completion check |
+| `async::is_cancelled($future)` | Check if cancelled |
+| `async::pool_init($workers)` | Initialize thread pool with N workers |
+| `async::pool_shutdown()` | Shutdown thread pool |
+
+### Wait for All (async::all)
+
+```strada
+my array @futures = (compute(1), compute(2), compute(3));
+my array @results = async::all(\@futures);  # [2, 4, 6]
+```
+
+### Race (async::race)
+
+Wait for the first future to complete:
+
+```strada
+async func slow_task(int $id, int $delay_ms) str {
+    sys::usleep($delay_ms * 1000);
+    return "task " . $id;
+}
+
+my array @futures = (
+    slow_task(1, 100),   # 100ms
+    slow_task(2, 50),    # 50ms - wins
+    slow_task(3, 150)    # 150ms
+);
+my str $winner = async::race(\@futures);  # "task 2"
+```
+
+### Timeout
+
+```strada
+my scalar $slow = slow_task(99, 500);  # 500ms
+try {
+    my str $r = async::timeout($slow, 100);  # 100ms timeout
+    say("Got: " . $r);
+} catch ($e) {
+    say("Timed out: " . $e);
+}
+```
+
+### Cancellation
+
+```strada
+my scalar $future = slow_task(1, 1000);
+async::cancel($future);
+
+if (async::is_cancelled($future)) {
+    say("Cancelled!");
+}
+
+try {
+    await $future;  # Throws "Future was cancelled"
+} catch ($e) {
+    say("Caught: " . $e);
+}
+```
+
+### Error Propagation
+
+Exceptions in async functions propagate through await:
+
+```strada
+async func fail_async() int {
+    throw "async error";
+}
+
+try {
+    my int $x = await fail_async();
+} catch ($e) {
+    say("Caught: " . $e);  # "Caught: async error"
+}
+```
+
+### Thread Pool Configuration
+
+The thread pool auto-initializes with 4 workers on first async call. For custom configuration:
+
+```strada
+func main() int {
+    async::pool_init(8);  # 8 worker threads
+
+    # ... async operations ...
+
+    async::pool_shutdown();  # Optional cleanup
+    return 0;
+}
+```
+
+---
+
 ## Packages and Modules
 
 ### Declaring a Package
@@ -1763,24 +1974,60 @@ func speak(scalar $self) void {
     say($self->{"name"} . " makes a sound");
 }
 
-func main() void {
+func main() int {
     my scalar $animal = new("Buddy");
     say(blessed($animal));  # "Animal"
     speak($animal);
+    return 0;
 }
 ```
 
 #### The `__PACKAGE__` Keyword
 
-`__PACKAGE__` returns the current package name as a string:
+`__PACKAGE__` returns the current package name as a string at runtime:
 
 ```strada
 package My::App;
 
-func main() void {
+func main() int {
     say(__PACKAGE__);  # "My::App"
+    return 0;
 }
 ```
+
+#### Calling Functions in the Current Package
+
+Use `::func()` to call a function in the current package without repeating the package name.
+This is resolved at **compile time**, not runtime:
+
+```strada
+package Calculator;
+
+func add(int $a, int $b) int {
+    return $a + $b;
+}
+
+func multiply(int $a, int $b) int {
+    return $a * $b;
+}
+
+func compute(int $x, int $y) int {
+    # These all call Calculator_add and Calculator_multiply
+    my int $sum = ::add($x, $y);           # Preferred shorthand
+    my int $prod = ::multiply($x, $y);
+    return $sum + $prod;
+}
+```
+
+Three equivalent syntaxes are supported:
+- `::func()` — Preferred shorthand
+- `.::func()` — Alternate shorthand
+- `__PACKAGE__::func()` — Explicit form
+
+All three resolve to `PackageName_func()` at compile time.
+
+**Note:** `__PACKAGE__` alone (without `::`) returns the package name as a string at runtime,
+while `::func()` and `__PACKAGE__::func()` are compile-time function resolution.
 
 #### Inheritance
 
@@ -2060,29 +2307,52 @@ See `examples/test_oop_better.strada` and `examples/test_multi_inherit.strada` f
 
 ## C Interoperability
 
-### Extern Functions
+### `__C__` Blocks
 
-Use `extern` to declare functions with C calling conventions:
+Use `__C__` blocks to embed raw C code directly in Strada programs:
+
+**Top-level blocks** (at file scope) for includes and globals:
 
 ```strada
-extern func c_sqrt(num $x) num {
-    # C code uses raw types, not StradaValue
-    return sqrt($x);
+__C__ {
+    #include <math.h>
+    #include <openssl/ssl.h>
+    static SSL_CTX *g_ctx = NULL;
+}
+```
+
+**Statement-level blocks** (inside functions) for inline C:
+
+```strada
+func my_sqrt(num $x) num {
+    __C__ {
+        double val = strada_to_num(x);
+        return strada_new_num(sqrt(val));
+    }
 }
 
 func main() int {
-    my num $result = c_sqrt(16.0);
+    my num $result = my_sqrt(16.0);
     say($result);  # 4.0
     return 0;
 }
 ```
 
-### C Types in Extern Functions
+### Opaque Handle Pattern
+
+Store C pointers as `int` (64-bit) values:
 
 ```strada
-extern func process_data(ptr $data, sizet $len) i32 {
-    # Uses raw C types
-    return 0;
+# In C code: convert pointer to int
+__C__ {
+    SSL *conn = SSL_new(ctx);
+    return strada_new_int((int64_t)(intptr_t)conn);
+}
+
+# Later: retrieve pointer from int
+__C__ {
+    SSL *conn = (SSL*)(intptr_t)strada_to_int(handle);
+    // use conn...
 }
 ```
 
@@ -2122,6 +2392,41 @@ func main() int {
     return 0;
 }
 ```
+
+### Raw C Code Blocks
+
+For maximum control, embed raw C code directly using `__C__ { }`:
+
+```strada
+func main() int {
+    my int $x = 10;
+
+    __C__ {
+        // Access Strada variables (they're StradaValue* pointers)
+        long long val = strada_to_int(x);
+        printf("C sees x as: %lld\n", val);
+
+        // Modify Strada variables
+        strada_decref(x);
+        x = strada_new_int(val * 2);
+
+        // Use any C features
+        for (int i = 0; i < 3; i++) {
+            printf("Loop %d\n", i);
+        }
+    }
+
+    say("x is now " . $x);  # 20
+    return 0;
+}
+```
+
+Key points:
+- Strada variables are `StradaValue*` pointers
+- Use `strada_to_int()`, `strada_to_str()`, etc. to extract values
+- Use `strada_new_int()`, `strada_new_str()`, etc. to create values
+- Remember to `strada_decref()` before replacing a variable
+- All `strada_runtime.h` functions are available
 
 ---
 
@@ -2553,7 +2858,7 @@ Use the `_sv` variants when:
 ### Complete FFI Example
 
 ```strada
-func main() void {
+func main() int {
     # Load math library
     my int $libm = sys::dl_open("libm.so.6");
 
@@ -2570,6 +2875,7 @@ func main() void {
     say("pow(2, 10) = " . $result);  # 1024.0
 
     sys::dl_close($libm);
+    return 0;
 }
 ```
 

@@ -1,13 +1,39 @@
 # Makefile for Strada Language
-# 
+#
 # Build order:
-#   1. Bootstrap compiler (C) - builds bootstrap/stradac
-#   2. Self-hosting compiler (Strada) - uses bootstrap to compile itself
-#   3. Examples use self-hosting compiler (./stradac)
+#   1. Run ./configure to detect dependencies (optional but recommended)
+#   2. Bootstrap compiler (C) - builds bootstrap/stradac
+#   3. Self-hosting compiler (Strada) - uses bootstrap to compile itself
+#   4. Examples use self-hosting compiler (./stradac)
 #
 
-CC = gcc
-CFLAGS = -Wall -Wextra -Wno-unused-variable -Wno-return-type -Wno-unused-but-set-variable -Wno-unused-result -Wno-comment -O2 -std=c99
+# Include generated config if it exists (run ./configure to generate)
+-include config.mk
+
+# Default values if config.mk doesn't exist
+CC ?= gcc
+PREFIX ?= /usr/local
+HAVE_MYSQL ?= 0
+HAVE_SQLITE ?= 1
+HAVE_POSTGRES ?= 0
+HAVE_CRYPT ?= 0
+HAVE_READLINE ?= 0
+HAVE_SSL ?= 0
+DBI_DEFINES ?=
+DBI_LIBS ?= -lsqlite3
+CRYPT_LIBS ?= -lcrypt
+READLINE_LIBS ?= -lreadline
+SSL_LIBS ?= -lssl -lcrypto
+# Base warning flags (portable)
+CFLAGS_BASE = -Wall -Wextra -Wno-unused-variable -Wno-return-type -Wno-unused-result -Wno-comment -O2 -std=c99
+# GCC-specific flags (not available on clang/macOS)
+CFLAGS_GCC = -Wno-unused-but-set-variable
+# Detect compiler and set appropriate flags
+ifeq ($(shell $(CC) --version 2>&1 | grep -q clang && echo clang),clang)
+CFLAGS = $(CFLAGS_BASE)
+else
+CFLAGS = $(CFLAGS_BASE) $(CFLAGS_GCC)
+endif
 LDFLAGS = -ldl -lm -lpthread
 RUNTIME_DIR = runtime
 BOOTSTRAP_DIR = bootstrap
@@ -23,23 +49,32 @@ STRADAC = ./stradac
 RUNTIME_SRC = $(RUNTIME_DIR)/strada_runtime.c
 RUNTIME_HDR = $(RUNTIME_DIR)/strada_runtime.h
 RUNTIME_OBJ = $(RUNTIME_DIR)/strada_runtime.o
+RUNTIME_TCC_OBJ = $(RUNTIME_DIR)/strada_runtime_tcc.o
 
-.PHONY: all clean test test-all test-examples test-selfhost test-suite runtime bootstrap compiler examples run run-bootstrap help info selfhost install uninstall
+.PHONY: all clean test test-all test-examples test-selfhost test-suite runtime bootstrap compiler examples run run-bootstrap help info selfhost install uninstall tools libs lib-dbi lib-crypt lib-ssl lib-readline configure-check
 
-# Default: build everything including self-hosting compiler
-all: stradac $(RUNTIME_OBJ)
+# Default: build everything including self-hosting compiler and tools
+all: stradac $(RUNTIME_OBJ) tools
 	@echo ""
 	@echo "✓ Build complete!"
-	@echo "  Primary compiler: ./stradac (self-hosting, written in Strada)"
-	@echo "  Bootstrap compiler: ./bootstrap/stradac (written in C)"
+	@echo "  Compiler: ./stradac"
+	@echo "  Tools:    tools/stradadoc, tools/strada-soinfo, tools/strada-md2man, tools/strada-md2html, tools/strada-repl"
 	@echo ""
-	@echo "Usage: ./stradac input.strada output.c"
+	@echo "Usage: ./strada -r hello.strada"
 	@echo "   or: make run PROG=test_simple"
+	@echo "   or: tools/strada-repl"
+	@echo ""
+	@echo "Run 'make install' to install to /usr/local (or PREFIX=/path make install)"
 
 # Pre-compiled runtime object (for faster program compilation)
 $(RUNTIME_OBJ): $(RUNTIME_SRC) $(RUNTIME_HDR)
 	@echo "=== Building pre-compiled runtime ==="
 	$(CC) $(CFLAGS) -c $(RUNTIME_SRC) -I$(RUNTIME_DIR) -o $(RUNTIME_OBJ)
+
+# TCC-compatible runtime object (for REPL with TCC backend)
+$(RUNTIME_TCC_OBJ): $(RUNTIME_SRC) $(RUNTIME_HDR) $(RUNTIME_DIR)/strada_runtime_tcc.h
+	@echo "=== Building TCC runtime ==="
+	$(CC) $(CFLAGS) -fPIC -c $(RUNTIME_SRC) -I$(RUNTIME_DIR) -o $(RUNTIME_TCC_OBJ)
 
 # Build the runtime test
 runtime: $(RUNTIME_DIR)/test_runtime
@@ -64,14 +99,20 @@ $(COMPILER_DIR)/Combined.strada: $(COMPILER_DIR)/AST.strada $(COMPILER_DIR)/Lexe
 	cat $(COMPILER_DIR)/AST.strada $(COMPILER_DIR)/Lexer.strada $(COMPILER_DIR)/Parser.strada $(COMPILER_DIR)/Semantic.strada $(COMPILER_DIR)/CodeGen.strada $(COMPILER_DIR)/Main.strada > $(COMPILER_DIR)/Combined.strada
 
 # Compile combined source to C using bootstrap compiler
-$(COMPILER_DIR)/Combined.c: $(COMPILER_DIR)/Combined.strada bootstrap
+$(COMPILER_DIR)/Combined.c: $(COMPILER_DIR)/Combined.strada $(BOOTSTRAP_STRADAC)
 	@echo "=== Compiling self-hosting compiler (Strada -> C) ==="
 	$(BOOTSTRAP_STRADAC) $(COMPILER_DIR)/Combined.strada $(COMPILER_DIR)/Combined.c
 
+# Build bootstrap compiler if it doesn't exist
+$(BOOTSTRAP_STRADAC):
+	$(MAKE) -C $(BOOTSTRAP_DIR)
+
 # Build the self-hosting compiler executable
+# Note: -rdynamic exports symbols so that shared libraries loaded at compile time
+# (via import_lib) can access runtime functions
 stradac: $(COMPILER_DIR)/Combined.c $(RUNTIME_OBJ)
 	@echo "=== Building self-hosting compiler executable ==="
-	$(CC) $(CFLAGS) -o stradac $(COMPILER_DIR)/Combined.c $(RUNTIME_OBJ) -I$(RUNTIME_DIR) $(LDFLAGS)
+	$(CC) $(CFLAGS) -rdynamic -o stradac $(COMPILER_DIR)/Combined.c $(RUNTIME_OBJ) -I$(RUNTIME_DIR) $(LDFLAGS)
 	@echo "✓ Self-hosting compiler built: ./stradac"
 
 # Aliases
@@ -168,23 +209,112 @@ test-suite: stradac $(RUNTIME_OBJ)
 	if [ -n "$(FILTER)" ]; then OPTS="$$OPTS $(FILTER)"; fi; \
 	./t/run_tests.sh $$OPTS
 
+# Build tools (stradadoc, strada-soinfo, strada-md2man, strada-md2html, strada-repl)
+TOOL_BINS = tools/stradadoc tools/strada-soinfo tools/strada-md2man tools/strada-md2html tools/strada-repl
+
+tools: $(TOOL_BINS)
+	@echo ""
+	@echo "✓ Tools built in tools/"
+
+tools/stradadoc: tools/stradadoc.strada stradac
+	@echo "Building stradadoc..."
+	@./strada tools/stradadoc.strada -o tools/stradadoc
+
+tools/strada-soinfo: tools/strada-soinfo.strada stradac
+	@echo "Building strada-soinfo..."
+	@./strada tools/strada-soinfo.strada -o tools/strada-soinfo
+
+tools/strada-md2man: tools/strada-md2man.strada stradac
+	@echo "Building strada-md2man..."
+	@./strada tools/strada-md2man.strada -o tools/strada-md2man
+
+tools/strada-md2html: tools/strada-md2html.strada stradac
+	@echo "Building strada-md2html..."
+	@./strada tools/strada-md2html.strada -o tools/strada-md2html
+
+tools/strada-repl: tools/strada-repl.strada stradac $(RUNTIME_TCC_OBJ)
+	@echo "Building strada-repl..."
+	@./strada tools/strada-repl.strada -o tools/strada-repl -l readline
+
+# =============================================================================
+# Library Targets
+# =============================================================================
+# Build shared libraries with detected dependencies from ./configure
+# Run ./configure first to generate config.mk with proper flags
+
+# Check if configure has been run
+configure-check:
+	@if [ ! -f config.mk ]; then \
+		echo ""; \
+		echo "Warning: config.mk not found. Run ./configure first for optimal builds."; \
+		echo "Using default settings (SQLite only for DBI)."; \
+		echo ""; \
+	fi
+
+# Build all libraries
+libs: configure-check lib-dbi lib-crypt lib-ssl lib-readline
+	@echo ""
+	@echo "✓ Libraries built in lib/"
+
+# DBI library (database interface)
+lib/DBI.so: lib/DBI.strada stradac configure-check
+	@echo "Building DBI library..."
+	@if [ "$(HAVE_MYSQL)" = "1" ] || [ "$(HAVE_POSTGRES)" = "1" ] || [ "$(HAVE_SQLITE)" = "1" ]; then \
+		./strada --shared $(DBI_DEFINES) lib/DBI.strada $(DBI_LIBS) -o lib/DBI.so; \
+	else \
+		echo "  No database drivers detected. Run ./configure."; \
+		exit 1; \
+	fi
+	@echo "  DBI drivers: MySQL=$(HAVE_MYSQL) SQLite=$(HAVE_SQLITE) PostgreSQL=$(HAVE_POSTGRES)"
+
+lib-dbi: lib/DBI.so
+
+# Crypt library (password hashing)
+lib/crypt.so: lib/crypt.strada stradac
+	@echo "Building crypt library..."
+	./strada --shared lib/crypt.strada $(CRYPT_LIBS) -o lib/crypt.so
+
+lib-crypt: lib/crypt.so
+
+# SSL library
+lib/ssl.so: lib/ssl.strada stradac
+	@echo "Building SSL library..."
+	./strada --shared lib/ssl.strada $(SSL_LIBS) -o lib/ssl.so
+
+lib-ssl: lib/ssl.so
+
+# Readline library
+lib/readline/readline.so: lib/readline/readline.strada stradac
+	@echo "Building readline library..."
+	./strada --shared lib/readline/readline.strada $(READLINE_LIBS) -o lib/readline/readline.so
+
+lib-readline: lib/readline/readline.so
+
+# =============================================================================
+# Installation
+# =============================================================================
+
 # Install to a directory (default: /usr/local)
 # Usage: make install PREFIX=/path/to/install
-PREFIX ?= /usr/local
 INSTALL_BIN = $(PREFIX)/bin
 INSTALL_LIB = $(PREFIX)/lib/strada
+INSTALL_DOC = $(PREFIX)/share/doc/strada
+INSTALL_MAN = $(PREFIX)/share/man/man1
 
-install: all
+install: stradac $(RUNTIME_OBJ)
 	@echo "=== Installing Strada to $(PREFIX) ==="
 	@mkdir -p $(INSTALL_BIN)
 	@mkdir -p $(INSTALL_LIB)/runtime
 	@mkdir -p $(INSTALL_LIB)/lib
+	@mkdir -p $(INSTALL_DOC)
+	@mkdir -p $(INSTALL_MAN)
 	@# Install the compiler
 	install -m 755 stradac $(INSTALL_BIN)/stradac
 	@# Install the wrapper script (modified for installed paths)
 	@# Use LIB_PATHS_LOW so installed libs have lowest precedence (project libs can override)
 	@sed -e 's|SCRIPT_DIR=.*|SCRIPT_DIR="$(INSTALL_LIB)"|' \
 	     -e 's|STRADAC=.*|STRADAC="$(INSTALL_BIN)/stradac"|' \
+	     -e 's|REPL_DIR=.*|REPL_DIR="$(INSTALL_BIN)"|' \
 	     -e 's|LIB_PATHS_LOW=()|LIB_PATHS_LOW=("$(INSTALL_LIB)/lib")|' \
 	     strada > $(INSTALL_BIN)/strada
 	@chmod 755 $(INSTALL_BIN)/strada
@@ -212,12 +342,53 @@ install: all
 			install -m 644 "$$f" "$$dir/"; \
 		done; \
 	fi
+	@# Install documentation
+	@echo "Installing documentation..."
+	@if [ -d docs ]; then \
+		find docs -name "*.md" | while read f; do \
+			install -m 644 "$$f" $(INSTALL_DOC)/; \
+		done; \
+	fi
+	@# Build and install tools
+	@echo "Installing tools..."
+	@for tool in stradadoc strada-soinfo strada-md2man strada-md2html strada-repl stradapp; do \
+		if [ ! -x tools/$$tool ]; then \
+			echo "  Building $$tool..."; \
+			./strada tools/$$tool.strada -o tools/$$tool 2>/dev/null || true; \
+		fi; \
+		if [ -x tools/$$tool ]; then \
+			install -m 755 tools/$$tool $(INSTALL_BIN)/$$tool; \
+		fi; \
+	done
+	@# Install TCC runtime for REPL
+	@if [ -f $(RUNTIME_TCC_OBJ) ]; then \
+		install -m 644 $(RUNTIME_TCC_OBJ) $(INSTALL_LIB)/runtime/; \
+	fi
+	@if [ -f $(RUNTIME_DIR)/strada_runtime_tcc.h ]; then \
+		install -m 644 $(RUNTIME_DIR)/strada_runtime_tcc.h $(INSTALL_LIB)/runtime/; \
+	fi
+	@# Build and install man pages
+	@echo "Installing man pages..."
+	@if [ -x tools/strada-md2man ]; then \
+		for manmd in docs/stradac.1.md docs/strada.1.md; do \
+			if [ -f "$$manmd" ]; then \
+				name=$$(basename "$$manmd" .1.md); \
+				echo "  Generating $$name.1..."; \
+				./tools/strada-md2man --name "$$name" --section 1 --center "Strada Programming Language" "$$manmd" $(INSTALL_MAN)/$$name.1; \
+			fi; \
+		done; \
+	else \
+		echo "  Warning: strada-md2man not available, skipping man pages"; \
+	fi
 	@echo ""
 	@echo "✓ Strada installed to $(PREFIX)"
 	@echo "  Compiler: $(INSTALL_BIN)/stradac"
 	@echo "  Wrapper:  $(INSTALL_BIN)/strada"
+	@echo "  Tools:    $(INSTALL_BIN)/stradadoc, strada-soinfo, strada-md2man, strada-md2html"
 	@echo "  Runtime:  $(INSTALL_LIB)/runtime/"
 	@echo "  Library:  $(INSTALL_LIB)/lib/"
+	@echo "  Docs:     $(INSTALL_DOC)/"
+	@echo "  Man:      $(INSTALL_MAN)/"
 	@echo ""
 	@echo "Make sure $(INSTALL_BIN) is in your PATH"
 
@@ -225,13 +396,22 @@ uninstall:
 	@echo "=== Uninstalling Strada from $(PREFIX) ==="
 	rm -f $(INSTALL_BIN)/stradac
 	rm -f $(INSTALL_BIN)/strada
+	rm -f $(INSTALL_BIN)/stradadoc
+	rm -f $(INSTALL_BIN)/strada-soinfo
+	rm -f $(INSTALL_BIN)/strada-md2man
+	rm -f $(INSTALL_BIN)/strada-md2html
+	rm -f $(INSTALL_BIN)/strada-repl
 	rm -rf $(INSTALL_LIB)
+	rm -rf $(INSTALL_DOC)
+	rm -f $(INSTALL_MAN)/stradac.1
+	rm -f $(INSTALL_MAN)/strada.1
 	@echo "✓ Strada uninstalled"
 
 # Clean build artifacts
 clean:
 	rm -f $(RUNTIME_DIR)/test_runtime
 	rm -f $(RUNTIME_OBJ)
+	rm -f $(RUNTIME_TCC_OBJ)
 	rm -f $(BOOTSTRAP_DIR)/*.o $(BOOTSTRAP_DIR)/stradac
 	rm -f $(COMPILER_DIR)/Combined.strada $(COMPILER_DIR)/Combined.c
 	rm -f $(COMPILER_DIR)/*.o
@@ -240,14 +420,24 @@ clean:
 	find $(EXAMPLES_DIR) -maxdepth 1 -type f -executable -delete
 	rm -rf build/*
 	rm -f stradac
+	rm -f $(TOOL_BINS)
+	rm -f lib/readline.so
 	@echo "✓ Cleaned"
 
 # Help target
 help:
 	@echo "Strada Language Build System"
 	@echo ""
+	@echo "Quick Start:"
+	@echo "  ./configure   - Detect dependencies (MySQL, PostgreSQL, SSL, etc.)"
+	@echo "  make          - Build compiler and tools"
+	@echo "  make libs     - Build shared libraries (DBI, crypt, ssl, readline)"
+	@echo "  make install  - Install to system"
+	@echo ""
 	@echo "Primary Targets:"
 	@echo "  all           - Build self-hosting compiler (default)"
+	@echo "  tools         - Build tools (stradadoc, strada-soinfo, etc.)"
+	@echo "  libs          - Build all shared libraries"
 	@echo "  install       - Install to system (default: /usr/local)"
 	@echo "  uninstall     - Remove installed files"
 	@echo "  run PROG=x    - Compile and run example with self-hosting compiler"
@@ -255,6 +445,13 @@ help:
 	@echo "  test          - Test the runtime system"
 	@echo "  test-all      - Run full test suite (runtime + selfhost + examples)"
 	@echo "  clean         - Remove all build artifacts"
+	@echo ""
+	@echo "Library Targets (run ./configure first):"
+	@echo "  libs          - Build all libraries"
+	@echo "  lib-dbi       - Build DBI library (MySQL/SQLite/PostgreSQL)"
+	@echo "  lib-crypt     - Build crypt library (password hashing)"
+	@echo "  lib-ssl       - Build SSL library (TLS support)"
+	@echo "  lib-readline  - Build readline library (line editing)"
 	@echo ""
 	@echo "Installation:"
 	@echo "  make install                    # Install to /usr/local"
@@ -280,10 +477,14 @@ help:
 	@echo "  ./strada -r hello.strada   # Compile and run a program"
 	@echo "  make run PROG=test_simple  # Compile and run an example"
 	@echo ""
-	@echo "Tools:"
+	@echo "Tools (after 'make tools'):"
 	@echo "  ./strada               - One-step compiler (strada -> executable)"
 	@echo "  ./stradac              - Strada to C compiler"
-	@echo "  ./bootstrap/stradac    - Bootstrap compiler (C version)"
+	@echo "  tools/stradadoc        - View Strada documentation"
+	@echo "  tools/strada-soinfo    - Inspect Strada shared libraries"
+	@echo "  tools/strada-md2man    - Convert Markdown to man pages"
+	@echo "  tools/strada-md2html   - Convert Markdown to HTML"
+	@echo "  tools/strada-repl      - Interactive REPL (Read-Eval-Print Loop)"
 
 # Additional info
 info:

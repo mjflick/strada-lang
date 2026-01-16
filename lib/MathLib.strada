@@ -15,7 +15,59 @@
  along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-# MathLib.strada - Example library for import_lib testing
+=head1 NAME
+
+MathLib - Example library for import_lib/import_object testing
+
+=head1 SYNOPSIS
+
+    use lib "lib";
+    import_lib "MathLib.so";
+
+    my int $sum = MathLib::add(10, 20);
+    my int $diff = MathLib::subtract(30, 10);
+    my int $prod = MathLib::multiply(5, 6);
+    my str $msg = MathLib::greet("World");
+
+=head1 DESCRIPTION
+
+MathLib is a simple example library used to test the C<import_lib> and
+C<import_object> features of Strada. It provides basic arithmetic operations.
+
+B<To compile as shared library:>
+
+    ./strada --shared lib/MathLib.strada
+
+=head1 FUNCTIONS
+
+=head2 add($a, $b)
+
+Returns the sum of two integers.
+
+=head2 subtract($a, $b)
+
+Returns the difference of two integers.
+
+=head2 multiply($a, $b)
+
+Returns the product of two integers.
+
+=head2 double_val($x)
+
+Returns the value doubled.
+
+=head2 greet($name)
+
+Returns a greeting string.
+
+    MathLib::greet("Alice")  # "Hello, Alice!"
+
+=head1 SEE ALSO
+
+L<Math::Utils>
+
+=cut
+
 package MathLib;
 
 func add(int $a, int $b) int {

@@ -15,14 +15,136 @@
  along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-# YAML - Simple YAML parser for Strada
-#
-# Usage:
-#   use lib "lib";
-#   use YAML;
-#
-#   my scalar $data = YAML::Load($yaml_string);
-#   my str $yaml = YAML::Dump($data);
+=head1 NAME
+
+YAML - Simple YAML parser and dumper for Strada
+
+=head1 SYNOPSIS
+
+    use lib "lib";
+    use YAML;
+
+    # Parse YAML string
+    my scalar $data = YAML::Load($yaml_string);
+
+    # Dump data structure to YAML
+    my str $yaml = YAML::Dump($data);
+
+=head1 DESCRIPTION
+
+YAML provides functions for parsing YAML documents into Strada data structures
+and dumping Strada data back to YAML format.
+
+This is a simple YAML 1.1 implementation that supports:
+
+=over 4
+
+=item * Mappings (hashes)
+
+=item * Sequences (arrays)
+
+=item * Scalars (strings, numbers, booleans, null)
+
+=item * Multi-line literal blocks (|)
+
+=item * Inline notation ({} and [])
+
+=item * Comments (#)
+
+=item * Quoted strings (single and double)
+
+=back
+
+=head1 FUNCTIONS
+
+=head2 Load($yaml)
+
+Parse a YAML string and return the corresponding Strada data structure.
+
+    my str $yaml = "name: Alice\nage: 30\n";
+    my scalar $data = YAML::Load($yaml);
+    say($data->{"name"});  # Alice
+
+=head2 Dump($data)
+
+Convert a Strada data structure to a YAML string.
+
+    my hash %user = ();
+    $user{"name"} = "Bob";
+    $user{"scores"} = [85, 90, 78];
+    my str $yaml = YAML::Dump(\%user);
+
+=head1 YAML SYNTAX
+
+=head2 Basic Mappings
+
+    key: value
+    name: Alice
+    age: 30
+
+=head2 Nested Mappings
+
+    database:
+      host: localhost
+      port: 5432
+
+=head2 Sequences
+
+    colors:
+      - red
+      - green
+      - blue
+
+=head2 Inline Notation
+
+    servers: [web1, web2, web3]
+    config: {debug: true, timeout: 30}
+
+=head2 Multi-line Strings
+
+    description: |
+      This is a multi-line
+      string that preserves
+      newlines.
+
+=head2 Special Values
+
+    enabled: true     # or yes, on -> 1
+    disabled: false   # or no, off -> 0
+    nothing: null     # or ~ -> undef
+
+=head1 EXAMPLE
+
+    use lib "lib";
+    use YAML;
+
+    my str $config_yaml = "
+    server:
+      host: localhost
+      port: 8080
+    database:
+      driver: sqlite
+      name: app.db
+    features:
+      - logging
+      - caching
+      - compression
+    ";
+
+    my scalar $config = YAML::Load($config_yaml);
+
+    say("Server: " . $config->{"server"}->{"host"});
+    say("DB: " . $config->{"database"}->{"name"});
+
+    # Modify and dump back
+    $config->{"server"}->{"port"} = 9000;
+    say(YAML::Dump($config));
+
+=head1 SEE ALSO
+
+L<JSON>
+
+=cut
 
 package YAML;
 version "1.1.0";
@@ -687,11 +809,11 @@ func dump_value(scalar $value, int $indent) str {
 
     my str $rtype = ref($value);
 
-    if ($rtype eq "hash") {
+    if ($rtype eq "HASH") {
         return YAML::dump_hash($value, $indent);
     }
 
-    if ($rtype eq "array") {
+    if ($rtype eq "ARRAY") {
         return YAML::dump_array($value, $indent);
     }
 
@@ -766,7 +888,7 @@ func dump_hash(scalar $hval, int $indent) str {
         my scalar $val = $hval->{$key};
         my str $rtype = ref($val);
 
-        if ($rtype eq "hash" || $rtype eq "array") {
+        if ($rtype eq "HASH" || $rtype eq "ARRAY") {
             $result = $result . $pad . $key . ":\n";
             $result = $result . YAML::dump_value($val, $indent + 2);
         } else {
@@ -790,7 +912,7 @@ func dump_array(scalar $arr, int $indent) str {
         my scalar $val = $arr->[$i];
         my str $rtype = ref($val);
 
-        if ($rtype eq "hash") {
+        if ($rtype eq "HASH") {
             # First key on same line as dash
             my array @keys = keys($val);
             if (size(@keys) > 0) {
@@ -798,7 +920,7 @@ func dump_array(scalar $arr, int $indent) str {
                 my scalar $first_val = $val->{$first_key};
                 my str $first_rtype = ref($first_val);
 
-                if ($first_rtype eq "hash" || $first_rtype eq "array") {
+                if ($first_rtype eq "HASH" || $first_rtype eq "ARRAY") {
                     $result = $result . $pad . "- " . $first_key . ":\n";
                     $result = $result . YAML::dump_value($first_val, $indent + 4);
                 } else {
@@ -812,7 +934,7 @@ func dump_array(scalar $arr, int $indent) str {
                     my scalar $kval = $val->{$key};
                     my str $krtype = ref($kval);
 
-                    if ($krtype eq "hash" || $krtype eq "array") {
+                    if ($krtype eq "HASH" || $krtype eq "ARRAY") {
                         $result = $result . $pad . "  " . $key . ":\n";
                         $result = $result . YAML::dump_value($kval, $indent + 4);
                     } else {
@@ -824,7 +946,7 @@ func dump_array(scalar $arr, int $indent) str {
             } else {
                 $result = $result . $pad . "- {}\n";
             }
-        } elsif ($rtype eq "array") {
+        } elsif ($rtype eq "ARRAY") {
             $result = $result . $pad . "-\n";
             $result = $result . YAML::dump_array($val, $indent + 2);
         } else {

@@ -271,6 +271,84 @@ func Person_set_age(scalar $self, int $age) int {
 }
 ```
 
+### Calling Package Functions Without Repeating the Package Name
+
+Use `::func()` to call functions in the current package without repeating the package name:
+
+```strada
+package Person;
+
+func validate_age(int $age) int {
+    if ($age < 0 || $age > 150) {
+        return 0;
+    }
+    return 1;
+}
+
+func set_age(scalar $self, int $age) int {
+    # Use :: to call validate_age in current package
+    if (::validate_age($age)) {      # Resolves to Person_validate_age
+        $self->{"age"} = $age;
+        return 1;
+    }
+    return 0;
+}
+
+func complex_operation(scalar $self) void {
+    ::helper1();                     # Person_helper1
+    ::helper2($self);                # Person_helper2
+    .::helper3();                    # Alternate syntax
+    __PACKAGE__::helper4();          # Explicit form
+}
+```
+
+Three equivalent syntaxes:
+- `::func()` — Preferred shorthand
+- `.::func()` — Alternate shorthand
+- `__PACKAGE__::func()` — Explicit form
+
+All resolve to `PackageName_func()` at **compile time**.
+
+### Variadic Methods
+
+Methods can accept variable numbers of arguments using the spread operator syntax:
+
+```strada
+package Calculator;
+
+# Variadic method - sum all numbers
+func Calculator_sum(scalar $self, int ...@nums) int {
+    my int $total = 0;
+    foreach my int $n (@nums) {
+        $total = $total + $n;
+    }
+    return $total;
+}
+
+# Fixed params + variadic
+func Calculator_sum_with_base(scalar $self, int $base, int ...@nums) int {
+    my int $total = $base;
+    foreach my int $n (@nums) {
+        $total = $total + $n;
+    }
+    return $total;
+}
+
+# Usage
+my scalar $calc = Calculator::new();
+$calc->sum(1, 2, 3);                    # 6
+$calc->sum(10, 20, 30, 40, 50);         # 150
+
+# Using spread operator
+my array @values = (100, 200, 300);
+$calc->sum(...@values);                 # 600
+$calc->sum(1, ...@values, 99);          # 700
+
+# With fixed param
+$calc->sum_with_base(1000, 1, 2, 3);    # 1006
+$calc->sum_with_base(500, ...@values);  # 1100
+```
+
 ---
 
 ## 5. Inheritance
@@ -800,14 +878,18 @@ package ShapeFactory;
 
 func ShapeFactory_create(str $type, array @args) scalar {
     switch ($type) {
-        case "circle":
+        case "circle" {
             return Circle_new(@args[0]);
-        case "rectangle":
+        }
+        case "rectangle" {
             return Rectangle_new(@args[0], @args[1]);
-        case "triangle":
+        }
+        case "triangle" {
             return Triangle_new(@args[0], @args[1], @args[2]);
-        default:
+        }
+        default {
             die("Unknown shape: " . $type);
+        }
     }
 }
 ```

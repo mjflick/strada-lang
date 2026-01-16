@@ -29,6 +29,12 @@ test_run "$EXAMPLES_DIR/test_refs.strada" "test_refs" "Refs"
 # Test: Hash operations
 test_run "$EXAMPLES_DIR/test_native_hash.strada" "test_native_hash" "Native hash"
 test_run "$EXAMPLES_DIR/test_hash_barekeys.strada" "test_hash_barekeys" "Hash barekeys"
+test_output_contains "$EXAMPLES_DIR/test_hash_refcount.strada" "test_hash_refcount" "All hash refcount tests passed" "Hash refcount"
+test_output_contains "$EXAMPLES_DIR/anon_array_refcount.strada" "anon_array_refcount" "PASS: Anonymous array refcount test" "Anon array refcount"
+test_output_contains "$EXAMPLES_DIR/temp_cleanup_test.strada" "temp_cleanup_test" "PASS: Temporary cleanup test completed" "Temp cleanup"
+
+# Test: Parameter reassignment (tests that caller's values are not corrupted)
+test_output_contains "$EXAMPLES_DIR/test_param_reassign.strada" "test_param_reassign" "All parameter reassignment tests passed" "Param reassign"
 
 # Test: OOP
 test_run "$EXAMPLES_DIR/test_oop.strada" "test_oop" "OOP basics"
@@ -47,6 +53,16 @@ test_run "$EXAMPLES_DIR/optional_simple.strada" "optional_simple" "Optional simp
 # Test: Variable arguments
 test_run "$EXAMPLES_DIR/variable_args_demo.strada" "variable_args_demo" "Variable args"
 test_run "$EXAMPLES_DIR/spread_operator.strada" "spread_operator" "Spread operator"
+
+# Test: Variadic functions
+test_run "$EXAMPLES_DIR/test_variadic.strada" "test_variadic" "Variadic functions"
+test_run "$EXAMPLES_DIR/test_variadic_oop.strada" "test_variadic_oop" "Variadic OOP methods"
+
+# Test: import_lib with variadic functions
+test_import_lib "$EXAMPLES_DIR/test_import_variadic.strada" "test_import_variadic" "$EXAMPLES_DIR/VariadicLib.strada" "VariadicLib" "import_lib variadic"
+
+# Test: import_object with variadic functions
+test_import_object "$EXAMPLES_DIR/test_import_object_variadic.strada" "test_import_object_variadic" "$EXAMPLES_DIR/VariadicObjLib.strada" "VariadicObjLib" "import_object variadic"
 
 # Test: Negative indexing
 test_run "$EXAMPLES_DIR/negative_index.strada" "negative_index" "Negative index"
@@ -128,6 +144,7 @@ test_output_contains "$EXAMPLES_DIR/test_misc_libc.strada" "test_misc_libc" "All
 # Note: test_closures.strada tests capture-by-reference mutation which was
 # changed to capture-by-value for thread safety - compile only
 test_compile "$EXAMPLES_DIR/test_closures.strada" "test_closures" "Closures"
+test_output_contains "$EXAMPLES_DIR/test_closure_params.strada" "test_closure_params" "All closure parameter tests passed" "Closure params"
 
 # Test: Operators
 test_run "$EXAMPLES_DIR/test_operators.strada" "test_operators" "Operators"

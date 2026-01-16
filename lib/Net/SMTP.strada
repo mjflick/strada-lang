@@ -1,16 +1,167 @@
-# Net::SMTP - SMTP client library for Strada
-#
-# Usage:
-#   use lib "lib";
-#   use Net::SMTP;
-#
-#   my scalar $smtp = SMTP::new("smtp.example.com", 25);
-#   $smtp->helo("mydomain.com");
-#   $smtp->auth("user", "password");
-#   $smtp->mail("from@example.com");
-#   $smtp->rcpt_to("recipient@example.com");
-#   $smtp->data("Subject: Test\r\n\r\nHello!");
-#   $smtp->quit();
+=head1 NAME
+
+Net::SMTP - SMTP client library for Strada
+
+=head1 SYNOPSIS
+
+    use lib "lib";
+    use Net::SMTP;
+
+    my scalar $smtp = SMTP::new("smtp.example.com", 587);
+    $smtp->ehlo("mydomain.com");
+    $smtp->auth("user", "password");
+
+    my array @to = ("recipient@example.com");
+    $smtp->send_mail("sender@example.com", \@to, "Subject", "Body text");
+    $smtp->quit();
+
+=head1 DESCRIPTION
+
+Net::SMTP provides an SMTP client for sending emails. It supports:
+
+=over 4
+
+=item * Plain TCP connections (ports 25, 587)
+
+=item * AUTH LOGIN and AUTH PLAIN authentication
+
+=item * Multiple recipients
+
+=item * Debug mode for troubleshooting
+
+=back
+
+B<Note:> For TLS/SSL connections, upgrade after STARTTLS using the ssl module.
+
+=head1 CONSTRUCTOR
+
+=head2 new($host, $port)
+
+Create SMTP connection. Returns blessed object or undef on failure.
+
+    my scalar $smtp = SMTP::new("smtp.gmail.com", 587);
+
+=head1 METHODS
+
+=head2 debug($on)
+
+Enable/disable debug output (prints SMTP conversation).
+
+    $smtp->debug(1);
+
+=head2 helo($domain)
+
+Send HELO command (simple greeting).
+
+    $smtp->helo("mydomain.com");
+
+=head2 ehlo($domain)
+
+Send EHLO command (extended greeting). Returns server capabilities.
+
+    $smtp->ehlo("mydomain.com");
+
+=head2 auth($username, $password)
+
+Authenticate using AUTH LOGIN mechanism.
+
+    if ($smtp->auth("user", "pass")) {
+        say("Authenticated!");
+    }
+
+=head2 auth_plain($username, $password)
+
+Authenticate using AUTH PLAIN mechanism.
+
+=head2 starttls()
+
+Send STARTTLS command. After this, upgrade to TLS using ssl module.
+
+=head2 mail($from)
+
+Set sender (MAIL FROM command).
+
+    $smtp->mail("sender@example.com");
+
+=head2 rcpt_to($recipient)
+
+Add recipient (RCPT TO command). Call multiple times for multiple recipients.
+
+    $smtp->rcpt_to("user1@example.com");
+    $smtp->rcpt_to("user2@example.com");
+
+=head2 data($message)
+
+Send message body. Include headers and body separated by blank line.
+
+    my str $msg = "Subject: Hello\r\n\r\nMessage body here.";
+    $smtp->data($msg);
+
+=head2 send_mail($from, $to_list, $subject, $body)
+
+Convenience method to send a complete email.
+
+    my array @recipients = ("user@example.com");
+    $smtp->send_mail("me@example.com", \@recipients, "Subject", "Body text");
+
+=head2 reset()
+
+Reset session (RSET command).
+
+=head2 noop()
+
+No-op command (keep-alive).
+
+=head2 verify($address)
+
+Verify an email address (VRFY command).
+
+=head2 quit()
+
+Close connection (QUIT command).
+
+=head2 code()
+
+Get last response code.
+
+=head2 message()
+
+Get last response message.
+
+=head1 EXAMPLE
+
+    use lib "lib";
+    use Net::SMTP;
+
+    my scalar $smtp = SMTP::new("smtp.example.com", 587);
+    if (!defined($smtp)) {
+        die("Could not connect to SMTP server");
+    }
+
+    $smtp->debug(1);  # Show conversation
+
+    if (!$smtp->ehlo("mydomain.com")) {
+        die("EHLO failed");
+    }
+
+    if (!$smtp->auth("username", "password")) {
+        die("Authentication failed");
+    }
+
+    my array @to = ("recipient@example.com", "another@example.com");
+    if (!$smtp->send_mail("sender@example.com", \@to,
+                          "Test Subject", "This is the body.")) {
+        die("Failed to send: " . $smtp->message());
+    }
+
+    $smtp->quit();
+    say("Email sent successfully!");
+
+=head1 SEE ALSO
+
+L<ssl>, L<LWP>
+
+=cut
 
 package SMTP;
 

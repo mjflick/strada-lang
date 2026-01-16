@@ -15,17 +15,200 @@
  along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-# LWP - Library for WWW access in Strada
-# Inspired by Perl's LWP::UserAgent
-#
-# Usage:
-#   use lib "lib";
-#   use LWP;
-#
-#   my hash %response = LWP::get("http://example.com");
-#   say($response{"content"});
-#
-#   my hash %response = LWP::post("http://example.com/api", "data=value");
+=head1 NAME
+
+LWP - Library for WWW access in Strada
+
+=head1 SYNOPSIS
+
+    use lib "lib";
+    use LWP;
+
+    # Simple GET request
+    my hash %response = LWP::get("http://example.com");
+    if ($response{"success"}) {
+        say($response{"content"});
+    }
+
+    # POST request
+    my hash %response = LWP::post("http://example.com/api", "data=value");
+
+    # Just get the content
+    my str $html = LWP::get_content("http://example.com");
+
+=head1 DESCRIPTION
+
+LWP provides functions for making HTTP requests, similar to Perl's
+LWP::UserAgent module. It supports GET, POST, PUT, DELETE, and HEAD requests.
+
+B<Note:> For HTTPS support, use L<LWP_SSL> or the L<ssl> module.
+
+=head1 RESPONSE HASH
+
+All request functions return a hash with:
+
+=over 4
+
+=item B<success> - 1 if status is 2xx, 0 otherwise
+
+=item B<status> - HTTP status code (200, 404, etc.)
+
+=item B<reason> - HTTP reason phrase ("OK", "Not Found", etc.)
+
+=item B<content> - Response body
+
+=item B<headers> - Hash reference of response headers (lowercase keys)
+
+=item B<error> - Error message if request failed
+
+=back
+
+=head1 REQUEST FUNCTIONS
+
+=head2 get($url)
+
+Make a GET request.
+
+    my hash %resp = LWP::get("http://api.example.com/users");
+    if ($resp{"success"}) {
+        my scalar $data = JSON::decode($resp{"content"});
+    }
+
+=head2 get_with_options($url, %options)
+
+GET request with custom options (headers, user agent).
+
+    my hash %opts = ();
+    $opts{"user_agent"} = "MyApp/1.0";
+    $opts{"headers"} = { "Authorization" => "Bearer token123" };
+    my hash %resp = LWP::get_with_options($url, %opts);
+
+=head2 post($url, $data)
+
+Make a POST request with form data.
+
+    my hash %resp = LWP::post("http://api.example.com/login",
+        "username=alice&password=secret");
+
+=head2 post_with_options($url, $data, %options)
+
+POST with custom options.
+
+=head2 post_form($url, %form_data)
+
+POST form data from a hash (automatically URL-encoded).
+
+    my hash %form = ();
+    $form{"username"} = "alice";
+    $form{"password"} = "secret";
+    my hash %resp = LWP::post_form("http://example.com/login", %form);
+
+=head2 put($url, $data)
+
+Make a PUT request.
+
+=head2 delete_req($url)
+
+Make a DELETE request.
+
+=head2 head($url)
+
+Make a HEAD request (get headers only).
+
+=head1 CONVENIENCE FUNCTIONS
+
+=head2 get_content($url)
+
+Fetch URL and return just the content (empty string on error).
+
+    my str $html = LWP::get_content("http://example.com");
+
+=head2 is_reachable($url)
+
+Check if a URL is reachable (HEAD request).
+
+    if (LWP::is_reachable("http://api.example.com")) {
+        say("API is up!");
+    }
+
+=head2 get_header(%response, $name)
+
+Get a response header value (case-insensitive).
+
+    my str $type = LWP::get_header(%resp, "Content-Type");
+
+=head1 URL FUNCTIONS
+
+=head2 parse_url($url)
+
+Parse a URL into components (scheme, host, port, path, query).
+
+    my hash %parts = LWP::parse_url("http://example.com:8080/path?q=test");
+    # $parts{"host"} = "example.com"
+    # $parts{"port"} = 8080
+    # $parts{"path"} = "/path"
+    # $parts{"query"} = "q=test"
+
+=head2 url_encode($string)
+
+URL-encode a string.
+
+    my str $safe = LWP::url_encode("hello world!");
+    # "hello%20world%21"
+
+=head2 url_decode($string)
+
+URL-decode a string.
+
+=head2 build_query(%params)
+
+Build a query string from a hash.
+
+    my hash %p = ();
+    $p{"name"} = "Alice";
+    $p{"city"} = "New York";
+    my str $qs = LWP::build_query(%p);
+    # "name=Alice&city=New%20York"
+
+=head1 USERAGENT CLASS
+
+For more control, use the UserAgent functions:
+
+    my hash %ua = LWP::UserAgent_new();
+    LWP::UserAgent_set_agent(%ua, "MyApp/2.0");
+    LWP::UserAgent_set_header(%ua, "Accept", "application/json");
+
+    my hash %resp = LWP::UserAgent_get(%ua, $url);
+    my hash %resp = LWP::UserAgent_post(%ua, $url, $data);
+
+=head1 EXAMPLE
+
+    use lib "lib";
+    use LWP;
+    use JSON;
+
+    # Fetch JSON API
+    my hash %resp = LWP::get("http://api.example.com/users");
+    if ($resp{"success"}) {
+        my scalar $users = JSON::decode($resp{"content"});
+        foreach my scalar $user (@{$users}) {
+            say($user->{"name"});
+        }
+    } else {
+        say("Error: " . $resp{"error"});
+    }
+
+    # POST JSON data
+    my hash %opts = ();
+    $opts{"headers"} = { "Content-Type" => "application/json" };
+    my str $json = JSON::encode({ "name" => "Bob" });
+    my hash %resp = LWP::post_with_options($url, $json, %opts);
+
+=head1 SEE ALSO
+
+L<LWP_SSL>, L<ssl>, L<JSON>
+
+=cut
 
 package LWP;
 
