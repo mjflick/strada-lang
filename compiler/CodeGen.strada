@@ -7522,7 +7522,15 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         }
         return;
     }
-    
+
+    # Bare block { ... }
+    if ($type == NODE_BLOCK()) {
+        emit_indent($cg);
+        gen_block($cg, $stmt);
+        emit($cg, "\n");
+        return;
+    }
+
     # If statement
     if ($type == NODE_IF_STMT()) {
         emit_indent($cg);

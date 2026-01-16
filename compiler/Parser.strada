@@ -1932,6 +1932,11 @@ func parse_statement(scalar $parser) scalar {
         return ast_new_goto($target);
     }
 
+    # Bare block { ... }
+    if ($type eq "LBRACE") {
+        return parse_block($parser);
+    }
+
     # switch ($expr) { case val { ... } default { ... } }
     if ($type eq "SWITCH") {
         parser_advance($parser);
