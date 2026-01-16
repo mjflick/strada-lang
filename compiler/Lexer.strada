@@ -1322,8 +1322,9 @@ func lex_is_value_ending_token(str $type) int {
 
     # Literals (actual token types used by lexer)
     if ($type eq "INT_LITERAL") { return 1; }
-    if ($type eq "FLOAT_LITERAL") { return 1; }
-    if ($type eq "STRING") { return 1; }
+    if ($type eq "NUM_LITERAL") { return 1; }
+    if ($type eq "STR_LITERAL") { return 1; }
+    if ($type eq "INTERP_STRING") { return 1; }
 
     # Identifiers (variable names, function calls)
     if ($type eq "IDENT") { return 1; }
