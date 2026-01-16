@@ -4223,7 +4223,7 @@ func parse_function(scalar $parser) scalar {
 
     # Check for C keywords - they can't be used as function names
     if (is_c_keyword($func_name) == 1) {
-        parser_error($parser, "'" . $func_name . "' is a C keyword and cannot be used as a function name");
+        parser_error($parser, "'" . $func_name . "' is a keyword and cannot be used as a function name");
     }
 
     parser_expect($parser, "LPAREN");
