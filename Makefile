@@ -26,15 +26,17 @@ RUNTIME_OBJ = $(RUNTIME_DIR)/strada_runtime.o
 
 .PHONY: all clean test test-all test-examples test-selfhost test-suite runtime bootstrap compiler examples run run-bootstrap help info selfhost install uninstall tools
 
-# Default: build everything including self-hosting compiler
-all: stradac $(RUNTIME_OBJ)
+# Default: build everything including self-hosting compiler and tools
+all: stradac $(RUNTIME_OBJ) tools
 	@echo ""
 	@echo "✓ Build complete!"
-	@echo "  Primary compiler: ./stradac (self-hosting, written in Strada)"
-	@echo "  Bootstrap compiler: ./bootstrap/stradac (written in C)"
+	@echo "  Compiler: ./stradac"
+	@echo "  Tools:    tools/stradadoc, tools/strada-soinfo, tools/strada-md2man, tools/strada-md2html"
 	@echo ""
-	@echo "Usage: ./stradac input.strada output.c"
+	@echo "Usage: ./strada -r hello.strada"
 	@echo "   or: make run PROG=test_simple"
+	@echo ""
+	@echo "Run 'make install' to install to /usr/local (or PREFIX=/path make install)"
 
 # Pre-compiled runtime object (for faster program compilation)
 $(RUNTIME_OBJ): $(RUNTIME_SRC) $(RUNTIME_HDR)
@@ -64,9 +66,13 @@ $(COMPILER_DIR)/Combined.strada: $(COMPILER_DIR)/AST.strada $(COMPILER_DIR)/Lexe
 	cat $(COMPILER_DIR)/AST.strada $(COMPILER_DIR)/Lexer.strada $(COMPILER_DIR)/Parser.strada $(COMPILER_DIR)/Semantic.strada $(COMPILER_DIR)/CodeGen.strada $(COMPILER_DIR)/Main.strada > $(COMPILER_DIR)/Combined.strada
 
 # Compile combined source to C using bootstrap compiler
-$(COMPILER_DIR)/Combined.c: $(COMPILER_DIR)/Combined.strada bootstrap
+$(COMPILER_DIR)/Combined.c: $(COMPILER_DIR)/Combined.strada $(BOOTSTRAP_STRADAC)
 	@echo "=== Compiling self-hosting compiler (Strada -> C) ==="
 	$(BOOTSTRAP_STRADAC) $(COMPILER_DIR)/Combined.strada $(COMPILER_DIR)/Combined.c
+
+# Build bootstrap compiler if it doesn't exist
+$(BOOTSTRAP_STRADAC):
+	$(MAKE) -C $(BOOTSTRAP_DIR)
 
 # Build the self-hosting compiler executable
 stradac: $(COMPILER_DIR)/Combined.c $(RUNTIME_OBJ)
@@ -169,16 +175,27 @@ test-suite: stradac $(RUNTIME_OBJ)
 	./t/run_tests.sh $$OPTS
 
 # Build tools (stradadoc, strada-soinfo, strada-md2man, strada-md2html)
-TOOLS = stradadoc strada-soinfo strada-md2man strada-md2html
+TOOL_BINS = tools/stradadoc tools/strada-soinfo tools/strada-md2man tools/strada-md2html
 
-tools: all
-	@echo "=== Building tools ==="
-	@for tool in $(TOOLS); do \
-		echo "Building $$tool..."; \
-		./strada tools/$$tool.strada -o tools/$$tool; \
-	done
+tools: $(TOOL_BINS)
 	@echo ""
 	@echo "✓ Tools built in tools/"
+
+tools/stradadoc: tools/stradadoc.strada stradac
+	@echo "Building stradadoc..."
+	@./strada tools/stradadoc.strada -o tools/stradadoc
+
+tools/strada-soinfo: tools/strada-soinfo.strada stradac
+	@echo "Building strada-soinfo..."
+	@./strada tools/strada-soinfo.strada -o tools/strada-soinfo
+
+tools/strada-md2man: tools/strada-md2man.strada stradac
+	@echo "Building strada-md2man..."
+	@./strada tools/strada-md2man.strada -o tools/strada-md2man
+
+tools/strada-md2html: tools/strada-md2html.strada stradac
+	@echo "Building strada-md2html..."
+	@./strada tools/strada-md2html.strada -o tools/strada-md2html
 
 # Install to a directory (default: /usr/local)
 # Usage: make install PREFIX=/path/to/install
@@ -188,7 +205,7 @@ INSTALL_LIB = $(PREFIX)/lib/strada
 INSTALL_DOC = $(PREFIX)/share/doc/strada
 INSTALL_MAN = $(PREFIX)/share/man/man1
 
-install: all
+install: stradac $(RUNTIME_OBJ)
 	@echo "=== Installing Strada to $(PREFIX) ==="
 	@mkdir -p $(INSTALL_BIN)
 	@mkdir -p $(INSTALL_LIB)/runtime
@@ -297,6 +314,7 @@ clean:
 	find $(EXAMPLES_DIR) -maxdepth 1 -type f -executable -delete
 	rm -rf build/*
 	rm -f stradac
+	rm -f $(TOOL_BINS)
 	@echo "✓ Cleaned"
 
 # Help target
