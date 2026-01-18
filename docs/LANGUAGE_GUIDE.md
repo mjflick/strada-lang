@@ -1764,10 +1764,11 @@ func speak(scalar $self) void {
     say($self->{"name"} . " makes a sound");
 }
 
-func main() void {
+func main() int {
     my scalar $animal = new("Buddy");
     say(blessed($animal));  # "Animal"
     speak($animal);
+    return 0;
 }
 ```
 
@@ -1778,8 +1779,9 @@ func main() void {
 ```strada
 package My::App;
 
-func main() void {
+func main() int {
     say(__PACKAGE__);  # "My::App"
+    return 0;
 }
 ```
 
@@ -2612,7 +2614,7 @@ Use the `_sv` variants when:
 ### Complete FFI Example
 
 ```strada
-func main() void {
+func main() int {
     # Load math library
     my int $libm = sys::dl_open("libm.so.6");
 
@@ -2629,6 +2631,7 @@ func main() void {
     say("pow(2, 10) = " . $result);  # 1024.0
 
     sys::dl_close($libm);
+    return 0;
 }
 ```
 
