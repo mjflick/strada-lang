@@ -199,7 +199,7 @@ StradaHash* strada_deref_hash(StradaValue *ref);
 // Check if value is a reference
 int strada_is_ref(StradaValue *sv);
 
-// Get reference type string ("scalar", "array", "hash")
+// Get reference type string ("SCALAR", "ARRAY", "HASH")
 const char* strada_reftype(StradaValue *sv);
 ```
 

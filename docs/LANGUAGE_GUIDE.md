@@ -1058,7 +1058,7 @@ if (is_ref($ref)) {
 }
 
 # Get reference type
-my str $type = reftype($ref);  # "scalar", "array", or "hash"
+my str $type = reftype($ref);  # "SCALAR", "ARRAY", or "HASH"
 ```
 
 ---
