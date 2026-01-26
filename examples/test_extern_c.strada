@@ -1,59 +1,92 @@
-# test_extern_c.strada - Test extern "C" block with direct C function calls
+# test_extern_c.strada - Test __C__ blocks with direct C function calls
+#
+# This demonstrates using __C__ blocks to define and call C functions
+# directly within Strada code.
 
-# Declare external C functions
-extern "C" {
-    func c_add(int $a, int $b) int;
-    func c_multiply(num $a, num $b) num;
-    func c_get_message() ptr;
-    func c_create_string(ptr $prefix, int $n) ptr;
-    func c_strlen(ptr $s) int;
+# Top-level C code: includes and helper function definitions
+__C__ {
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+static int c_add(int a, int b) {
+    return a + b;
+}
+
+static double c_multiply(double a, double b) {
+    return a * b;
+}
+
+static const char* c_get_message(void) {
+    return "Hello from C!";
+}
+
+static char* c_create_string(const char *prefix, int n) {
+    char *buf = malloc(256);
+    if (buf) {
+        snprintf(buf, 256, "%s: %d", prefix, n);
+    }
+    return buf;
+}
+
+static size_t c_strlen_func(const char *s) {
+    return strlen(s);
+}
 }
 
 func main() int {
-    say("=== Testing extern C functions ===");
+    say("=== Testing __C__ blocks ===");
 
     # Test simple int addition
-    my int $sum = c_add(10, 32);
+    my int $sum = 0;
+    __C__ {
+        sum = strada_new_int(c_add(10, 32));
+    }
     say("c_add(10, 32) = " . $sum);
 
     # Test double multiplication
-    my num $product = c_multiply(3.14, 2.0);
+    my num $product = 0.0;
+    __C__ {
+        product = strada_new_num(c_multiply(3.14, 2.0));
+    }
     say("c_multiply(3.14, 2.0) = " . $product);
 
     # Test getting a static string from C
-    my ptr $msg_ptr = c_get_message();
-    my str $msg = c::ptr_to_str($msg_ptr);
+    my str $msg = "";
+    __C__ {
+        const char *m = c_get_message();
+        msg = strada_new_str(m);
+    }
     say("c_get_message() = " . $msg);
-    # Note: static string, don't free
 
     # Test passing a string to C
     my str $prefix = "Strada says";
-    my ptr $prefix_ptr = c::str_to_ptr($prefix);
-    my int $len = c_strlen($prefix_ptr);
+    my int $len = 0;
+    __C__ {
+        const char *p = strada_to_str(prefix);
+        len = strada_new_int((int)c_strlen_func(p));
+    }
     say("c_strlen(\"Strada says\") = " . $len);
-    c::free($prefix_ptr);  # Free the allocated string
 
     # Test C function that allocates a string (we must free it)
-    my ptr $prefix2 = c::str_to_ptr("Result");
-    my ptr $created = c_create_string($prefix2, 42);
-    my str $created_str = c::ptr_to_str($created);
-    say("c_create_string(\"Result\", 42) = " . $created_str);
-    c::free($prefix2);   # Free the input we allocated
-    c::free($created);   # Free the output C allocated
-
-    # Test NULL pointer
-    my ptr $null = c::null();
-    if (c::is_null($null)) {
-        say("c::null() is NULL - correct!");
+    my str $created_str = "";
+    __C__ {
+        char *created = c_create_string("Result", 42);
+        if (created) {
+            created_str = strada_new_str(created);
+            free(created);
+        }
     }
+    say("c_create_string(\"Result\", 42) = " . $created_str);
 
-    # Test sizeof functions
+    # Test c:: helper functions with int (pointers stored as int)
     say("sizeof(int) = " . c::sizeof_int());
     say("sizeof(long) = " . c::sizeof_long());
     say("sizeof(ptr) = " . c::sizeof_ptr());
 
-    # Test memory allocation
-    my ptr $buffer = c::alloc(100);
+    # Test memory allocation using c:: helpers (returns int)
+    my int $buffer = c::alloc(100);
     if (c::is_null($buffer) == 0) {
         say("Allocated 100 bytes successfully");
         c::write_int32($buffer, 12345);
@@ -62,6 +95,6 @@ func main() int {
         c::free($buffer);
     }
 
-    say("=== All extern C tests passed! ===");
+    say("=== All __C__ block tests passed! ===");
     return 0;
 }

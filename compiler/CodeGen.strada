@@ -10633,7 +10633,7 @@ func gen_program(scalar $cg, scalar $program) void {
 
     # Generate global initialization constructor for shared libraries (no main)
     if ($has_main_fn == 0) {
-        gen_global_constructor($cg, $program);
+        gen_global_constructor($cg);
     }
 }
 
@@ -10723,7 +10723,7 @@ func gen_version_info(scalar $cg, scalar $program, int $has_main) void {
 
 # Generate global variable initialization constructor for shared libraries
 # This runs automatically when the library is loaded (dlopen)
-func gen_global_constructor(scalar $cg, scalar $program) void {
+func gen_global_constructor(scalar $cg) void {
     my int $global_count = $cg->{"global_count"};
     if ($global_count == 0) {
         return;
