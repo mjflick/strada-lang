@@ -440,6 +440,24 @@ func render_string(str $template, scalar $vars) str {
     my int $i = 0;
 
     while ($i < $len) {
+        # Fast path: if not at '{', find next '{' and batch copy
+        my int $cur_ch = char_at($template, $i);
+        if ($cur_ch != ord("{")) {
+            # Find next '{' starting from current position
+            my int $next_brace = index(substr($template, $i), "{");
+            if ($next_brace < 0) {
+                # No more braces - copy rest and done
+                $result = $result . substr($template, $i);
+                last;
+            }
+            # Copy up to the brace
+            if ($next_brace > 0) {
+                $result = $result . substr($template, $i, $next_brace);
+            }
+            $i = $i + $next_brace;
+            next;
+        }
+
         # Check for {{#each ...}}
         if ($i + 7 < $len) {
             my str $check_each = substr($template, $i, 7);
@@ -1807,11 +1825,11 @@ func json_escape(str $s) str {
             $result = $result . "\\\"";
         } elsif ($ch eq "\\") {
             $result = $result . "\\\\";
-        } elsif ($code == 10) {
+        } elsif ($code == ord("\n")) {
             $result = $result . "\\n";
-        } elsif ($code == 13) {
+        } elsif ($code == ord("\r")) {
             $result = $result . "\\r";
-        } elsif ($code == 9) {
+        } elsif ($code == ord("\t")) {
             $result = $result . "\\t";
         } else {
             $result = $result . $ch;

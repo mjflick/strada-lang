@@ -145,14 +145,11 @@ func escape_str(str $s) str {
             $result = $result . "\\\"";
         } elsif ($ch eq "\\") {
             $result = $result . "\\\\";
-        } elsif ($code == 10) {
-            # Newline (LF)
+        } elsif ($code == ord("\n")) {
             $result = $result . "\\n";
-        } elsif ($code == 13) {
-            # Carriage return (CR)
+        } elsif ($code == ord("\r")) {
             $result = $result . "\\r";
-        } elsif ($code == 9) {
-            # Tab
+        } elsif ($code == ord("\t")) {
             $result = $result . "\\t";
         } else {
             $result = $result . $ch;
