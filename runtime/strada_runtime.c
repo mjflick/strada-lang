@@ -1624,8 +1624,31 @@ StradaValue* strada_sprintf_sv(StradaValue *format_sv, int arg_count, ...) {
             case 'x':
             case 'X': {
                 int64_t val = arg ? strada_to_int(arg) : 0;
-                /* Replace any length modifiers with lld for int64_t */
-                snprintf(temp, sizeof(temp), "%lld", (long long)val);
+                /* Build format string preserving flags/width but using lld */
+                char int_fmt[64] = "%";
+                char *fp = int_fmt + 1;
+                const char *sp = spec_start + 1;  /* skip % */
+                /* Copy flags */
+                while (*sp == '-' || *sp == '+' || *sp == ' ' || *sp == '#' || *sp == '0') {
+                    *fp++ = *sp++;
+                }
+                /* Copy width */
+                while (*sp >= '0' && *sp <= '9') {
+                    *fp++ = *sp++;
+                }
+                /* Copy precision */
+                if (*sp == '.') {
+                    *fp++ = *sp++;
+                    while (*sp >= '0' && *sp <= '9') {
+                        *fp++ = *sp++;
+                    }
+                }
+                /* Add ll modifier and specifier */
+                *fp++ = 'l';
+                *fp++ = 'l';
+                *fp++ = spec;
+                *fp = '\0';
+                snprintf(temp, sizeof(temp), int_fmt, (long long)val);
                 break;
             }
             case 'f':
@@ -7069,6 +7092,44 @@ StradaValue* strada_hash_from_ref(StradaValue *ref) {
         }
     }
     
+    return result;
+}
+
+StradaValue* strada_hash_from_flat_array(StradaValue *arr) {
+    /* Convert flat array [key, val, key, val, ...] to hash {key => val, ...} */
+    StradaValue *result = strada_new_hash();
+
+    if (!arr) return result;
+
+    /* Handle references to arrays */
+    StradaArray *src = NULL;
+    if (arr->type == STRADA_REF) {
+        StradaValue *inner = arr->value.rv;
+        if (inner && inner->type == STRADA_ARRAY) {
+            src = inner->value.av;
+        }
+    } else if (arr->type == STRADA_ARRAY) {
+        src = arr->value.av;
+    }
+
+    if (!src) return result;
+
+    /* Iterate in pairs: [0]=key, [1]=val, [2]=key, [3]=val, ... */
+    for (size_t i = 0; i + 1 < src->size; i += 2) {
+        StradaValue *key = src->elements[i];
+        StradaValue *val = src->elements[i + 1];
+
+        if (key) {
+            char *key_str = strada_to_str(key);
+            /* strada_hash_set already calls strada_incref on the value */
+            strada_hash_set(result->value.hv, key_str, val);
+            free(key_str);  /* strada_hash_set strdups the key */
+        }
+    }
+
+    /* Free the input array since we're consuming it */
+    strada_decref(arr);
+
     return result;
 }
 

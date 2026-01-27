@@ -401,15 +401,22 @@ sys::array_shrink(@arr);         # Shrink to fit
 
 ```strada
 # Map - transform elements using $_
-my scalar $doubled = map { $_ * 2; } @nums;
+my array @doubled = map { $_ * 2 } @nums;
+
+# Map with fat arrow - create lookup hash (Perl idiom!)
+my hash %lookup = map { $_ => 1 } @fruits;
+if (exists($lookup{"apple"})) { say("found!"); }
 
 # Grep - filter elements using $_
-my scalar $evens = grep { $_ % 2 == 0; } @nums;
+my array @evens = grep { $_ % 2 == 0 } @nums;
 
 # Sort - custom comparison using $a, $b, and <=>
-my scalar $asc = sort { $a <=> $b; } @nums;   # ascending
-my scalar $desc = sort { $b <=> $a; } @nums;  # descending
-my scalar $alpha = sort @names;                # default sort
+my array @asc = sort { $a <=> $b } @nums;    # ascending
+my array @desc = sort { $b <=> $a } @nums;   # descending
+my array @alpha = sort @names;                # default sort
+
+# Chain operations
+my array @result = sort { $a <=> $b } map { $_ * 2 } grep { $_ > 3 } @data;
 ```
 
 ## Hashes

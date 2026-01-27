@@ -662,18 +662,33 @@ func ast_new_anon_hash() scalar {
     my scalar $node = ast_new_node(NODE_ANON_HASH());
     my array @keys = ();
     my array @values = ();
+    my array @key_exprs = ();  # For dynamic keys (expressions)
     $node->{"keys"} = \@keys;
     $node->{"values"} = \@values;
+    $node->{"key_exprs"} = \@key_exprs;
     $node->{"pair_count"} = 0;
     return $node;
 }
 
-# Add pair to anonymous hash
+# Add pair to anonymous hash (string key)
 func ast_add_hash_pair(scalar $hash_node, str $key, scalar $value) void {
     my scalar $keys = $hash_node->{"keys"};
     my scalar $values = $hash_node->{"values"};
+    my scalar $key_exprs = $hash_node->{"key_exprs"};
     push($keys, $key);
     push($values, $value);
+    push($key_exprs, 0);  # No expression key (0 = no expr)
+    $hash_node->{"pair_count"} = $hash_node->{"pair_count"} + 1;
+}
+
+# Add pair to anonymous hash (expression key, e.g. $var => value)
+func ast_add_hash_pair_expr(scalar $hash_node, scalar $key_expr, scalar $value) void {
+    my scalar $keys = $hash_node->{"keys"};
+    my scalar $values = $hash_node->{"values"};
+    my scalar $key_exprs = $hash_node->{"key_exprs"};
+    push($keys, "");  # Placeholder
+    push($values, $value);
+    push($key_exprs, $key_expr);  # Expression for key
     $hash_node->{"pair_count"} = $hash_node->{"pair_count"} + 1;
 }
 

@@ -514,6 +514,7 @@ StradaValue* strada_anon_hash(int count, ...);        /* { key => val, ... } */
 StradaValue* strada_anon_array(int count, ...);       /* [ elem, ... ] */
 StradaValue* strada_array_from_ref(StradaValue *ref); /* Copy array from ref */
 StradaValue* strada_hash_from_ref(StradaValue *ref);  /* Copy hash from ref */
+StradaValue* strada_hash_from_flat_array(StradaValue *arr); /* Convert flat array [k,v,k,v,...] to hash */
 
 /* OOP - Blessed references (like Perl's bless) */
 typedef StradaValue* (*StradaMethod)(StradaValue *self, StradaValue *args);

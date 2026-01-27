@@ -8072,7 +8072,18 @@ func gen_expression(scalar $cg, scalar $expr) void {
     if ($type == NODE_ANON_HASH()) {
         my scalar $keys = $expr->{"keys"};
         my scalar $values = $expr->{"values"};
+        my scalar $key_exprs = $expr->{"key_exprs"};
         my int $pair_count = $expr->{"pair_count"};
+
+        # Check if any keys are expressions (dynamic keys)
+        my int $has_expr_keys = 0;
+        my int $check_k = 0;
+        while ($check_k < $pair_count) {
+            if ($key_exprs && $key_exprs->[$check_k]) {
+                $has_expr_keys = 1;
+            }
+            $check_k = $check_k + 1;
+        }
 
         # Check if any values need temp cleanup (newly created values)
         my int $needs_val_cleanup = 0;
@@ -8084,7 +8095,28 @@ func gen_expression(scalar $cg, scalar $expr) void {
             $check_i = $check_i + 1;
         }
 
-        if ($needs_val_cleanup == 1 && $cg->{"cleanup_enabled"} == 1) {
+        if ($has_expr_keys == 1) {
+            # Has expression keys - build hash manually
+            emit($cg, "({ StradaValue *__ah_hash = strada_new_hash(); ");
+            my int $e = 0;
+            while ($e < $pair_count) {
+                if ($key_exprs && $key_exprs->[$e]) {
+                    # Expression key - use strada_to_str
+                    emit($cg, "{ char *__ah_k" . $e . " = strada_to_str(");
+                    gen_expression($cg, $key_exprs->[$e]);
+                    emit($cg, "); strada_hash_set(__ah_hash->value.hv, __ah_k" . $e . ", ");
+                    gen_expression($cg, $values->[$e]);
+                    emit($cg, "); free(__ah_k" . $e . "); } ");
+                } else {
+                    # String key
+                    emit($cg, "strada_hash_set(__ah_hash->value.hv, \"" . $keys->[$e] . "\", ");
+                    gen_expression($cg, $values->[$e]);
+                    emit($cg, "); ");
+                }
+                $e = $e + 1;
+            }
+            emit($cg, "__ah_hash; })");
+        } elsif ($needs_val_cleanup == 1 && $cg->{"cleanup_enabled"} == 1) {
             # Generate block with temps for values that need cleanup
             emit($cg, "({ ");
 
@@ -8239,11 +8271,23 @@ func gen_expression(scalar $cg, scalar $expr) void {
                 $i = $i + 1;
             }
             # Last statement - extract its expression for the result
+            # Flatten arrays for map { $_ => 1 } idiom
             my scalar $last_stmt = $stmts->[$stmt_count - 1];
             if ($last_stmt->{"type"} == NODE_EXPR_STMT()) {
-                emit($cg, "strada_array_push(strada_deref_array(__map_result_" . $map_id . "), ");
+                emit($cg, "{ StradaValue *__map_elem_" . $map_id . " = ");
                 gen_expression($cg, $last_stmt->{"expr"});
-                emit($cg, "); ");
+                emit($cg, "; ");
+                # Handle both STRADA_ARRAY and STRADA_REF to array (from strada_anon_array)
+                emit($cg, "StradaValue *__flat_val_" . $map_id . " = __map_elem_" . $map_id . "; ");
+                emit($cg, "if (__flat_val_" . $map_id . " && __flat_val_" . $map_id . "->type == STRADA_REF) { ");
+                emit($cg, "__flat_val_" . $map_id . " = __flat_val_" . $map_id . "->value.rv; } ");
+                emit($cg, "if (__flat_val_" . $map_id . " && __flat_val_" . $map_id . "->type == STRADA_ARRAY) { ");
+                emit($cg, "StradaArray *__flat_arr_" . $map_id . " = __flat_val_" . $map_id . "->value.av; ");
+                emit($cg, "for (size_t __flat_j_" . $map_id . " = 0; __flat_j_" . $map_id . " < __flat_arr_" . $map_id . "->size; __flat_j_" . $map_id . "++) { ");
+                emit($cg, "strada_array_push(__map_result_" . $map_id . "->value.av, __flat_arr_" . $map_id . "->elements[__flat_j_" . $map_id . "]); } ");
+                emit($cg, "strada_decref(__map_elem_" . $map_id . "); ");
+                emit($cg, "} else { ");
+                emit($cg, "strada_array_push(__map_result_" . $map_id . "->value.av, __map_elem_" . $map_id . "); } } ");
             }
         }
 
@@ -8668,14 +8712,21 @@ func gen_statement(scalar $cg, scalar $stmt) void {
                 if ($init->{"type"} == NODE_ANON_HASH() && $init->{"pair_count"} == 0) {
                     emit($cg, "strada_new_hash()");
                 } else {
-                    gen_expression($cg, $init);
-                    # If initializing from a variable or deref, incref to share ownership properly
                     my int $init_type = $init->{"type"};
-                    if ($init_type == NODE_VARIABLE()) {
-                        emit($cg, "; strada_incref(" . $c_name . ")");
-                    } elsif ($init_type == NODE_DEREF_SCALAR() && $init->{"sigil"} eq "%") {
-                        # Hash deref like %{$ref} returns borrowed reference - need to incref
-                        emit($cg, "; strada_incref(" . $c_name . ")");
+                    # If init is a map expression, convert flat array to hash
+                    if ($init_type == NODE_MAP()) {
+                        emit($cg, "strada_hash_from_flat_array(");
+                        gen_expression($cg, $init);
+                        emit($cg, ")");
+                    } else {
+                        gen_expression($cg, $init);
+                        # If initializing from a variable or deref, incref to share ownership properly
+                        if ($init_type == NODE_VARIABLE()) {
+                            emit($cg, "; strada_incref(" . $c_name . ")");
+                        } elsif ($init_type == NODE_DEREF_SCALAR() && $init->{"sigil"} eq "%") {
+                            # Hash deref like %{$ref} returns borrowed reference - need to incref
+                            emit($cg, "; strada_incref(" . $c_name . ")");
+                        }
                     }
                 }
             } else {

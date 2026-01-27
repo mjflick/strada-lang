@@ -1060,21 +1060,29 @@ func parse_primary(scalar $parser) scalar {
         
         # Parse key => value pairs
         while (1) {
-            # Key (string or bareword)
+            # Key (string, bareword, or variable)
             my scalar $key_tok = parser_current($parser);
             my str $key = "";
-            
+            my scalar $key_expr = 0;
+
             if ($key_tok->{"type"} eq "STR_LITERAL" || $key_tok->{"type"} eq "IDENT") {
                 $key = $key_tok->{"value"};
                 parser_advance($parser);
+            } elsif ($key_tok->{"type"} eq "DOLLAR") {
+                # Variable key like $_ => 1 or $var => value
+                $key_expr = parse_primary($parser);
             } else {
                 parser_error($parser, "expected hash key");
             }
-            
+
             parser_expect($parser, "FAT_ARROW");
-            
+
             my scalar $value = parse_expression($parser);
-            ast_add_hash_pair($anon, $key, $value);
+            if ($key_expr) {
+                ast_add_hash_pair_expr($anon, $key_expr, $value);
+            } else {
+                ast_add_hash_pair($anon, $key, $value);
+            }
             
             if (parser_check($parser, "COMMA")) {
                 parser_advance($parser);
@@ -1431,10 +1439,20 @@ func parse_primary(scalar $parser) scalar {
         parser_expect($parser, "LBRACE");
         my scalar $block = ast_new_block();
 
-        # Parse block body - can be multiple statements or a single expression
+        # Parse block body - can be statements with ; or bare expression
         while (!parser_check($parser, "RBRACE") && !parser_check($parser, "EOF")) {
-            my scalar $stmt = parse_statement($parser);
-            ast_add_statement($block, $stmt);
+            # Parse expression first
+            my scalar $expr = parse_expression($parser);
+            # Check if this is a full statement (with ;) or bare expression
+            if (parser_check($parser, "SEMI")) {
+                parser_advance($parser);
+                ast_add_statement($block, ast_new_expr_stmt($expr));
+            } elsif (parser_check($parser, "RBRACE")) {
+                # Bare expression at end of block (e.g., map { $_ => 1 })
+                ast_add_statement($block, ast_new_expr_stmt($expr));
+            } else {
+                parser_error($parser, "expected ; or } in map block");
+            }
         }
         parser_expect($parser, "RBRACE");
 
@@ -1483,10 +1501,17 @@ func parse_primary(scalar $parser) scalar {
         parser_expect($parser, "LBRACE");
         my scalar $block = ast_new_block();
 
-        # Parse block body
+        # Parse block body - can be statements with ; or bare expression
         while (!parser_check($parser, "RBRACE") && !parser_check($parser, "EOF")) {
-            my scalar $stmt = parse_statement($parser);
-            ast_add_statement($block, $stmt);
+            my scalar $expr = parse_expression($parser);
+            if (parser_check($parser, "SEMI")) {
+                parser_advance($parser);
+                ast_add_statement($block, ast_new_expr_stmt($expr));
+            } elsif (parser_check($parser, "RBRACE")) {
+                ast_add_statement($block, ast_new_expr_stmt($expr));
+            } else {
+                parser_error($parser, "expected ; or } in grep block");
+            }
         }
         parser_expect($parser, "RBRACE");
 
@@ -1957,6 +1982,17 @@ func parse_ternary(scalar $parser) scalar {
         parser_expect($parser, "COLON");
         my scalar $false_expr = parse_ternary($parser);
         return ast_new_ternary($cond, $true_expr, $false_expr);
+    }
+
+    # Fat arrow creates a pair (2-element array) for map { $_ => 1 } idiom
+    if (parser_check($parser, "FAT_ARROW")) {
+        parser_advance($parser);
+        my scalar $value = parse_logical_or($parser);
+        # Create a 2-element anonymous array [key, value]
+        my scalar $pair = ast_new_anon_array();
+        ast_add_array_elem($pair, $cond);
+        ast_add_array_elem($pair, $value);
+        return $pair;
     }
 
     return $cond;

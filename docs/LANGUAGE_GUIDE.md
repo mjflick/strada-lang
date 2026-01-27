@@ -843,11 +843,62 @@ Transform each element of an array using `$_` as the current element:
 my array @nums = (1, 2, 3, 4, 5);
 
 # Double each element
-my scalar $doubled = map { $_ * 2; } @nums;
-# Result: [2, 4, 6, 8, 10]
+my array @doubled = map { $_ * 2 } @nums;
+# Result: (2, 4, 6, 8, 10)
 
 # Transform to strings
-my scalar $strings = map { "Value: " . $_; } @nums;
+my array @strings = map { "Value: " . $_ } @nums;
+```
+
+**Note:** The semicolon after the expression in a map block is optional.
+
+#### Map with Fat Arrow (Creating Hashes)
+
+The fat arrow (`=>`) operator in a map block creates key-value pairs. This is the classic Perl idiom for building lookup hashes:
+
+```strada
+my array @fruits = ("apple", "banana", "cherry");
+
+# Create a lookup hash - the Perl way!
+my hash %lookup = map { $_ => 1 } @fruits;
+# %lookup is now {"apple" => 1, "banana" => 1, "cherry" => 1}
+
+# Fast membership testing
+if (exists($lookup{"apple"})) {
+    say("Found apple!");
+}
+
+# Count occurrences
+my array @words = ("the", "cat", "sat", "on", "the", "mat");
+my hash %seen = ();
+foreach my str $w (@words) {
+    if (exists($seen{$w})) {
+        $seen{$w} = $seen{$w} + 1;
+    } else {
+        $seen{$w} = 1;
+    }
+}
+```
+
+**How it works:**
+
+1. The fat arrow `$_ => value` creates a 2-element array `[$_, value]` (a "pair")
+2. Map flattens these pairs into a single flat array: `("apple", 1, "banana", 1, "cherry", 1)`
+3. When assigned to a hash variable, alternating elements become key-value pairs
+
+You can also store the flat array and process it manually:
+
+```strada
+my array @pairs = map { $_ => 1 } @fruits;
+# @pairs is ("apple", 1, "banana", 1, "cherry", 1)
+
+# Build hash manually
+my hash %h = ();
+my int $i = 0;
+while ($i < scalar(@pairs)) {
+    $h{@pairs[$i]} = @pairs[$i + 1];
+    $i = $i + 2;
+}
 ```
 
 #### Grep
@@ -858,12 +909,16 @@ Filter array elements, keeping only those where the block returns true:
 my array @nums = (1, 2, 3, 4, 5, 6);
 
 # Keep only even numbers
-my scalar $evens = grep { $_ % 2 == 0; } @nums;
-# Result: [2, 4, 6]
+my array @evens = grep { $_ % 2 == 0 } @nums;
+# Result: (2, 4, 6)
 
 # Keep values greater than 3
-my scalar $big = grep { $_ > 3; } @nums;
-# Result: [4, 5, 6]
+my array @big = grep { $_ > 3 } @nums;
+# Result: (4, 5, 6)
+
+# Combine with map
+my array @doubled_evens = map { $_ * 2 } grep { $_ % 2 == 0 } @nums;
+# Result: (4, 8, 12)
 ```
 
 #### Sort
@@ -874,18 +929,29 @@ Sort arrays with custom comparison using `$a` and `$b`, and the spaceship operat
 my array @nums = (5, 2, 8, 1, 9);
 
 # Sort ascending (numeric)
-my scalar $asc = sort { $a <=> $b; } @nums;
-# Result: [1, 2, 5, 8, 9]
+my array @asc = sort { $a <=> $b } @nums;
+# Result: (1, 2, 5, 8, 9)
 
 # Sort descending
-my scalar $desc = sort { $b <=> $a; } @nums;
-# Result: [9, 8, 5, 2, 1]
+my array @desc = sort { $b <=> $a } @nums;
+# Result: (9, 8, 5, 2, 1)
 
 # Default sort (no block) - alphabetical
-my scalar $alpha = sort @names;
+my array @alpha = sort @names;
 ```
 
 The `<=>` operator returns -1 if left < right, 0 if equal, and 1 if left > right.
+
+#### Chaining Map, Grep, and Sort
+
+These operations can be chained for powerful data transformations:
+
+```strada
+my array @data = (5, 2, 8, 1, 9, 3, 7);
+
+# Filter, transform, and sort in one pipeline
+my array @result = sort { $a <=> $b } map { $_ * 10 } grep { $_ > 3 } @data;
+# Result: (50, 70, 80, 90)
 
 ---
 
