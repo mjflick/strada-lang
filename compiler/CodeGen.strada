@@ -146,6 +146,9 @@ func codegen_new(str $filename, int $debug_info, int $enable_profiling) scalar {
     $cg{"cleanup_enabled"} = 1;  # Enable scope-based memory cleanup
     $cg{"returns_struct"} = 0;   # Track if current function returns struct
     $cg{"try_depth"} = 0;        # Track nesting depth in try blocks (for proper cleanup on return)
+    # Track label-to-scope-depth for proper cleanup on labeled break/continue
+    my hash %label_depths = ();
+    $cg{"label_depths"} = \%label_depths;
     return \%cg;
 }
 
@@ -319,6 +322,27 @@ func scope_emit_all_cleanup(scalar $cg) void {
             emit($cg, "strada_decref(" . $pname . ");\n");
             $pn_i = $pn_i + 1;
         }
+    }
+}
+
+# Emit cleanup for scopes from current depth down to (but not including) target_depth
+# Used for labeled break/continue to clean up intermediate scopes
+func scope_emit_cleanup_to_depth(scalar $cg, int $target_depth) void {
+    my int $enabled = $cg->{"cleanup_enabled"};
+    if ($enabled == 0) {
+        return;
+    }
+    my int $depth = $cg->{"scope_depth"};
+    my scalar $vars = $cg->{"scope_vars"};
+    my scalar $counts = $cg->{"scope_counts"};
+
+    # Emit cleanup from innermost scope down to (but not including) target_depth
+    my int $d = $depth;
+    while ($d > $target_depth) {
+        my str $scope_str = $vars->[$d - 1];
+        my int $count = $counts->[$d - 1];
+        emit_scope_decref($cg, $scope_str, $count);
+        $d = $d - 1;
     }
 }
 
@@ -8858,6 +8882,11 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # While statement
     if ($type == NODE_WHILE_STMT()) {
         my str $label = $stmt->{"label"};
+        # Register label depth BEFORE scope_push so cleanup covers loop body
+        if (length($label) > 0) {
+            my scalar $label_depths = $cg->{"label_depths"};
+            $label_depths->{$label} = $cg->{"scope_depth"};
+        }
         emit_indent($cg);
         emit($cg, "while (");
         emit_condition($cg, $stmt->{"condition"});
@@ -8897,6 +8926,11 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # Do-while statement
     if ($type == NODE_DO_WHILE_STMT()) {
         my str $label = $stmt->{"label"};
+        # Register label depth BEFORE scope_push so cleanup covers loop body
+        if (length($label) > 0) {
+            my scalar $label_depths = $cg->{"label_depths"};
+            $label_depths->{$label} = $cg->{"scope_depth"};
+        }
         emit_indent($cg);
         emit($cg, "do {\n");
         indent($cg);
@@ -8936,6 +8970,11 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # For statement
     if ($type == NODE_FOR_STMT()) {
         my str $label = $stmt->{"label"};
+        # Register label depth BEFORE any blocks so cleanup covers everything
+        if (length($label) > 0) {
+            my scalar $label_depths = $cg->{"label_depths"};
+            $label_depths->{$label} = $cg->{"scope_depth"};
+        }
         my str $loop_var_name = "";
         my int $has_var_decl = 0;
 
@@ -9030,6 +9069,11 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # Foreach statement
     if ($type == NODE_FOREACH_STMT()) {
         my str $label = $stmt->{"label"};
+        # Register label depth BEFORE any blocks so cleanup covers everything
+        if (length($label) > 0) {
+            my scalar $label_depths = $cg->{"label_depths"};
+            $label_depths->{$label} = $cg->{"scope_depth"};
+        }
         my scalar $var_decl = $stmt->{"var_decl"};
         my str $var_name = escape_c_keyword($stmt->{"var_name"});
         my scalar $array_expr = $stmt->{"array"};
@@ -9268,12 +9312,17 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # Last (break)
     if ($type == 100) {
         my str $label = $stmt->{"label"};
-        emit_indent($cg);
         if (length($label) > 0) {
+            # Emit cleanup for all scopes between current and target label's scope
+            my scalar $label_depths = $cg->{"label_depths"};
+            my int $target_depth = $label_depths->{$label} + 0;
+            scope_emit_cleanup_to_depth($cg, $target_depth);
+            emit_indent($cg);
             emit($cg, "goto ");
             emit($cg, $label);
             emit($cg, "_break;\n");
         } else {
+            emit_indent($cg);
             emit($cg, "break;\n");
         }
         return;
@@ -9282,12 +9331,19 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # Next (continue)
     if ($type == 101) {
         my str $label = $stmt->{"label"};
-        emit_indent($cg);
         if (length($label) > 0) {
+            # Emit cleanup for scopes between current and target label's BODY scope
+            # Note: For next, we use label_depth + 1 because the _continue label is
+            # placed before scope_pop, so the loop body's cleanup still runs normally
+            my scalar $label_depths = $cg->{"label_depths"};
+            my int $target_depth = $label_depths->{$label} + 1;
+            scope_emit_cleanup_to_depth($cg, $target_depth);
+            emit_indent($cg);
             emit($cg, "goto ");
             emit($cg, $label);
             emit($cg, "_continue;\n");
         } else {
+            emit_indent($cg);
             emit($cg, "continue;\n");
         }
         return;
