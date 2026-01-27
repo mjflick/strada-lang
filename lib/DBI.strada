@@ -168,6 +168,25 @@ Finish statement and release resources.
 
 =head1 CONVENIENCE FUNCTIONS
 
+=head2 selectall_arrayref($dbh, $sql)
+
+Execute a SQL query and return all rows as an array of array refs.
+Combines prepare, execute, and fetchall_arrayref into a single call.
+
+    my scalar $rows = DBI::selectall_arrayref($dbh, "SELECT id, name FROM users");
+    foreach my scalar $r (@{$rows}) {
+        my array @row = @{$r};
+        say("ID: " . @row[0] . ", Name: " . @row[1]);
+    }
+
+=head2 selectall_arrayref_bind($dbh, $sql, $params)
+
+Execute a SQL query with bind parameters and return all rows as an array of array refs.
+
+    my array @params = ($min_age);
+    my scalar $rows = DBI::selectall_arrayref_bind($dbh,
+        "SELECT id, name FROM users WHERE age > ?", \@params);
+
 =head2 selectall_hashref($dbh, $sql, $params)
 
 Execute query and return all rows as array of hash refs.
@@ -1674,6 +1693,29 @@ func fetchall_arrayref(scalar $sth) scalar {
         $row = DBI::fetchrow_array($sth);
     }
     return \@all;
+}
+
+# Convenience function: prepare, execute, and fetch all rows in one call
+# Usage: my scalar $rows = DBI::selectall_arrayref($dbh, $sql);
+#        my scalar $rows = DBI::selectall_arrayref($dbh, $sql, \@params);
+func selectall_arrayref(scalar $dbh, str $sql) scalar {
+    my scalar $sth = DBI::prepare($dbh, $sql);
+    if (!defined($sth)) {
+        return undef;
+    }
+    my array @empty = ();
+    DBI::execute($sth, \@empty);
+    return DBI::fetchall_arrayref($sth);
+}
+
+# Convenience function with bind parameters
+func selectall_arrayref_bind(scalar $dbh, str $sql, scalar $params) scalar {
+    my scalar $sth = DBI::prepare($dbh, $sql);
+    if (!defined($sth)) {
+        return undef;
+    }
+    DBI::execute($sth, $params);
+    return DBI::fetchall_arrayref($sth);
 }
 
 # Begin a transaction

@@ -8893,7 +8893,46 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         }
         return;
     }
-    
+
+    # Do-while statement
+    if ($type == NODE_DO_WHILE_STMT()) {
+        my str $label = $stmt->{"label"};
+        emit_indent($cg);
+        emit($cg, "do {\n");
+        indent($cg);
+        scope_push($cg);
+
+        my scalar $body = $stmt->{"body"};
+        my scalar $stmts = $body->{"statements"};
+        my int $i = 0;
+        while ($i < $body->{"statement_count"}) {
+            gen_statement($cg, $stmts->[$i]);
+            $i = $i + 1;
+        }
+
+        # Add continue label at end of loop body if labeled
+        if (length($label) > 0) {
+            emit_indent($cg);
+            emit($cg, $label);
+            emit($cg, "_continue: ;\n");
+        }
+
+        scope_pop($cg);
+        dedent($cg);
+        emit_indent($cg);
+        emit($cg, "} while (");
+        emit_condition($cg, $stmt->{"condition"});
+        emit($cg, ");\n");
+
+        # Add break label after loop if labeled
+        if (length($label) > 0) {
+            emit_indent($cg);
+            emit($cg, $label);
+            emit($cg, "_break: ;\n");
+        }
+        return;
+    }
+
     # For statement
     if ($type == NODE_FOR_STMT()) {
         my str $label = $stmt->{"label"};

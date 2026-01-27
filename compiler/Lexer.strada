@@ -1043,6 +1043,7 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "elsif") { return "ELSIF"; }
     if ($text eq "else") { return "ELSE"; }
     if ($text eq "while") { return "WHILE"; }
+    if ($text eq "do") { return "DO"; }
     if ($text eq "for") { return "FOR"; }
     if ($text eq "foreach") { return "FOREACH"; }
     if ($text eq "return") { return "RETURN"; }

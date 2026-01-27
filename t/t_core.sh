@@ -80,6 +80,7 @@ test_run "$EXAMPLES_DIR/test_try_catch.strada" "test_try_catch" "Try/catch"
 # Test: Goto and loop labels
 test_run "$EXAMPLES_DIR/test_goto.strada" "test_goto" "Goto"
 test_run "$EXAMPLES_DIR/test_loop_labels.strada" "test_loop_labels" "Loop labels"
+test_run "$EXAMPLES_DIR/test_do_while.strada" "test_do_while" "Do-while loops"
 
 # Test: Foreach
 test_run "$EXAMPLES_DIR/test_foreach.strada" "test_foreach" "Foreach loops"

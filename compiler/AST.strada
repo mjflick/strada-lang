@@ -82,6 +82,7 @@ func NODE_ASYNC_FUNC() int { return 122; }
 func NODE_AWAIT() int { return 123; }
 func NODE_READLINE() int { return 124; }
 func NODE_DESTRUCTURE() int { return 125; }
+func NODE_DO_WHILE_STMT() int { return 126; }
 
 # Type constants
 func TYPE_INT() int { return 1; }
@@ -433,6 +434,15 @@ func ast_new_while_stmt(scalar $condition, scalar $body, str $label) scalar {
     my scalar $node = ast_new_node(NODE_WHILE_STMT());
     $node->{"condition"} = $condition;
     $node->{"body"} = $body;
+    $node->{"label"} = $label;
+    return $node;
+}
+
+# Create do-while statement
+func ast_new_do_while_stmt(scalar $body, scalar $condition, str $label) scalar {
+    my scalar $node = ast_new_node(NODE_DO_WHILE_STMT());
+    $node->{"body"} = $body;
+    $node->{"condition"} = $condition;
     $node->{"label"} = $label;
     return $node;
 }
@@ -924,6 +934,7 @@ func ast_type_name(int $type) str {
     if ($type == NODE_VAR_DECL()) { return "VAR_DECL"; }
     if ($type == NODE_IF_STMT()) { return "IF_STMT"; }
     if ($type == NODE_WHILE_STMT()) { return "WHILE_STMT"; }
+    if ($type == NODE_DO_WHILE_STMT()) { return "DO_WHILE_STMT"; }
     if ($type == NODE_FOR_STMT()) { return "FOR_STMT"; }
     if ($type == NODE_FOREACH_STMT()) { return "FOREACH_STMT"; }
     if ($type == NODE_RETURN_STMT()) { return "RETURN_STMT"; }

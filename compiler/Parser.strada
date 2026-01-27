@@ -2234,6 +2234,18 @@ func parse_while_stmt(scalar $parser, str $label) scalar {
     return ast_new_while_stmt($condition, $body, $label);
 }
 
+# Parse do-while loop: do { body } while (condition);
+func parse_do_while_stmt(scalar $parser, str $label) scalar {
+    parser_expect($parser, "DO");
+    my scalar $body = parse_block($parser);
+    parser_expect($parser, "WHILE");
+    parser_expect($parser, "LPAREN");
+    my scalar $condition = parse_expression($parser);
+    parser_expect($parser, "RPAREN");
+    parser_expect($parser, "SEMI");
+    return ast_new_do_while_stmt($body, $condition, $label);
+}
+
 # Parse array-style for loop: for my type $var (@array) or for $var (@array)
 # This is syntactic sugar for foreach
 func parse_for_array_style(scalar $parser, str $label) scalar {
@@ -2411,6 +2423,8 @@ func parse_statement(scalar $parser) scalar {
 
             if ($loop_type eq "WHILE") {
                 return parse_while_stmt($parser, $label);
+            } elsif ($loop_type eq "DO") {
+                return parse_do_while_stmt($parser, $label);
             } elsif ($loop_type eq "FOR") {
                 return parse_for_stmt($parser, $label);
             } elsif ($loop_type eq "FOREACH") {
@@ -2424,6 +2438,10 @@ func parse_statement(scalar $parser) scalar {
 
     if ($type eq "WHILE") {
         return parse_while_stmt($parser, "");
+    }
+
+    if ($type eq "DO") {
+        return parse_do_while_stmt($parser, "");
     }
 
     if ($type eq "FOR") {
