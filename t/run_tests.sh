@@ -159,7 +159,7 @@ compile_strada() {
     fi
 
     # Compile C to executable
-    if ! gcc -o "$exe_file" "$c_file" "$RUNTIME" -I"$RUNTIME_H" -ldl -lm > "$BUILD_DIR/${name}_gcc.log" 2>&1; then
+    if ! gcc -o "$exe_file" "$c_file" "$RUNTIME" -I"$RUNTIME_H" -ldl -lm ${EXTRA_LDFLAGS:-} > "$BUILD_DIR/${name}_gcc.log" 2>&1; then
         return 2
     fi
 
@@ -361,6 +361,129 @@ test_skip() {
     TOTAL=$((TOTAL + 1))
     SKIPPED=$((SKIPPED + 1))
     log_skip "$name" "$reason"
+}
+
+# Test: import_lib test (requires compiling a library to .so first)
+test_import_lib() {
+    local src="$1"
+    local name="$2"
+    local lib_src="$3"
+    local lib_name="$4"
+    local desc="${5:-$name}"
+    local timeout_secs="${6:-5}"
+
+    TOTAL=$((TOTAL + 1))
+
+    # First compile the library to .so file in examples dir
+    local lib_c="$EXAMPLES_DIR/${lib_name}.c"
+    local lib_so="$EXAMPLES_DIR/${lib_name}.so"
+
+    # Compile library source to C
+    if ! timeout 30 "$STRADAC" "$lib_src" "$lib_c" > "$BUILD_DIR/${lib_name}_strada.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${lib_name}_strada.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Library compile failed: $err"
+        return 1
+    fi
+
+    # Compile library C to .so
+    if ! gcc -shared -fPIC -rdynamic "$lib_c" -o "$lib_so" "$PROJECT_DIR/runtime/strada_runtime.c" -I"$RUNTIME_H" -ldl -lm > "$BUILD_DIR/${lib_name}_gcc.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${lib_name}_gcc.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Library .so compile failed: $err"
+        return 1
+    fi
+
+    # Now compile and run the test
+    if ! compile_strada "$src" "$name"; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${name}_strada.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Compile failed: $err"
+        return 1
+    fi
+
+    run_program "$name" "$timeout_secs"
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        PASSED=$((PASSED + 1))
+        log_pass "run: $desc"
+        return 0
+    else
+        FAILED=$((FAILED + 1))
+        log_fail "run: $desc" "Exit code: $exit_code"
+        if [ $VERBOSE -eq 1 ]; then
+            cat "$BUILD_DIR/${name}.out" | head -20
+        fi
+        return 1
+    fi
+}
+
+# Test: import_object test (requires compiling a library to .o first)
+test_import_object() {
+    local src="$1"
+    local name="$2"
+    local lib_src="$3"
+    local lib_name="$4"
+    local desc="${5:-$name}"
+    local timeout_secs="${6:-5}"
+
+    TOTAL=$((TOTAL + 1))
+
+    # First compile the library to .o file in examples dir
+    local lib_c="$EXAMPLES_DIR/${lib_name}.c"
+    local lib_o="$EXAMPLES_DIR/${lib_name}.o"
+
+    # Compile library source to C
+    if ! timeout 30 "$STRADAC" "$lib_src" "$lib_c" > "$BUILD_DIR/${lib_name}_strada.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${lib_name}_strada.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Library compile failed: $err"
+        return 1
+    fi
+
+    # Compile library C to .o
+    if ! gcc -c -fPIC "$lib_c" -o "$lib_o" -I"$RUNTIME_H" > "$BUILD_DIR/${lib_name}_gcc.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${lib_name}_gcc.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Library .o compile failed: $err"
+        return 1
+    fi
+
+    # Compile test source to C
+    local c_file="$BUILD_DIR/${name}.c"
+    local exe_file="$BUILD_DIR/${name}"
+
+    if ! timeout 30 "$STRADAC" "$src" "$c_file" > "$BUILD_DIR/${name}_strada.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${name}_strada.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Compile failed: $err"
+        return 1
+    fi
+
+    # Compile C to executable - INCLUDE the .o file
+    if ! gcc -o "$exe_file" "$c_file" "$lib_o" "$RUNTIME" -I"$RUNTIME_H" -ldl -lm > "$BUILD_DIR/${name}_gcc.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${name}_gcc.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "GCC compile failed: $err"
+        return 1
+    fi
+
+    run_program "$name" "$timeout_secs"
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        PASSED=$((PASSED + 1))
+        log_pass "run: $desc"
+        return 0
+    else
+        FAILED=$((FAILED + 1))
+        log_fail "run: $desc" "Exit code: $exit_code"
+        if [ $VERBOSE -eq 1 ]; then
+            cat "$BUILD_DIR/${name}.out" | head -20
+        fi
+        return 1
+    fi
 }
 
 # ============================================================

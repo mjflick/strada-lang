@@ -40,6 +40,9 @@ test_run "$EXAMPLES_DIR/mathlib.strada" "mathlib" "Math library"
 # Test: OOP better
 test_run "$EXAMPLES_DIR/test_oop_better.strada" "test_oop_better" "OOP improved"
 
+# Test: OOP stress
+test_run "$EXAMPLES_DIR/oop_stress_test.strada" "oop_stress_test" "OOP stress"
+
 # Test: Dumper with blessed objects
 test_run "$EXAMPLES_DIR/dumper_blessed.strada" "dumper_blessed" "Dumper blessed"
 
@@ -48,6 +51,12 @@ test_run "$EXAMPLES_DIR/test_field_types.strada" "test_field_types" "Field types
 
 # Test: C types
 test_run "$EXAMPLES_DIR/test_c_types.strada" "test_c_types" "C types"
+
+# Test: Extended C types (int8, int16, uint8, uint16, uint32, uint64, size_t, char)
+test_run "$EXAMPLES_DIR/c_types_extended.strada" "c_types_extended" "C types extended"
+
+# Test: Enum types
+test_run "$EXAMPLES_DIR/test_enum.strada" "test_enum" "Enum types"
 
 # Test: Person struct
 test_run "$EXAMPLES_DIR/test_person.strada" "test_person" "Person struct"
