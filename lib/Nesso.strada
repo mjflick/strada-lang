@@ -532,3 +532,469 @@ func clone(scalar $self, scalar $new_dbh) scalar {
     $new_self{"_debug"} = $self->{"_debug"};
     return bless(\%new_self, "Nesso");
 }
+
+__END__
+
+=head1 NAME
+
+Nesso - Lightweight ORM for Strada
+
+=head1 SYNOPSIS
+
+    use lib "lib";
+    use DBI;
+    use Nesso;
+    use Nesso::Record;    # For ActiveRecord-style methods
+
+    # Connect to database and create Nesso instance
+    my scalar $db = DBI::connect("dbi:SQLite:app.db", "", "");
+    my scalar $n = Nesso::new($db);
+
+    # Define models
+    $n->define("users", {
+        "table"   => "users",
+        "columns" => ["id", "username", "email", "created_at"],
+        "primary" => "id"
+    });
+
+    $n->define("posts", {
+        "table"   => "posts",
+        "columns" => ["id", "user_id", "title", "body"],
+        "primary" => "id"
+    });
+
+    # Define relationships
+    $n->has_many("users", "posts", "user_id");
+    $n->belongs_to("posts", "author", "users", "user_id");
+
+    # Create and save a record
+    my scalar $user = $n->create("users", { "username" => "alice" });
+    $n->save($user);
+
+    # Or use ActiveRecord-style (requires Nesso::Record)
+    my scalar $user = $n->create("users", { "username" => "bob" });
+    $user->save();
+
+    # Query records
+    my scalar $found = $n->find("users", 1);
+    my scalar $alice = $n->find_by("users", { "username" => "alice" });
+    my scalar $all = $n->all("users");
+    my scalar $active = $n->where("users", { "status" => "active" });
+
+    # Fetch related records
+    my scalar $posts = $n->related($user, "posts");
+    my scalar $author = $n->related($post, "author");
+
+    # Transactions
+    $n->transaction(func () {
+        $n->save($user);
+        $n->save($post);
+    });
+
+=head1 DESCRIPTION
+
+Nesso is a lightweight database model library for Strada. It provides a thin,
+practical layer over DBI for defining models, performing CRUD operations,
+and managing relationships between tables.
+
+Records are returned as B<Nesso::Record> objects (or custom subclasses),
+which can be used with either Data Mapper style (methods on the Nesso instance)
+or ActiveRecord style (methods on the record itself).
+
+=head1 CONSTRUCTOR
+
+=head2 new
+
+    my scalar $n = Nesso::new($dbh);
+
+Creates a new Nesso instance with the given DBI database handle.
+
+=head1 DATABASE METHODS
+
+=head2 set_db
+
+    $n->set_db($new_dbh);
+
+Swap the database handle. Useful for switching between databases.
+
+=head2 get_db
+
+    my scalar $dbh = $n->get_db();
+
+Returns the current DBI database handle.
+
+=head2 clone
+
+    my scalar $n2 = $n->clone($other_dbh);
+
+Creates a copy of this Nesso instance with a different database handle
+but the same model definitions and relationships. Useful for testing
+with separate databases.
+
+=head1 DEBUG MODE
+
+=head2 set_debug
+
+    $n->set_debug(1);    # Enable SQL logging
+    $n->set_debug(0);    # Disable SQL logging
+
+When debug mode is enabled, all SQL queries and their parameters are
+printed to stdout.
+
+=head2 get_debug
+
+    my int $debug = $n->get_debug();
+
+Returns 1 if debug mode is enabled, 0 otherwise.
+
+=head1 SCHEMA DEFINITION
+
+=head2 define
+
+    $n->define($model_name, $schema);
+
+Defines a model with the given name and schema hash. The schema hash
+should contain:
+
+=over 4
+
+=item * B<table> - The database table name
+
+=item * B<columns> - Array of column names
+
+=item * B<primary> - The primary key column name
+
+=item * B<class> - (Optional) Custom class name for records (must inherit Nesso::Record)
+
+=back
+
+Example:
+
+    $n->define("users", {
+        "table"   => "users",
+        "columns" => ["id", "username", "email", "password_hash", "created_at"],
+        "primary" => "id",
+        "class"   => "User"    # Optional: use custom User class
+    });
+
+=head2 columns
+
+    my scalar $cols = $n->columns($model_name);
+
+Returns the array of column names for the given model.
+
+=head1 CRUD OPERATIONS
+
+=head2 create
+
+    my scalar $record = $n->create($model_name, $attributes);
+
+Creates a new record object with the given attributes. The record is
+B<not saved> to the database until C<save()> is called.
+
+    my scalar $user = $n->create("users", {
+        "username" => "alice",
+        "email"    => "alice@example.com"
+    });
+    $n->save($user);    # Now it's in the database
+
+=head2 save
+
+    my int $id = $n->save($record);
+
+Saves a record to the database. If the record has a primary key value > 0,
+it performs an UPDATE; otherwise, it performs an INSERT.
+
+Returns the primary key value (the new ID for inserts).
+
+=head2 find
+
+    my scalar $record = $n->find($model_name, $id);
+
+Finds a record by its primary key value. Returns C<undef> if not found.
+
+    my scalar $user = $n->find("users", 42);
+
+=head2 find_by
+
+    my scalar $record = $n->find_by($model_name, $conditions);
+
+Finds the first record matching the given conditions hash.
+Returns C<undef> if not found.
+
+    my scalar $user = $n->find_by("users", { "email" => "alice@example.com" });
+
+Supports special directives in the conditions hash:
+
+=over 4
+
+=item * B<_order> - ORDER BY clause (e.g., "created_at DESC")
+
+=back
+
+=head2 where
+
+    my scalar $records = $n->where($model_name, $conditions);
+
+Finds all records matching the given conditions. Returns an array
+reference of record objects.
+
+    my scalar $active_users = $n->where("users", { "status" => "active" });
+
+Supports special directives in the conditions hash:
+
+=over 4
+
+=item * B<_order> - ORDER BY clause (e.g., "created_at DESC")
+
+=item * B<_limit> - LIMIT clause (e.g., 10)
+
+=item * B<_offset> - OFFSET clause (e.g., 20)
+
+=back
+
+Example with directives:
+
+    my scalar $recent = $n->where("posts", {
+        "status"  => "published",
+        "_order"  => "created_at DESC",
+        "_limit"  => 10,
+        "_offset" => 0
+    });
+
+=head2 all
+
+    my scalar $records = $n->all($model_name);
+
+Returns all records for the given model as an array reference.
+
+=head2 count
+
+    my int $count = $n->count($model_name, $conditions);
+
+Counts records matching the given conditions. Pass an empty hash
+to count all records.
+
+    my int $total = $n->count("users", {});
+    my int $active = $n->count("users", { "status" => "active" });
+
+=head2 delete
+
+    my int $rows = $n->delete($record);
+
+Deletes the given record from the database by its primary key.
+Returns the number of affected rows.
+
+=head2 query
+
+    my scalar $rows = $n->query($sql, $params);
+
+Executes a raw SQL query and returns the results as an array of hash
+references. Use this for complex queries that don't fit the ORM model.
+
+    my scalar $stats = $n->query(
+        "SELECT status, COUNT(*) as count FROM users GROUP BY status",
+        []
+    );
+
+=head1 TRANSACTIONS
+
+=head2 transaction
+
+    $n->transaction(func () {
+        # All operations here are atomic
+        $n->save($user);
+        $n->save($post);
+    });
+
+Wraps the given callback in a database transaction. If the callback
+completes normally, the transaction is committed. If an exception is
+thrown, the transaction is rolled back and the exception is re-thrown.
+
+=head1 RELATIONSHIPS
+
+Nesso supports three types of relationships: has_many, belongs_to, and has_one.
+
+=head2 has_many
+
+    $n->has_many($owner_model, $relation_name, $foreign_key);
+
+Declares a one-to-many relationship. The foreign key column exists on
+the related model's table.
+
+    # A user has many posts (posts.user_id references users.id)
+    $n->has_many("users", "posts", "user_id");
+
+=head2 belongs_to
+
+    $n->belongs_to($owner_model, $relation_name, $target_model, $foreign_key);
+
+Declares a many-to-one relationship. The foreign key column exists on
+the owner model's table.
+
+    # A post belongs to an author (posts.user_id references users.id)
+    $n->belongs_to("posts", "author", "users", "user_id");
+
+=head2 has_one
+
+    $n->has_one($owner_model, $relation_name, $target_model, $foreign_key);
+
+Declares a one-to-one relationship. The foreign key column exists on
+the target model's table.
+
+    # A user has one profile (profiles.user_id references users.id)
+    $n->has_one("users", "profile", "profiles", "user_id");
+
+=head2 related
+
+    my scalar $related = $n->related($record, $relation_name);
+
+Fetches related records for the given record and relation name.
+
+=over 4
+
+=item * For B<has_many>: Returns an array reference of related records
+
+=item * For B<belongs_to>: Returns a single record or C<undef>
+
+=item * For B<has_one>: Returns a single record or C<undef>
+
+=back
+
+Example:
+
+    my scalar $user = $n->find("users", 1);
+    my scalar $posts = $n->related($user, "posts");      # Array of posts
+
+    my scalar $post = $n->find("posts", 1);
+    my scalar $author = $n->related($post, "author");    # Single user
+
+=head1 CUSTOM MODEL CLASSES
+
+You can define custom classes for specific models to add business logic.
+Custom classes must inherit from Nesso::Record.
+
+    package User;
+    inherit Nesso::Record;
+
+    func set_password(scalar $self, str $password) void {
+        $self->{"password_hash"} = crypt::hash_password($password);
+        $self->save();
+    }
+
+    func authenticate(scalar $self, str $password) int {
+        return crypt::check_password($password, $self->{"password_hash"});
+    }
+
+    func full_name(scalar $self) str {
+        return $self->{"first_name"} . " " . $self->{"last_name"};
+    }
+
+Then specify the class in the model definition:
+
+    $n->define("users", {
+        "table"   => "users",
+        "columns" => ["id", "username", "password_hash", "first_name", "last_name"],
+        "primary" => "id",
+        "class"   => "User"
+    });
+
+Now all records from the "users" model are blessed as User objects:
+
+    my scalar $user = $n->find("users", 1);    # Returns a User, not Nesso::Record
+    $user->set_password("secret");              # Custom method
+    say($user->full_name());                    # Custom method
+    $user->save();                              # Inherited from Nesso::Record
+
+=head1 COMPLETE EXAMPLE
+
+    use lib "lib";
+    use DBI;
+    use Nesso;
+    use Nesso::Record;
+
+    # Connect to database
+    my scalar $db = DBI::connect("dbi:SQLite:blog.db", "", "");
+
+    # Create tables
+    DBI::exec($db, "CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY,
+        username TEXT NOT NULL,
+        email TEXT
+    )", []);
+
+    DBI::exec($db, "CREATE TABLE IF NOT EXISTS posts (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT
+    )", []);
+
+    # Set up Nesso
+    my scalar $n = Nesso::new($db);
+    $n->set_debug(1);    # Log SQL for debugging
+
+    # Define models
+    $n->define("users", {
+        "table"   => "users",
+        "columns" => ["id", "username", "email"],
+        "primary" => "id"
+    });
+
+    $n->define("posts", {
+        "table"   => "posts",
+        "columns" => ["id", "user_id", "title", "body"],
+        "primary" => "id"
+    });
+
+    # Define relationships
+    $n->has_many("users", "posts", "user_id");
+    $n->belongs_to("posts", "author", "users", "user_id");
+
+    # Create a user
+    my scalar $user = $n->create("users", {
+        "username" => "alice",
+        "email"    => "alice@example.com"
+    });
+    $user->save();
+
+    # Create some posts
+    my scalar $post1 = $n->create("posts", {
+        "user_id" => $user->id(),
+        "title"   => "First Post",
+        "body"    => "Hello, world!"
+    });
+    $post1->save();
+
+    # Query and display
+    my scalar $all_users = $n->all("users");
+    foreach my scalar $u (@{$all_users}) {
+        say("User: " . $u->{"username"});
+
+        my scalar $posts = $u->related("posts");
+        foreach my scalar $p (@{$posts}) {
+            say("  Post: " . $p->{"title"});
+        }
+    }
+
+    # Transaction example
+    $n->transaction(func () {
+        my scalar $new_user = $n->create("users", { "username" => "bob" });
+        $new_user->save();
+    });
+
+=head1 SEE ALSO
+
+L<DBI> - Database interface used by Nesso
+
+L<Nesso::Record> - ActiveRecord-style methods for records
+
+=head1 AUTHOR
+
+Michael J. Flickinger
+
+=head1 LICENSE
+
+GNU General Public License, version 2
+
+=cut
