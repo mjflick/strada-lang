@@ -478,7 +478,8 @@ func parse_type(scalar $parser) int {
             }
         }
         parser_expect($parser, "RPAREN");
-        parse_type($parser);  # Parse and discard return type
+        my int $funcptr_ret = parse_type($parser);  # Parse return type
+        $parser->{"last_funcptr_return"} = $funcptr_ret;
         return TYPE_FUNCPTR();
     }
     
@@ -3002,12 +3003,18 @@ func parse_struct(scalar $parser) scalar {
     while (!parser_check($parser, "RBRACE")) {
         # Fields in structs don't have sigils: "int x;" not "int $x;"
         my int $field_type = parse_type($parser);
-        
+
+        # Get funcptr_return if this is a function pointer field
+        my int $funcptr_return = -1;
+        if ($field_type == TYPE_FUNCPTR()) {
+            $funcptr_return = $parser->{"last_funcptr_return"};
+        }
+
         my scalar $field_tok = parser_current($parser);
         parser_expect($parser, "IDENT");
-        
-        ast_add_field($st, $field_tok->{"value"}, $field_type, "$");
-        
+
+        ast_add_field($st, $field_tok->{"value"}, $field_type, "$", $funcptr_return);
+
         parser_expect($parser, "SEMI");
     }
     

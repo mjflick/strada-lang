@@ -70,6 +70,7 @@ test_run "$EXAMPLES_DIR/negative_index.strada" "negative_index" "Negative index"
 # Test: Function pointers and callbacks
 test_run "$EXAMPLES_DIR/test_funcptr.strada" "test_funcptr" "Function pointers"
 test_run "$EXAMPLES_DIR/test_callbacks.strada" "test_callbacks" "Callbacks"
+test_output_contains "$EXAMPLES_DIR/test_void_funcptr.strada" "test_void_funcptr" "PASS: All void function pointer tests completed" "Void funcptr"
 
 # Test: Type introspection
 test_run "$EXAMPLES_DIR/test_clone.strada" "test_clone" "Clone"

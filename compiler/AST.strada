@@ -311,11 +311,13 @@ func ast_new_struct(str $name) scalar {
 }
 
 # Add field to struct
-func ast_add_field(scalar $st, str $name, int $field_type, str $sigil) void {
+# funcptr_return is optional - pass -1 for non-funcptr fields
+func ast_add_field(scalar $st, str $name, int $field_type, str $sigil, int $funcptr_return) void {
     my hash %field = ();
     $field{"name"} = $name;
     $field{"field_type"} = $field_type;
     $field{"sigil"} = $sigil;
+    $field{"funcptr_return"} = $funcptr_return;
     my scalar $fields = $st->{"fields"};
     push($fields, \%field);
     $st->{"field_count"} = $st->{"field_count"} + 1;

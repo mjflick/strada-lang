@@ -136,6 +136,19 @@ StradaValue* strada_new_undef(void) {
     return sv;
 }
 
+/* Static undef singleton for void-like returns (push, etc.)
+ * This avoids allocating a new StradaValue for each void operation.
+ * Has very high refcount so it's never freed. */
+static StradaValue __strada_undef_static = {
+    .type = STRADA_UNDEF,
+    .refcount = INT32_MAX,  /* Effectively immortal */
+    .blessed_package = NULL
+};
+
+StradaValue* strada_undef_static(void) {
+    return &__strada_undef_static;
+}
+
 StradaValue* strada_new_int(int64_t i) {
     StradaValue *sv = malloc(sizeof(StradaValue));
     sv->type = STRADA_INT;
@@ -378,43 +391,55 @@ int strada_to_bool(StradaValue *sv) {
 /* Compare StradaValue string to C string literal - returns 1 if equal */
 int strada_str_eq_lit(StradaValue *sv, const char *lit) {
     if (!sv || !lit) return 0;
-    const char *str = strada_to_str(sv);
-    return strcmp(str, lit) == 0;
+    char *str = strada_to_str(sv);
+    int result = strcmp(str, lit) == 0;
+    free(str);
+    return result;
 }
 
 /* Compare StradaValue string to C string literal - returns 1 if not equal */
 int strada_str_ne_lit(StradaValue *sv, const char *lit) {
     if (!sv || !lit) return 1;
-    const char *str = strada_to_str(sv);
-    return strcmp(str, lit) != 0;
+    char *str = strada_to_str(sv);
+    int result = strcmp(str, lit) != 0;
+    free(str);
+    return result;
 }
 
 /* Compare StradaValue string to C string literal - returns 1 if less than */
 int strada_str_lt_lit(StradaValue *sv, const char *lit) {
     if (!sv || !lit) return 0;
-    const char *str = strada_to_str(sv);
-    return strcmp(str, lit) < 0;
+    char *str = strada_to_str(sv);
+    int result = strcmp(str, lit) < 0;
+    free(str);
+    return result;
 }
 
 /* Compare StradaValue string to C string literal - returns 1 if greater than */
 int strada_str_gt_lit(StradaValue *sv, const char *lit) {
     if (!sv || !lit) return 0;
-    const char *str = strada_to_str(sv);
-    return strcmp(str, lit) > 0;
+    char *str = strada_to_str(sv);
+    int result = strcmp(str, lit) > 0;
+    free(str);
+    return result;
 }
 
 /* Compare StradaValue string to C string literal - returns 1 if less than or equal */
 int strada_str_le_lit(StradaValue *sv, const char *lit) {
     if (!sv || !lit) return 0;
-    const char *str = strada_to_str(sv);
-    return strcmp(str, lit) <= 0;
+    char *str = strada_to_str(sv);
+    int result = strcmp(str, lit) <= 0;
+    free(str);
+    return result;
 }
 
 /* Compare StradaValue string to C string literal - returns 1 if greater than or equal */
 int strada_str_ge_lit(StradaValue *sv, const char *lit) {
     if (!sv || !lit) return 0;
-    const char *str = strada_to_str(sv);
-    return strcmp(str, lit) >= 0;
+    char *str = strada_to_str(sv);
+    int result = strcmp(str, lit) >= 0;
+    free(str);
+    return result;
 }
 
 /* ===== INCREMENT/DECREMENT OPERATIONS ===== */
@@ -880,7 +905,7 @@ void strada_hash_set(StradaHash *hv, const char *key, StradaValue *sv) {
 }
 
 StradaValue* strada_hash_get(StradaHash *hv, const char *key) {
-    if (!hv || !key) return strada_new_undef();
+    if (!hv || !key) return strada_undef_static();
 
     unsigned int hash = strada_hash_string(key);
     unsigned int bucket = hash % hv->num_buckets;
@@ -894,7 +919,7 @@ StradaValue* strada_hash_get(StradaHash *hv, const char *key) {
         entry = entry->next;
     }
 
-    return strada_new_undef();
+    return strada_undef_static();
 }
 
 int strada_hash_exists(StradaHash *hv, const char *key) {
@@ -5705,7 +5730,12 @@ StradaValue* strada_reverse_sv(StradaValue *sv) {
     }
 
     /* For strings and other types, reverse as string */
-    return strada_new_str(strada_reverse(strada_to_str(sv)));
+    char *str = strada_to_str(sv);
+    char *reversed = strada_reverse(str);
+    StradaValue *result = strada_new_str(reversed);
+    free(str);
+    free(reversed);
+    return result;
 }
 
 char* strada_repeat(const char *str, int count) {
@@ -5823,21 +5853,25 @@ int strada_byte_length(StradaValue *sv) {
         return 0;
     }
 
-    const char *str = strada_to_str(sv);
-    return str ? (int)strlen(str) : 0;
+    char *str = strada_to_str(sv);
+    int result = str ? (int)strlen(str) : 0;
+    free(str);
+    return result;
 }
 
 /* Substring by byte positions (not UTF-8 character positions) */
 StradaValue* strada_byte_substr(StradaValue *sv, int start, int len) {
     if (!sv) return strada_new_str("");
     const char *str = NULL;
+    char *allocated_str = NULL;
     size_t str_len = 0;
 
     if (sv->type == STRADA_STR && sv->value.pv) {
         str = sv->value.pv;
         str_len = sv->struct_size > 0 ? sv->struct_size : strlen(str);
     } else {
-        str = strada_to_str(sv);
+        allocated_str = strada_to_str(sv);
+        str = allocated_str;
         str_len = strlen(str);
     }
 
@@ -5848,6 +5882,7 @@ StradaValue* strada_byte_substr(StradaValue *sv, int start, int len) {
     }
 
     if ((size_t)start >= str_len) {
+        free(allocated_str);
         return strada_new_str("");
     }
 
@@ -5863,7 +5898,9 @@ StradaValue* strada_byte_substr(StradaValue *sv, int start, int len) {
         actual_len = str_len - start;
     }
 
-    return strada_new_str_len(str + start, actual_len);
+    StradaValue *result = strada_new_str_len(str + start, actual_len);
+    free(allocated_str);
+    return result;
 }
 
 /* Pack values into binary string - Perl-like pack() */
@@ -6369,18 +6406,22 @@ StradaValue* strada_base64_encode(StradaValue *sv) {
     if (!sv) return strada_new_str("");
 
     const unsigned char *data = NULL;
+    char *allocated_str = NULL;
     size_t len = 0;
 
     if (sv->type == STRADA_STR && sv->value.pv) {
         data = (const unsigned char *)sv->value.pv;
         len = sv->struct_size > 0 ? sv->struct_size : strlen(sv->value.pv);
     } else {
-        const char *str = strada_to_str(sv);
-        data = (const unsigned char *)str;
-        len = str ? strlen(str) : 0;
+        allocated_str = strada_to_str(sv);
+        data = (const unsigned char *)allocated_str;
+        len = allocated_str ? strlen(allocated_str) : 0;
     }
 
-    if (!data || len == 0) return strada_new_str("");
+    if (!data || len == 0) {
+        free(allocated_str);
+        return strada_new_str("");
+    }
 
     /* Output length: 4 chars for every 3 bytes, rounded up */
     size_t out_len = ((len + 2) / 3) * 4;
@@ -6412,6 +6453,7 @@ StradaValue* strada_base64_encode(StradaValue *sv) {
     result[out_len] = '\0';
     StradaValue *ret = strada_new_str(result);
     free(result);
+    free(allocated_str);
     return ret;
 }
 
@@ -8792,7 +8834,12 @@ StradaValue* strada_method_call(StradaValue *obj, const char *method, StradaValu
         exit(1);
     }
 
-    return func(obj, args);
+    StradaValue *result = func(obj, args);
+    /* Free the args array (created by strada_pack_args) after the call */
+    if (args) {
+        strada_decref(args);
+    }
+    return result;
 }
 
 /* Helper to get first parent package (for SUPER:: calls) */
@@ -8891,7 +8938,12 @@ StradaValue* strada_super_call(StradaValue *obj, const char *from_package,
     char saved_pkg[OOP_MAX_NAME_LEN];
     snprintf(saved_pkg, OOP_MAX_NAME_LEN, "%s", oop_current_method_package);
 
-    return func(obj, args);
+    StradaValue *result = func(obj, args);
+    /* Free the args array (created by strada_pack_args) after the call */
+    if (args) {
+        strada_decref(args);
+    }
+    return result;
 }
 
 /* Set current method package (for SUPER:: context) */
@@ -9451,10 +9503,12 @@ StradaValue* strada_mkdtemp(StradaValue *template) {
 /* ===== COMMAND EXECUTION (popen) ===== */
 
 StradaValue* strada_popen(StradaValue *cmd, StradaValue *mode) {
-    const char *c = strada_to_str(cmd);
-    const char *m = strada_to_str(mode);
+    char *c = strada_to_str(cmd);
+    char *m = strada_to_str(mode);
 
     FILE *fp = popen(c, m);
+    free(c);
+    free(m);
     if (!fp) return strada_new_undef();
 
     return strada_new_filehandle(fp);
@@ -9471,9 +9525,13 @@ StradaValue* strada_pclose(StradaValue *fh) {
 
 /* Run command and capture stdout (like Perl's qx// or backticks) */
 StradaValue* strada_qx(StradaValue *cmd) {
-    const char *c = strada_to_str(cmd);
+    char *c = strada_to_str(cmd);
     FILE *fp = popen(c, "r");
-    if (!fp) return strada_new_str("");
+    if (!fp) {
+        free(c);
+        return strada_new_str("");
+    }
+    free(c);
 
     /* Read all output into a buffer */
     size_t capacity = 4096;

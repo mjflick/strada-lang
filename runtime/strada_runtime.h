@@ -291,6 +291,7 @@ struct StradaHash {
 
 /* Value creation functions */
 StradaValue* strada_new_undef(void);
+StradaValue* strada_undef_static(void);  /* Static singleton for void returns */
 StradaValue* strada_new_int(int64_t i);
 StradaValue* strada_new_num(double n);
 StradaValue* strada_safe_div(double a, double b);      /* Returns undef if b==0 */
