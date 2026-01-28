@@ -196,3 +196,8 @@ test_compile "$EXAMPLES_DIR/ps.strada" "ps" "ps command"
 
 # Test: LWP library
 test_output_contains "$EXAMPLES_DIR/test_lwp.strada" "test_lwp" "All LWP tests passed" "LWP HTTP library"
+
+# Test: Nesso ORM (requires SQLite)
+EXTRA_LDFLAGS="-lsqlite3"
+test_output_contains "lib/Nesso/test_nesso.strada" "test_nesso" "PASS: All Nesso tests passed" "Nesso ORM"
+EXTRA_LDFLAGS=""

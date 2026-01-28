@@ -3121,6 +3121,12 @@ func parse_version(scalar $parser, scalar $program) void {
 func parse_inherit(scalar $parser, scalar $program) void {
     parser_expect($parser, "INHERIT");
 
+    # Get current package as child
+    my str $child_pkg = $parser->{"current_package"};
+    if (length($child_pkg) == 0) {
+        parser_error($parser, "inherit statement must be inside a package");
+    }
+
     # Parse first parent
     my str $parent_name = "";
     my scalar $tok = parser_current($parser);
@@ -3135,7 +3141,7 @@ func parse_inherit(scalar $parser, scalar $program) void {
         $parent_name = $parent_name . "::" . $next_tok->{"value"};
     }
 
-    ast_add_inherit($program, $parent_name);
+    ast_add_inherit($program, $child_pkg, $parent_name);
 
     # Parse additional parents (comma-separated)
     while (parser_check($parser, "COMMA")) {
@@ -3154,7 +3160,7 @@ func parse_inherit(scalar $parser, scalar $program) void {
             $parent_name = $parent_name . "::" . $next_tok->{"value"};
         }
 
-        ast_add_inherit($program, $parent_name);
+        ast_add_inherit($program, $child_pkg, $parent_name);
     }
 
     parser_expect($parser, "SEMI");
@@ -3963,21 +3969,27 @@ func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) sca
             if ($is_async == 1) {
                 $fn->{"type"} = NODE_ASYNC_FUNC();
             }
-            # Auto-prefix function names with package name when inside a simple package
-            # (single-word packages like "Animal", not module-style "Math::Utils")
+            # Auto-prefix function names with package name
             my str $pkg = $program->{"package"};
             my str $fn_name = $fn->{"name"};
             # Store the package in the function node for OOP registration
             $fn->{"package"} = $pkg;
-            # Only auto-prefix for simple single-word packages (no :: in name)
-            my int $pkg_colon_idx = index($pkg, "::");
-            if (length($pkg) > 0 && $pkg ne "main" && $fn_name ne "main" && $pkg_colon_idx < 0) {
+            # Auto-prefix for all packages (not main)
+            # For packages with :: (e.g., Nesso::Record), convert to _ for C identifier
+            if (length($pkg) > 0 && $pkg ne "main" && $fn_name ne "main") {
+                # Convert :: to _ for C-compatible prefix
+                my str $c_pkg = $pkg;
+                my int $colon_idx = index($c_pkg, "::");
+                while ($colon_idx >= 0) {
+                    $c_pkg = substr($c_pkg, 0, $colon_idx) . "_" . substr($c_pkg, $colon_idx + 2, length($c_pkg) - $colon_idx - 2);
+                    $colon_idx = index($c_pkg, "::");
+                }
                 # Check if function already has the package prefix
-                my str $prefix = $pkg . "_";
+                my str $prefix = $c_pkg . "_";
                 my int $prefix_len = length($prefix);
                 if (length($fn_name) < $prefix_len || substr($fn_name, 0, $prefix_len) ne $prefix) {
                     # Always prefix functions in a package
-                    $fn->{"name"} = $pkg . "_" . $fn_name;
+                    $fn->{"name"} = $c_pkg . "_" . $fn_name;
                 }
             }
             ast_add_function($program, $fn);

@@ -226,10 +226,13 @@ func ast_add_use(scalar $program, str $module) void {
     $program->{"use_count"} = $program->{"use_count"} + 1;
 }
 
-# Add inherit to program (parent package name)
-func ast_add_inherit(scalar $program, str $parent) void {
+# Add inherit to program (child and parent package names)
+func ast_add_inherit(scalar $program, str $child, str $parent) void {
     my scalar $inherits = $program->{"inherits"};
-    push($inherits, $parent);
+    my hash %entry = ();
+    $entry{"child"} = $child;
+    $entry{"parent"} = $parent;
+    push($inherits, \%entry);
     $program->{"inherit_count"} = $program->{"inherit_count"} + 1;
 }
 

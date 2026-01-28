@@ -1,0 +1,107 @@
+/*
+ This file is part of the Strada Language (https://github.com/mjflick/strada-lang).
+ Copyright (c) 2026 Michael J. Flickinger
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, version 2.
+
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+# NessoRecord - Record object with ActiveRecord-style methods
+#
+# Usage:
+#   my scalar $user = $n->create("users", { "name" => "Alice" });
+#   $user->save();
+#   $user->update({ "name" => "Bob" });
+#   $user->delete();
+#   $user->reload();
+#   my scalar $posts = $user->related("posts");
+
+package Nesso::Record;
+
+# Save this record to the database (INSERT or UPDATE)
+func save(scalar $self) int {
+    my scalar $nesso = $self->{"_nesso"};
+    return Nesso::save($nesso, $self);
+}
+
+# Update attributes and save in one call
+func update(scalar $self, scalar $attrs) int {
+    my array @keys = keys($attrs);
+    my int $i = 0;
+    my int $n = scalar(@keys);
+    while ($i < $n) {
+        my str $key = @keys[$i];
+        $self->{$key} = $attrs->{$key};
+        $i++;
+    }
+    return $self->save();
+}
+
+# Delete this record from the database
+func delete(scalar $self) int {
+    my scalar $nesso = $self->{"_nesso"};
+    return Nesso::delete($nesso, $self);
+}
+
+# Reload this record from the database
+func reload(scalar $self) scalar {
+    my scalar $nesso = $self->{"_nesso"};
+    my str $model = $self->{"_model"};
+    my scalar $schema = Nesso::get_schema($nesso, $model);
+    my str $pk = $schema->{"primary"};
+    my scalar $pk_val = $self->{$pk};
+
+    my scalar $fresh = Nesso::find($nesso, $model, $pk_val + 0);
+    if (defined($fresh)) {
+        # Copy all fields from fresh record
+        my array @keys = keys($fresh);
+        my int $i = 0;
+        my int $n = scalar(@keys);
+        while ($i < $n) {
+            my str $key = @keys[$i];
+            if ($key ne "_nesso") {
+                $self->{$key} = $fresh->{$key};
+            }
+            $i++;
+        }
+    }
+    return $self;
+}
+
+# Fetch related records
+func related(scalar $self, str $name) scalar {
+    my scalar $nesso = $self->{"_nesso"};
+    return Nesso::related($nesso, $self, $name);
+}
+
+# Get the model name
+func model(scalar $self) str {
+    return $self->{"_model"};
+}
+
+# Get the primary key value
+func id(scalar $self) scalar {
+    my scalar $nesso = $self->{"_nesso"};
+    my str $model = $self->{"_model"};
+    my scalar $schema = Nesso::get_schema($nesso, $model);
+    my str $pk = $schema->{"primary"};
+    return $self->{$pk};
+}
+
+# Check if this is a new record (not yet saved)
+func is_new(scalar $self) int {
+    my scalar $id_val = $self->id();
+    if (!defined($id_val) || $id_val + 0 == 0) {
+        return 1;
+    }
+    return 0;
+}

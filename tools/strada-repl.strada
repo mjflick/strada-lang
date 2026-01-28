@@ -30,7 +30,8 @@ my array @g_lib_paths_low = (); # Library search paths -LL (low priority, search
 my str $g_current_package = ""; # Current package name
 my int $g_eval_count = 0;       # Counter for unique .so names
 my str $g_tmpdir = "/tmp";      # Temp directory for generated files
-my int $g_debug = 0;            # Debug mode
+my int $g_debug = 0;            # Debug mode (shows generated Strada)
+my int $g_cdebug = 0;           # C debug mode (shows generated C)
 my str $g_compiler = "";        # Detected compiler: "libtcc", "tcc", or "gcc"
 my int $g_libtcc_available = 0; # 1 if libtcc is usable
 
@@ -784,6 +785,23 @@ func eval_input(str $input, scalar $state) scalar {
         return undef;
     }
 
+    # Show generated C code if cdebug is enabled
+    if ($g_cdebug == 1) {
+        say("");
+        say(color_cyan("=== Generated C Code ==="));
+        my scalar $cfh_dbg = sys::open($c_file, "r");
+        if (defined($cfh_dbg)) {
+            my scalar $cline_dbg = sys::fgets($cfh_dbg, 65536);
+            while (defined($cline_dbg)) {
+                print($cline_dbg);
+                $cline_dbg = sys::fgets($cfh_dbg, 65536);
+            }
+            sys::close($cfh_dbg);
+        }
+        say(color_cyan("========================"));
+        say("");
+    }
+
     my scalar $result = undef;
 
     # Step 2: Compile C to .so using selected backend
@@ -1392,7 +1410,8 @@ func print_help() void {
     say("  .load FILE          - Load and execute code from file");
     say("  .soinfo FILE        - Show exported functions from .so/.o/.a file");
     say("  .clear              - Clear all state");
-    say("  .debug              - Toggle debug mode");
+    say("  .debug              - Toggle debug mode (show generated Strada)");
+    say("  .cdebug             - Toggle C debug mode (show generated C)");
     say("  .compiler           - Show compiler backend");
     say("  .set compiler=X     - Change compiler (libtcc, tcc, gcc)");
     say("  .memprof            - Toggle memory profiling");
@@ -2009,9 +2028,19 @@ func main(int $argc, array @argv) int {
         if ($input eq ".debug") {
             $g_debug = 1 - $g_debug;
             if ($g_debug == 1) {
-                say("Debug mode ON");
+                say("Debug mode ON (shows generated Strada)");
             } else {
                 say("Debug mode OFF");
+            }
+            next;
+        }
+
+        if ($input eq ".cdebug") {
+            $g_cdebug = 1 - $g_cdebug;
+            if ($g_cdebug == 1) {
+                say("C debug mode ON (shows generated C)");
+            } else {
+                say("C debug mode OFF");
             }
             next;
         }

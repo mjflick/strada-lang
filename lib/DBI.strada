@@ -1395,11 +1395,15 @@ static int dbi_rows(DbiStatement *sth) {
 func connect(str $dsn, str $username, str $password) scalar {
     my int $dbh_ptr = 0;
     __C__ {
-        const char *dsn_str = strada_to_str(dsn);
-        const char *user_str = strada_to_str(username);
-        const char *pass_str = strada_to_str(password);
+        char *dsn_str = strada_to_str(dsn);
+        char *user_str = strada_to_str(username);
+        char *pass_str = strada_to_str(password);
         DbiHandle *dbh = dbi_connect_raw(dsn_str, user_str, pass_str, 1, 1);
+        strada_decref(dbh_ptr);  /* Free old value before reassign */
         dbh_ptr = strada_new_int((int64_t)(intptr_t)dbh);
+        free(dsn_str);
+        free(user_str);
+        free(pass_str);
     }
 
     if ($dbh_ptr == 0) {
@@ -1432,16 +1436,20 @@ func connect_attrs(str $dsn, str $username, str $password, scalar $attrs) scalar
 
     my int $dbh_ptr = 0;
     __C__ {
-        const char *dsn_str = strada_to_str(dsn);
-        const char *user_str = strada_to_str(username);
-        const char *pass_str = strada_to_str(password);
+        char *dsn_str = strada_to_str(dsn);
+        char *user_str = strada_to_str(username);
+        char *pass_str = strada_to_str(password);
         int ac = (int)strada_to_int(auto_commit);
         int pe = (int)strada_to_int(print_error);
         DbiHandle *dbh = dbi_connect_raw(dsn_str, user_str, pass_str, ac, pe);
         if (dbh) {
             dbh->raise_error = (int)strada_to_int(raise_error);
         }
+        strada_decref(dbh_ptr);  /* Free old value before reassign */
         dbh_ptr = strada_new_int((int64_t)(intptr_t)dbh);
+        free(dsn_str);
+        free(user_str);
+        free(pass_str);
     }
 
     if ($dbh_ptr == 0) {
@@ -1479,9 +1487,11 @@ func prepare(scalar $dbh, str $sql) scalar {
 
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
-        const char *sql_str = strada_to_str(sql);
+        char *sql_str = strada_to_str(sql);
         DbiStatement *sth = dbi_prepare(h, sql_str);
+        strada_decref(sth_ptr);  /* Free old value before reassign */
         sth_ptr = strada_new_int((int64_t)(intptr_t)sth);
+        free(sql_str);
     }
 
     if ($sth_ptr == 0) {
@@ -1545,6 +1555,7 @@ func execute(scalar $sth, scalar $params) int {
     my int $result = 0;
     __C__ {
         DbiStatement *s2 = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
+        strada_decref(result);  /* Free old value before reassign */
         result = strada_new_int(dbi_execute_raw(s2));
     }
     $sth->{"_executed"} = 1;
@@ -1580,6 +1591,8 @@ func fetchrow_array(scalar $sth) scalar {
 
     __C__ {
         DbiStatement *s = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
+        strada_decref(rc);
+        strada_decref(col_count);
         rc = strada_new_int(dbi_step(s));
         col_count = strada_new_int(dbi_column_count(s));
     }
@@ -1600,6 +1613,11 @@ func fetchrow_array(scalar $sth) scalar {
         __C__ {
             DbiStatement *s = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
             int idx = (int)strada_to_int(i);
+            strada_decref(is_null);
+            strada_decref(col_type);
+            strada_decref(int_val);
+            strada_decref(num_val);
+            strada_decref(str_val);
             is_null = strada_new_int(dbi_column_is_null(s, idx));
             col_type = strada_new_int(dbi_column_type(s, idx));
             int_val = strada_new_int(dbi_column_int(s, idx));
@@ -1636,6 +1654,8 @@ func fetchrow_hashref(scalar $sth) scalar {
 
     __C__ {
         DbiStatement *s = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
+        strada_decref(rc);
+        strada_decref(col_count);
         rc = strada_new_int(dbi_step(s));
         col_count = strada_new_int(dbi_column_count(s));
     }
@@ -1657,6 +1677,12 @@ func fetchrow_hashref(scalar $sth) scalar {
         __C__ {
             DbiStatement *s = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
             int idx = (int)strada_to_int(i);
+            strada_decref(name);
+            strada_decref(is_null);
+            strada_decref(col_type);
+            strada_decref(int_val);
+            strada_decref(num_val);
+            strada_decref(str_val);
             char *n = dbi_column_name(s, idx);
             name = strada_new_str(n);
             free(n);
@@ -1727,6 +1753,7 @@ func begin_work(scalar $dbh) int {
     my int $result = 0;
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
+        strada_decref(result);
         result = strada_new_int(dbi_begin_work(h));
     }
     return $result;
@@ -1741,6 +1768,7 @@ func commit(scalar $dbh) int {
     my int $result = 0;
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
+        strada_decref(result);
         result = strada_new_int(dbi_commit(h));
     }
     return $result;
@@ -1755,6 +1783,7 @@ func rollback(scalar $dbh) int {
     my int $result = 0;
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
+        strada_decref(result);
         result = strada_new_int(dbi_rollback(h));
     }
     return $result;
@@ -1770,10 +1799,12 @@ func quote(scalar $dbh, str $value) str {
     my str $result = "";
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
-        const char *val_str = strada_to_str(value);
+        char *val_str = strada_to_str(value);
         char *quoted = dbi_quote(h, val_str);
+        strada_decref(result);
         result = strada_new_str(quoted);
         free(quoted);
+        free(val_str);
     }
     return $result;
 }
@@ -1787,6 +1818,7 @@ func last_insert_id(scalar $dbh) int {
     my int $result = 0;
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
+        strada_decref(result);
         result = strada_new_int(dbi_last_insert_id(h));
     }
     return $result;
@@ -1802,6 +1834,7 @@ func errstr(scalar $dbh) str {
     my str $result = "";
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
+        strada_decref(result);
         result = strada_new_str(dbi_errstr(h));
     }
     return $result;
@@ -1816,6 +1849,7 @@ func err(scalar $dbh) int {
     my int $result = 0;
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
+        strada_decref(result);
         result = strada_new_int(dbi_err(h));
     }
     return $result;
@@ -1833,16 +1867,22 @@ func set_raise_error(scalar $dbh, int $flag) void {
     }
 }
 
-# Finish statement
+# Finish statement and free resources
 func finish(scalar $sth) void {
     if (!defined($sth)) {
         return;
     }
     my int $sth_ptr = $sth->{"_ptr"};
+    if ($sth_ptr == 0) {
+        return;  # Already freed
+    }
     __C__ {
         DbiStatement *stmt = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
         dbi_finish(stmt);
+        dbi_free_statement(stmt);
     }
+    # Mark as freed to prevent use-after-free
+    $sth->{"_ptr"} = 0;
 }
 
 # Get number of rows affected
@@ -1854,6 +1894,7 @@ func rows(scalar $sth) int {
     my int $result = 0;
     __C__ {
         DbiStatement *stmt = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
+        strada_decref(result);
         result = strada_new_int(dbi_rows(stmt));
     }
     return $result;
@@ -1869,6 +1910,7 @@ func column_names(scalar $sth) scalar {
     my int $col_count = 0;
     __C__ {
         DbiStatement *stmt = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
+        strada_decref(col_count);
         col_count = strada_new_int(dbi_column_count(stmt));
     }
 
@@ -1880,6 +1922,7 @@ func column_names(scalar $sth) scalar {
             DbiStatement *stmt = (DbiStatement *)(intptr_t)strada_to_int(sth_ptr);
             int idx = (int)strada_to_int(i);
             char *n = dbi_column_name(stmt, idx);
+            strada_decref(name);
             name = strada_new_str(n);
             free(n);
         }
@@ -1899,6 +1942,7 @@ func ping(scalar $dbh) int {
     my int $result = 0;
     __C__ {
         DbiHandle *h = (DbiHandle *)(intptr_t)strada_to_int(dbh_ptr);
+        strada_decref(result);
         result = strada_new_int(dbi_ping(h));
     }
     return $result;

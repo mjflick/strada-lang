@@ -914,16 +914,46 @@ func analyze_expression(scalar $ctx, scalar $expr) void {
         my scalar $fn_info = $ctx->{"functions"}->{$lookup_name};
         my int $is_reg = $fn_info->{"is_registered"};
         if ($is_reg == 0) {
-            # Not found - but allow namespaced calls (e.g., JSON::encode)
-            # These are resolved at runtime via module loading
+            # Not found - try package-prefixed name if we're in a package
             if ($colon_idx < 0) {
-                semantic_error("undefined function '" . $name . "'", $line);
+                my scalar $cur_fn = $ctx->{"current_func"};
+                my str $pkg = "";
+                my int $has_cur_fn = 0;
+                if ($cur_fn) {
+                    $has_cur_fn = 1;
+                }
+                if ($has_cur_fn == 1) {
+                    $pkg = $cur_fn->{"package"};
+                }
+                if (length($pkg) > 0 && $pkg ne "main") {
+                    # Convert :: to _ in package name
+                    my str $c_pkg = $pkg;
+                    my int $ci = index($c_pkg, "::");
+                    while ($ci >= 0) {
+                        $c_pkg = substr($c_pkg, 0, $ci) . "_" . substr($c_pkg, $ci + 2, length($c_pkg) - $ci - 2);
+                        $ci = index($c_pkg, "::");
+                    }
+                    # Try package-prefixed name
+                    my str $prefixed_name = $c_pkg . "_" . $name;
+                    my scalar $fn_info_pkg = $ctx->{"functions"}->{$prefixed_name};
+                    if ($fn_info_pkg->{"is_registered"} == 1) {
+                        # Found it! Update for continued validation
+                        $lookup_name = $prefixed_name;
+                        $fn_info = $fn_info_pkg;
+                        $is_reg = 1;
+                    }
+                }
+                if ($is_reg == 0) {
+                    semantic_error("undefined function '" . $name . "'", $line);
+                }
             }
-            # For namespaced functions, just analyze arguments and trust runtime
-            for (my int $i = 0; $i < $arg_count; $i = $i + 1) {
-                analyze_expression($ctx, $args->[$i]);
+            if ($is_reg == 0) {
+                # For namespaced functions, just analyze arguments and trust runtime
+                for (my int $i = 0; $i < $arg_count; $i = $i + 1) {
+                    analyze_expression($ctx, $args->[$i]);
+                }
+                return;
             }
-            return;
         }
 
         my int $expected = $fn_info->{"param_count"};
