@@ -2397,11 +2397,12 @@ void strada_throw(const char *msg) {
 
 void strada_throw_value(StradaValue *sv) {
     /* Store the actual exception value for typed catches */
+    /* Take ownership of sv directly - caller transfers ownership */
     if (strada_exception_value) {
         strada_decref(strada_exception_value);
     }
     strada_exception_value = sv;
-    strada_incref(strada_exception_value);
+    /* Note: don't incref - we take ownership from caller */
 
     /* Also store the string message for backward compat and error reporting */
     char *msg = strada_to_str(sv);

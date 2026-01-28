@@ -2730,20 +2730,34 @@ func gen_expression(scalar $cg, scalar $expr) void {
         if ($name eq "delete") {
             my scalar $args = $expr->{"args"};
             my scalar $arg0 = $args->[0];
-            
+
             # Check if single arg is a hash access node
             if ($expr->{"arg_count"} == 1 && $arg0->{"type"} == NODE_HASH_ACCESS()) {
-                emit($cg, "strada_hash_delete(strada_deref_hash(");
+                my scalar $key_expr = $arg0->{"key"};
+                my int $key_needs_cleanup = needs_temp_cleanup($cg, $key_expr);
+                # Generate a block to properly clean up C string (and key temp if needed)
+                emit($cg, "({ StradaValue *__del_key = ");
+                gen_expression($cg, $key_expr);
+                emit($cg, "; char *__del_key_str = strada_to_str(__del_key); strada_hash_delete(strada_deref_hash(");
                 gen_expression($cg, $arg0->{"hash"});
-                emit($cg, "), strada_to_str(");
-                gen_expression($cg, $arg0->{"key"});
-                emit($cg, "))");
+                emit($cg, "), __del_key_str); free(__del_key_str); ");
+                if ($key_needs_cleanup == 1) {
+                    emit($cg, "strada_decref(__del_key); ");
+                }
+                emit($cg, "strada_undef_static(); })");
             } else {
-                emit($cg, "strada_hash_delete(strada_deref_hash(");
+                # Two-arg form: delete($hash, $key)
+                my scalar $key_expr = $args->[1];
+                my int $key_needs_cleanup = needs_temp_cleanup($cg, $key_expr);
+                emit($cg, "({ StradaValue *__del_key = ");
+                gen_expression($cg, $key_expr);
+                emit($cg, "; char *__del_key_str = strada_to_str(__del_key); strada_hash_delete(strada_deref_hash(");
                 gen_expression($cg, $args->[0]);
-                emit($cg, "), strada_to_str(");
-                gen_expression($cg, $args->[1]);
-                emit($cg, "))");
+                emit($cg, "), __del_key_str); free(__del_key_str); ");
+                if ($key_needs_cleanup == 1) {
+                    emit($cg, "strada_decref(__del_key); ");
+                }
+                emit($cg, "strada_undef_static(); })");
             }
             return;
         }
@@ -9389,10 +9403,17 @@ func gen_statement(scalar $cg, scalar $stmt) void {
                     gen_expression($cg, $init);
                 } elsif (is_scalar_expr($init)) {
                     # Single scalar expression like ($x) - wrap in array
-                    # Create array and push the element
-                    emit($cg, "strada_new_array(); strada_array_push(" . $c_name . "->value.av, ");
-                    gen_expression($cg, $init);
-                    emit($cg, ")");
+                    # Create array and push the element, cleaning up temp if needed
+                    my int $init_needs_cleanup = needs_temp_cleanup($cg, $init);
+                    if ($init_needs_cleanup == 1) {
+                        emit($cg, "strada_new_array(); { StradaValue *__arr_init_tmp = ");
+                        gen_expression($cg, $init);
+                        emit($cg, "; strada_array_push(" . $c_name . "->value.av, __arr_init_tmp); strada_decref(__arr_init_tmp); }");
+                    } else {
+                        emit($cg, "strada_new_array(); strada_array_push(" . $c_name . "->value.av, ");
+                        gen_expression($cg, $init);
+                        emit($cg, ")");
+                    }
                 } else {
                     # Could be array/hash/function returning array - assign directly
                     gen_expression($cg, $init);
