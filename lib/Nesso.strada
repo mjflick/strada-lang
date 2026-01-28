@@ -533,7 +533,7 @@ func clone(scalar $self, scalar $new_dbh) scalar {
     return bless(\%new_self, "Nesso");
 }
 
-__END__
+/*
 
 =head1 NAME
 
@@ -998,3 +998,5 @@ Michael J. Flickinger
 GNU General Public License, version 2
 
 =cut
+
+*/
