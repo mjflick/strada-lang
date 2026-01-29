@@ -1381,6 +1381,17 @@ func lex_next_token(scalar $lexer) scalar {
         return \%token;
     }
 
+    # //  (/47, /47) - defined-or operator
+    if ($code == 47 && $code2 == 47) {
+        lex_advance($lexer);
+        lex_advance($lexer);
+        my hash %token = ();
+        $token{"type"} = "DEFINED_OR";
+        $token{"value"} = "//";
+        $token{"line"} = $token_line;
+        return \%token;
+    }
+
     # <<  (<60, <60)
     if ($code == 60 && $code2 == 60) {
         lex_advance($lexer);

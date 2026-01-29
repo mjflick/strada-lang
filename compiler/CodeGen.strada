@@ -1527,7 +1527,7 @@ func needs_temp_cleanup(scalar $cg, scalar $expr) int {
         if ($op eq "." || $op eq "+" || $op eq "-" || $op eq "*" || $op eq "/" ||
             $op eq "%" || $op eq "**" || $op eq "==" || $op eq "!=" ||
             $op eq "<" || $op eq ">" || $op eq "<=" || $op eq ">=" ||
-            $op eq "&&" || $op eq "||" || $op eq "&" || $op eq "|" ||
+            $op eq "&&" || $op eq "||" || $op eq "//" || $op eq "&" || $op eq "|" ||
             $op eq "^" || $op eq "<<" || $op eq ">>" ||
             $op eq "eq" || $op eq "ne" || $op eq "lt" || $op eq "gt" ||
             $op eq "le" || $op eq "ge") {
@@ -2141,11 +2141,73 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit_bool_operand($cg, $expr->{"right"});
             emit($cg, ")");
         } elsif ($op eq "||") {
-            emit($cg, "strada_new_int(");
-            emit_bool_operand($cg, $expr->{"left"});
-            emit($cg, " || ");
-            emit_bool_operand($cg, $expr->{"right"});
-            emit($cg, ")");
+            # Perl-style || - return left if truthy, otherwise return right
+            my scalar $left = $expr->{"left"};
+            my scalar $right = $expr->{"right"};
+            my int $left_needs_cleanup = needs_temp_cleanup($cg, $left);
+            my int $left_needs_incref = return_needs_incref($left);
+            my int $right_needs_incref = return_needs_incref($right);
+
+            if ($cg->{"cleanup_enabled"} == 1) {
+                emit($cg, "({ StradaValue *__or_l = ");
+                gen_expression($cg, $left);
+                emit($cg, "; StradaValue *__or_r; if (strada_to_bool(__or_l)) { __or_r = __or_l; ");
+                if ($left_needs_incref == 1) {
+                    emit($cg, "strada_incref(__or_r); ");
+                }
+                emit($cg, "} else { ");
+                if ($left_needs_cleanup == 1) {
+                    emit($cg, "strada_decref(__or_l); ");
+                }
+                emit($cg, "__or_r = ");
+                gen_expression($cg, $right);
+                emit($cg, "; ");
+                if ($right_needs_incref == 1) {
+                    emit($cg, "strada_incref(__or_r); ");
+                }
+                emit($cg, "} __or_r; })");
+            } else {
+                # No cleanup - simpler form (avoids double-evaluation)
+                emit($cg, "({ StradaValue *__or_l = ");
+                gen_expression($cg, $left);
+                emit($cg, "; strada_to_bool(__or_l) ? __or_l : ");
+                gen_expression($cg, $right);
+                emit($cg, "; })");
+            }
+        } elsif ($op eq "//") {
+            # Defined-or - return left if defined, otherwise return right
+            my scalar $left = $expr->{"left"};
+            my scalar $right = $expr->{"right"};
+            my int $left_needs_cleanup = needs_temp_cleanup($cg, $left);
+            my int $left_needs_incref = return_needs_incref($left);
+            my int $right_needs_incref = return_needs_incref($right);
+
+            if ($cg->{"cleanup_enabled"} == 1) {
+                emit($cg, "({ StradaValue *__dor_l = ");
+                gen_expression($cg, $left);
+                emit($cg, "; StradaValue *__dor_r; if (strada_defined_bool(__dor_l)) { __dor_r = __dor_l; ");
+                if ($left_needs_incref == 1) {
+                    emit($cg, "strada_incref(__dor_r); ");
+                }
+                emit($cg, "} else { ");
+                if ($left_needs_cleanup == 1) {
+                    emit($cg, "strada_decref(__dor_l); ");
+                }
+                emit($cg, "__dor_r = ");
+                gen_expression($cg, $right);
+                emit($cg, "; ");
+                if ($right_needs_incref == 1) {
+                    emit($cg, "strada_incref(__dor_r); ");
+                }
+                emit($cg, "} __dor_r; })");
+            } else {
+                # No cleanup - simpler form
+                emit($cg, "({ StradaValue *__dor_l = ");
+                gen_expression($cg, $left);
+                emit($cg, "; strada_defined_bool(__dor_l) ? __dor_l : ");
+                gen_expression($cg, $right);
+                emit($cg, "; })");
+            }
         } elsif ($op eq "&") {
             emit($cg, "strada_new_int(");
             emit_int_operand($cg, $expr->{"left"});

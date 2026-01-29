@@ -1960,14 +1960,16 @@ func parse_logical_and(scalar $parser) scalar {
     return $left;
 }
 
-# Logical OR: ||
+# Logical OR: || and defined-or: //
 func parse_logical_or(scalar $parser) scalar {
     my scalar $left = parse_logical_and($parser);
 
-    while (parser_check($parser, "OR")) {
+    while (parser_check($parser, "OR") || parser_check($parser, "DEFINED_OR")) {
+        my scalar $tok = parser_current($parser);
+        my str $op = $tok->{"value"};
         parser_advance($parser);
         my scalar $right = parse_logical_and($parser);
-        $left = ast_new_binary_op("||", $left, $right);
+        $left = ast_new_binary_op($op, $left, $right);
     }
 
     return $left;
