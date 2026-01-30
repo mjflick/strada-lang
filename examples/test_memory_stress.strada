@@ -527,7 +527,7 @@ func main(int $argc, array @argv) int {
 
     # Allow custom iteration count via command line
     if ($argc > 1) {
-        $iterations = sys::atoi(@argv[1]);
+        $iterations = sys::atoi($argv[1]);
         if ($iterations < 1) {
             $iterations = 100;
         }

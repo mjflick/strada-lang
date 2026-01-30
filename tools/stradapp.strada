@@ -48,7 +48,7 @@ func find_include(str $filename, str $current_dir) str {
     my int $i = 0;
     my int $n = size(@g_include_paths);
     while ($i < $n) {
-        $path = @g_include_paths[$i] . "/" . $filename;
+        $path = $g_include_paths[$i] . "/" . $filename;
         if (file_exists($path)) {
             return $path;
         }
@@ -85,7 +85,7 @@ func preprocess(str $filename) str {
     my int $num_lines = size(@lines);
 
     while ($i < $num_lines) {
-        my str $line = @lines[$i];
+        my str $line = $lines[$i];
         my str $trimmed = trim($line);
 
         # Check for __C__ block start
@@ -181,7 +181,7 @@ func preprocess(str $filename) str {
                 if (size(@cond_stack) == 0) {
                     die("stradapp: " . $filename . ":" . ($i + 1) . ": #else without #ifdef/#ifndef");
                 }
-                my int $parent_active = @cond_stack[size(@cond_stack) - 1];
+                my int $parent_active = $cond_stack[size(@cond_stack) - 1];
                 if ($parent_active) {
                     $active = !$active;
                 }
@@ -286,7 +286,7 @@ func main(int $argc, array @argv) int {
 
     my int $i = 1;
     while ($i < $argc) {
-        my str $arg = @argv[$i];
+        my str $arg = $argv[$i];
 
         if ($arg eq "-h" || $arg eq "--help") {
             print_usage();
@@ -296,7 +296,7 @@ func main(int $argc, array @argv) int {
             if ($i >= $argc) {
                 die("stradapp: -o requires an argument");
             }
-            $output_file = @argv[$i];
+            $output_file = $argv[$i];
         } elsif (starts_with($arg, "-D")) {
             my str $def = "";
             if (length($arg) > 2) {
@@ -306,7 +306,7 @@ func main(int $argc, array @argv) int {
                 if ($i >= $argc) {
                     die("stradapp: -D requires an argument");
                 }
-                $def = @argv[$i];
+                $def = $argv[$i];
             }
             my int $eq_idx = index($def, "=");
             if ($eq_idx > 0) {
@@ -325,7 +325,7 @@ func main(int $argc, array @argv) int {
                 if ($i >= $argc) {
                     die("stradapp: -I requires an argument");
                 }
-                $path = @argv[$i];
+                $path = $argv[$i];
             }
             push(@g_include_paths, $path);
         } elsif (substr($arg, 0, 1) eq "-") {

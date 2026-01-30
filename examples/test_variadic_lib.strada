@@ -45,7 +45,7 @@ func min_val(int ...@nums) int {
     if (size(@nums) == 0) {
         return 0;
     }
-    my int $min = @nums[0];
+    my int $min = $nums[0];
     foreach my int $n (@nums) {
         if ($n < $min) {
             $min = $n;
@@ -59,7 +59,7 @@ func max_val(int ...@nums) int {
     if (size(@nums) == 0) {
         return 0;
     }
-    my int $max = @nums[0];
+    my int $max = $nums[0];
     foreach my int $n (@nums) {
         if ($n > $max) {
             $max = $n;

@@ -42,8 +42,8 @@ func test_closure_with_outer_params(str $prefix, int $count) int {
     }
 
     # Verify first and last
-    if (@results[0] ne $prefix . "_0") {
-        say("FAIL: first result wrong: " . @results[0]);
+    if ($results[0] ne $prefix . "_0") {
+        say("FAIL: first result wrong: " . $results[0]);
         return 1;
     }
 

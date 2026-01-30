@@ -230,7 +230,7 @@ func do_encode(scalar $value, int $canonical, int $depth) str {
             if ($i > 0) {
                 $result = $result . ",";
             }
-            my str $key = @k[$i];
+            my str $key = $k[$i];
             $result = $result . "\"" . JSON::escape_str($key) . "\":";
             $result = $result . JSON::do_encode($value->{$key}, $canonical, $depth + 1);
             $i = $i + 1;

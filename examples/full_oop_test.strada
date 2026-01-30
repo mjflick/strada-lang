@@ -432,7 +432,7 @@ func LargeObject_sum_numbers(scalar $self) int {
     my array @nums = @{$self->{"numbers"}};
     my int $i = 0;
     while ($i < scalar(@nums)) {
-        $sum = $sum + @nums[$i];
+        $sum = $sum + $nums[$i];
         $i = $i + 1;
     }
     return $sum;
@@ -505,7 +505,7 @@ func Outer_inner_count(scalar $self) int {
 func Outer_get_inner(scalar $self, int $idx) scalar {
     my array @inners = @{$self->{"inners"}};
     if ($idx >= 0 && $idx < scalar(@inners)) {
-        return @inners[$idx];
+        return $inners[$idx];
     }
     return undef;
 }
@@ -519,7 +519,7 @@ func Outer_sum_inner_values(scalar $self) int {
     my array @inners = @{$self->{"inners"}};
     my int $i = 0;
     while ($i < scalar(@inners)) {
-        my scalar $inner = @inners[$i];
+        my scalar $inner = $inners[$i];
         $sum = $sum + $inner->value();
         $i = $i + 1;
     }
@@ -1020,7 +1020,7 @@ func test_array_of_objects() void {
     # Verify all objects in array
     $i = 0;
     while ($i < $count) {
-        my scalar $obj = @objects[$i];
+        my scalar $obj = $objects[$i];
         assert(isa($obj, "SimpleObject") == 1, "object " . $i . " isa SimpleObject");
         assert($obj->name() eq "obj_" . $i, "object " . $i . " has correct name");
         $i = $i + 1;

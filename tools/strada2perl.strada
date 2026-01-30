@@ -131,7 +131,7 @@ func convert_file(str $input_path, str $output_path) int {
 
     my int $i = 0;
     while ($i < size(@lines)) {
-        my str $ln = @lines[$i];
+        my str $ln = $lines[$i];
         my str $trimmed = $ln;
         $trimmed =~ s/^\s+//;
         $trimmed =~ s/\s+$//;
@@ -223,11 +223,11 @@ func main(int $argc, array @argv) int {
         return 1;
     }
 
-    my str $input = @argv[1];
+    my str $input = $argv[1];
     my str $output = "";
 
     if ($argc >= 3) {
-        $output = @argv[2];
+        $output = $argv[2];
     } else {
         $output = $input;
         $output = replace($output, "\\.strada$", ".pl");

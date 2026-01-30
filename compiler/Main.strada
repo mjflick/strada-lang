@@ -88,7 +88,7 @@ func main() int {
     my int $i = 1;
 
     while ($i < $arg_count) {
-        my str $arg = @ARGV[$i];
+        my str $arg = $ARGV[$i];
 
         if ($arg eq "-g" || $arg eq "--debug") {
             $debug_info = 1;
@@ -102,7 +102,7 @@ func main() int {
             # -LL <path> - add low-priority library search path
             $i = $i + 1;
             if ($i < $arg_count) {
-                push(@lib_paths_low, @ARGV[$i]);
+                push(@lib_paths_low, $ARGV[$i]);
             } else {
                 say("Error: -LL requires a path argument");
                 return 1;
@@ -115,7 +115,7 @@ func main() int {
             # -L <path> - add library search path
             $i = $i + 1;
             if ($i < $arg_count) {
-                push(@lib_paths, @ARGV[$i]);
+                push(@lib_paths, $ARGV[$i]);
             } else {
                 say("Error: -L requires a path argument");
                 return 1;

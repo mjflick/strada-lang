@@ -176,7 +176,7 @@ Combines prepare, execute, and fetchall_arrayref into a single call.
     my scalar $rows = DBI::selectall_arrayref($dbh, "SELECT id, name FROM users");
     foreach my scalar $r (@{$rows}) {
         my array @row = @{$r};
-        say("ID: " . @row[0] . ", Name: " . @row[1]);
+        say("ID: " . $row[0] . ", Name: " . $row[1]);
     }
 
 =head2 selectall_arrayref_bind($dbh, $sql, $params)

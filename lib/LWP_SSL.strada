@@ -240,7 +240,7 @@ func build_query(hash %params) str {
     my array @keys = keys(%params);
     my int $i = 0;
     while ($i < scalar(@keys)) {
-        my str $key = @keys[$i];
+        my str $key = $keys[$i];
         if ($i > 0) { $result = $result . "&"; }
         $result = $result . LWP_SSL::url_encode($key) . "=" . LWP_SSL::url_encode($params{$key});
         $i = $i + 1;
@@ -275,14 +275,14 @@ func parse_response(str $raw) hash {
 
     my array @status_parts = split(" ", $status_line);
     if (scalar(@status_parts) >= 2) {
-        $response{"protocol"} = @status_parts[0];
-        $response{"status"} = cast_int(@status_parts[1]);
+        $response{"protocol"} = $status_parts[0];
+        $response{"status"} = cast_int($status_parts[1]);
         if (scalar(@status_parts) >= 3) {
             my str $reason = "";
             my int $i = 2;
             while ($i < scalar(@status_parts)) {
                 if ($i > 2) { $reason = $reason . " "; }
-                $reason = $reason . @status_parts[$i];
+                $reason = $reason . $status_parts[$i];
                 $i = $i + 1;
             }
             $response{"reason"} = $reason;

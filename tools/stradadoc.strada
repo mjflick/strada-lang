@@ -103,7 +103,7 @@ func word_wrap(str $text, int $width, int $indent) str {
 
     my int $i = 0;
     while ($i < scalar(@words)) {
-        my str $word = @words[$i];
+        my str $word = $words[$i];
         my int $word_len = length($word);
 
         if ($first_word == 1) {
@@ -188,7 +188,7 @@ func find_module(str $module) str {
 
     my int $i = 0;
     while ($i < scalar(@lib_paths)) {
-        my str $full_path = @lib_paths[$i] . "/" . $rel_path;
+        my str $full_path = $lib_paths[$i] . "/" . $rel_path;
         if (sys::is_file($full_path)) {
             return $full_path;
         }
@@ -283,7 +283,7 @@ func format_pod_inline(str $text) str {
                         # For links, just show the text (could be Module::Name or "text|url")
                         if ($content =~ /\|/) {
                             my array @parts = split("\\|", $content);
-                            $result = $result . color_underline() . @parts[0] . color_reset();
+                            $result = $result . color_underline() . $parts[0] . color_reset();
                         } else {
                             $result = $result . color_underline() . $content . color_reset();
                         }
@@ -316,7 +316,7 @@ func format_pod(str $pod_content, int $raw_mode) str {
 
     my int $i = 0;
     while ($i < scalar(@lines)) {
-        my str $line = @lines[$i];
+        my str $line = $lines[$i];
         $line =~ s/\r$//;
 
         # Verbatim paragraph (starts with whitespace)
@@ -329,7 +329,7 @@ func format_pod(str $pod_content, int $raw_mode) str {
         # =head1
         if ($line =~ /^=head1\s+(.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . "\n";
             $output = $output . color_bold() . color_yellow() . $heading . color_reset() . "\n";
             my str $underline = "";
@@ -347,7 +347,7 @@ func format_pod(str $pod_content, int $raw_mode) str {
         # =head2
         if ($line =~ /^=head2\s+(.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . "\n";
             $output = $output . color_bold() . $heading . color_reset() . "\n";
             my str $underline = "";
@@ -365,7 +365,7 @@ func format_pod(str $pod_content, int $raw_mode) str {
         # =head3
         if ($line =~ /^=head3\s+(.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . "\n";
             $output = $output . color_bold() . "  " . $heading . color_reset() . "\n";
             $i = $i + 1;
@@ -375,7 +375,7 @@ func format_pod(str $pod_content, int $raw_mode) str {
         # =head4
         if ($line =~ /^=head4\s+(.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . "    " . color_underline() . $heading . color_reset() . "\n";
             $i = $i + 1;
             next;
@@ -404,7 +404,7 @@ func format_pod(str $pod_content, int $raw_mode) str {
         # =item
         if ($line =~ /^=item\s+(.+)$/) {
             my array @caps = captures();
-            my str $item = @caps[1];
+            my str $item = $caps[1];
             my str $formatted = format_pod_inline($item);
             $output = $output . "\n";
 
@@ -464,7 +464,7 @@ func list_modules_with_pod(array @lib_paths) void {
 
     my int $i = 0;
     while ($i < scalar(@lib_paths)) {
-        my str $lib_path = @lib_paths[$i];
+        my str $lib_path = $lib_paths[$i];
         list_modules_recursive($lib_path, $lib_path);
         $i = $i + 1;
     }
@@ -476,7 +476,7 @@ func list_modules_recursive(str $base_path, str $current_path) void {
 
     my int $i = 0;
     while ($i < scalar(@entries)) {
-        my str $entry = @entries[$i];
+        my str $entry = $entries[$i];
 
         if ($entry eq "." || $entry eq "..") {
             $i = $i + 1;
@@ -618,7 +618,7 @@ func format_markdown(str $filepath, int $raw_mode) str {
         # H1 heading
         if ($line =~ /^# (.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . "\n";
             $output = $output . color_bold() . color_yellow() . $heading . color_reset() . "\n";
             # Add underline
@@ -636,7 +636,7 @@ func format_markdown(str $filepath, int $raw_mode) str {
         # H2 heading
         if ($line =~ /^## (.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . "\n";
             $output = $output . color_bold() . $heading . color_reset() . "\n";
             my str $underline = "";
@@ -653,7 +653,7 @@ func format_markdown(str $filepath, int $raw_mode) str {
         # H3 heading
         if ($line =~ /^### (.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . "\n";
             $output = $output . color_bold() . "  " . $heading . color_reset() . "\n";
             next;
@@ -662,7 +662,7 @@ func format_markdown(str $filepath, int $raw_mode) str {
         # H4+ heading
         if ($line =~ /^#{4,} (.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . "    " . color_underline() . $heading . color_reset() . "\n";
             next;
         }
@@ -670,7 +670,7 @@ func format_markdown(str $filepath, int $raw_mode) str {
         # Unordered list item
         if ($line =~ /^[-*]\s+(.+)$/) {
             my array @caps = captures();
-            my str $item = @caps[1];
+            my str $item = $caps[1];
             $in_list = 1;
             my str $formatted = format_inline($item);
             my str $wrapped = word_wrap($formatted, $term_width - 6, 0);
@@ -680,10 +680,10 @@ func format_markdown(str $filepath, int $raw_mode) str {
             my int $li = 0;
             while ($li < scalar(@wrap_lines)) {
                 if ($first == 1) {
-                    $output = $output . "  * " . @wrap_lines[$li] . "\n";
+                    $output = $output . "  * " . $wrap_lines[$li] . "\n";
                     $first = 0;
                 } else {
-                    $output = $output . "    " . @wrap_lines[$li] . "\n";
+                    $output = $output . "    " . $wrap_lines[$li] . "\n";
                 }
                 $li = $li + 1;
             }
@@ -693,8 +693,8 @@ func format_markdown(str $filepath, int $raw_mode) str {
         # Ordered list item
         if ($line =~ /^([0-9]+)\.\s+(.+)$/) {
             my array @caps = captures();
-            my str $num = @caps[1];
-            my str $item = @caps[2];
+            my str $num = $caps[1];
+            my str $item = $caps[2];
             $in_list = 1;
             my str $formatted = format_inline($item);
             $output = $output . "  " . $num . ". " . $formatted . "\n";
@@ -704,7 +704,7 @@ func format_markdown(str $filepath, int $raw_mode) str {
         # Indented code (4 spaces)
         if ($line =~ /^    (.+)$/) {
             my array @caps = captures();
-            my str $code = @caps[1];
+            my str $code = $caps[1];
             $output = $output . "    " . color_green() . $code . color_reset() . "\n";
             next;
         }
@@ -733,7 +733,7 @@ func list_docs(str $docs_path) void {
     my array @main_docs = sys::readdir($docs_path);
     my int $i = 0;
     while ($i < scalar(@main_docs)) {
-        my str $name = @main_docs[$i];
+        my str $name = $main_docs[$i];
         if ($name =~ /\.md$/ && $name ne "." && $name ne "..") {
             my str $display = $name;
             $display =~ s/\.md$//;
@@ -754,7 +754,7 @@ func list_docs(str $docs_path) void {
         my array @ext_docs = sys::readdir($extended_path);
         my int $j = 0;
         while ($j < scalar(@ext_docs)) {
-            my str $name = @ext_docs[$j];
+            my str $name = $ext_docs[$j];
             if ($name =~ /\.md$/ && $name ne "." && $name ne "..") {
                 my str $display = $name;
                 $display =~ s/\.md$//;
@@ -850,7 +850,7 @@ func find_doc(str $docs_path, str $topic) str {
     my array @files = sys::readdir($docs_path);
     my int $j = 0;
     while ($j < scalar(@files)) {
-        my str $name = @files[$j];
+        my str $name = $files[$j];
         if ($name =~ /\.md$/) {
             my str $base = $name;
             $base =~ s/\.md$//;
@@ -879,7 +879,7 @@ func find_doc(str $docs_path, str $topic) str {
         my array @ext_files = sys::readdir($ext_path);
         my int $m = 0;
         while ($m < scalar(@ext_files)) {
-            my str $name = @ext_files[$m];
+            my str $name = $ext_files[$m];
             if ($name =~ /\.md$/) {
                 my str $base = $name;
                 $base =~ s/\.md$//;
@@ -916,7 +916,7 @@ func main(int $argc, array @argv) int {
     # Parse arguments
     my int $i = 1;
     while ($i < $argc) {
-        my str $arg = @argv[$i];
+        my str $arg = $argv[$i];
 
         if ($arg eq "--help" || $arg eq "-h") {
             usage();

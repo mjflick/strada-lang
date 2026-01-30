@@ -60,7 +60,7 @@ func dir_listing(str $dir, str $url) str {
     my array @entries = sys::readdir_full($dir);
     my int $i = 0;
     while ($i < scalar(@entries)) {
-        my str $name = @entries[$i];
+        my str $name = $entries[$i];
         if ($name ne "." && $name ne "..") {
             my str $full_path = $dir . "/" . $name;
             my str $link_url = $url;
@@ -153,10 +153,10 @@ func main(int $argc, array @argv) int {
     my int $port = 8080;
 
     if ($argc > 1) {
-        $root = @argv[1];
+        $root = $argv[1];
     }
     if ($argc > 2) {
-        $port = sys::atoi(@argv[2]);
+        $port = sys::atoi($argv[2]);
     }
 
     say("Static File Server");

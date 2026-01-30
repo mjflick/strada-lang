@@ -124,7 +124,7 @@ func build_where_clause(scalar $self, scalar $conds, scalar $params) str {
     my int $i = 0;
     my int $nkeys = scalar(@cond_keys);
     while ($i < $nkeys) {
-        my str $key = @cond_keys[$i];
+        my str $key = $cond_keys[$i];
         # Skip directives (keys starting with _)
         if (substr($key, 0, 1) ne "_") {
             if ($first == 0) {

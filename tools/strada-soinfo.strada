@@ -81,7 +81,7 @@ func extract_var_name(str $param) str {
     my array @words = split(" ", $param);
     my int $i = 0;
     while ($i < scalar(@words)) {
-        my str $word = @words[$i];
+        my str $word = $words[$i];
         # Check if word starts with $
         if (length($word) > 1) {
             my str $first = substr($word, 0, 1);
@@ -100,9 +100,9 @@ func parse_func_def(str $line) str {
     # Match: func name(params) return_type {
     if ($line =~ /^\s*func\s+(\w+)\s*\(([^)]*)\)\s*(\w+)/) {
         my array @caps = captures();
-        my str $name = @caps[1];
-        my str $params = @caps[2];
-        my str $ret = @caps[3];
+        my str $name = $caps[1];
+        my str $params = $caps[2];
+        my str $ret = $caps[3];
         return $name . "|" . $ret . "|" . $params;
     }
     return "";
@@ -125,11 +125,11 @@ func parse_source(str $filename) hash {
         my str $parsed = parse_func_def($line);
         if (length($parsed) > 0) {
             my array @parts = split("\\|", $parsed);
-            my str $name = @parts[0];
-            my str $ret = @parts[1];
+            my str $name = $parts[0];
+            my str $ret = $parts[1];
             my str $params = "";
             if (scalar(@parts) > 2) {
-                $params = @parts[2];
+                $params = $parts[2];
             }
 
             my hash %info = ();
@@ -152,23 +152,23 @@ func parse_export_info(str $info) hash {
     my array @lines = split("\n", $info);
     my int $i = 0;
     while ($i < scalar(@lines)) {
-        my str $line = @lines[$i];
+        my str $line = $lines[$i];
         if (length($line) > 0 && $line =~ /^func:/) {
             # func:name:return_type:param_count:param_types:variadic_idx
             my array @parts = split(":", $line);
             if (scalar(@parts) >= 4) {
                 # Force string copies with "" . value to prevent use-after-free
                 # when @parts goes out of scope
-                my str $name = "" . @parts[1];
-                my str $ret = "" . @parts[2];
-                my int $param_count = sys::atoi(@parts[3]);
+                my str $name = "" . $parts[1];
+                my str $ret = "" . $parts[2];
+                my int $param_count = sys::atoi($parts[3]);
                 my str $param_types = "";
                 if (scalar(@parts) > 4) {
-                    $param_types = "" . @parts[4];
+                    $param_types = "" . $parts[4];
                 }
                 my int $variadic_idx = -1;
                 if (scalar(@parts) > 5) {
-                    $variadic_idx = sys::atoi(@parts[5]);
+                    $variadic_idx = sys::atoi($parts[5]);
                 }
 
                 my hash %info = ();
@@ -195,7 +195,7 @@ func format_param_types(str $types, int $count) str {
     my array @type_list = split(",", $types);
     my int $i = 0;
     while ($i < scalar(@type_list) && $i < $count) {
-        my str $t = "" . @type_list[$i];  # Force string copy
+        my str $t = "" . $type_list[$i];  # Force string copy
         if ($i > 0) {
             $result = $result . ", ";
         }
@@ -220,7 +220,7 @@ func format_params(str $params) str {
     my array @param_list = split(",", $params);
     my int $i = 0;
     while ($i < scalar(@param_list)) {
-        my str $p = @param_list[$i];
+        my str $p = $param_list[$i];
         $p =~ s/^\s+//;  # trim leading
 
         if ($i > 0) {
@@ -250,7 +250,7 @@ func generate_example(str $name, hash %info, str $lib_var) str {
         my str $arg_items = "";
         my int $i = 0;
         while ($i < scalar(@param_list)) {
-            my str $p = @param_list[$i];
+            my str $p = $param_list[$i];
             $p =~ s/^\s+//;
 
             # Extract variable name from "type $name"
@@ -352,7 +352,7 @@ func get_export_info_from_binary(str $file) str {
     my array @lines = split("\n", $output);
     my int $i = 0;
     while ($i < scalar(@lines)) {
-        my str $line = "" . @lines[$i];  # Force string copy
+        my str $line = "" . $lines[$i];  # Force string copy
         # Match export info format: starts with "func:" and has at least 4 colons
         if (length($line) > 5 && substr($line, 0, 5) eq "func:") {
             # Count colons to verify format (should have at least 4)
@@ -403,7 +403,7 @@ func extract_lib_name(str $path) str {
     # Remove directory part
     if ($name =~ /\/([^\/]+)$/) {
         my array @caps = captures();
-        $name = "" . @caps[1];  # Force string copy
+        $name = "" . $caps[1];  # Force string copy
     }
 
     # Remove extension (.so, .o, .a)
@@ -416,7 +416,7 @@ func extract_lib_name(str $path) str {
 func extract_lib_dir(str $path) str {
     if ($path =~ /^(.+)\/[^\/]+$/) {
         my array @caps = captures();
-        return @caps[1];
+        return $caps[1];
     }
     return "";
 }
@@ -482,7 +482,7 @@ func main(int $argc, array @argv) int {
     my int $show_examples = 0;
     my int $i = 1;
     while ($i < $argc) {
-        my str $arg = @argv[$i];
+        my str $arg = $argv[$i];
         if ($arg eq "--examples") {
             $show_examples = 1;
         } elsif ($arg eq "--help" || $arg eq "-h") {
@@ -582,13 +582,13 @@ func main(int $argc, array @argv) int {
     my array @lines = split("\n", $nm_output);
     my int $li = 0;
     while ($li < scalar(@lines)) {
-        my str $line = "" . @lines[$li];  # Force string copy
+        my str $line = "" . $lines[$li];  # Force string copy
 
         # nm output format: "address type name" or "name:" for archives
         # We want T (text/code) symbols
         if ($line =~ /\s+T\s+(\w+)/) {
             my array @caps = captures();
-            my str $name = "" . @caps[1];  # Force string copy
+            my str $name = "" . $caps[1];  # Force string copy
             if (is_user_function($name)) {
                 push(@nm_functions, $name);
             }
@@ -602,7 +602,7 @@ func main(int $argc, array @argv) int {
         my array @keys = keys(%export_funcs);
         my int $i = 0;
         while ($i < scalar(@keys)) {
-            push(@functions, @keys[$i]);
+            push(@functions, $keys[$i]);
             $i = $i + 1;
         }
     } else {
@@ -664,7 +664,7 @@ func main(int $argc, array @argv) int {
         say("# -------------------------------------------------");
         my int $i = 0;
         while ($i < scalar(@functions)) {
-            my str $name = @functions[$i];
+            my str $name = $functions[$i];
 
             if (exists(%export_funcs, $name)) {
                 my scalar $info = $export_funcs{$name};
@@ -685,7 +685,7 @@ func main(int $argc, array @argv) int {
                         if ($j >= 26) {
                             $var = "arg" . $j;
                         }
-                        my str $type_j = "" . @types[$j];  # Force string copy
+                        my str $type_j = "" . $types[$j];  # Force string copy
                         say("#       $" . $var . ": " . $type_j);
                         $j = $j + 1;
                     }
@@ -703,7 +703,7 @@ func main(int $argc, array @argv) int {
         say("# -------------------");
         my int $i = 0;
         while ($i < scalar(@functions)) {
-            my str $name = @functions[$i];
+            my str $name = $functions[$i];
             my str $sig = "func " . $name . "(...)";
 
             if (exists(%source_funcs, $name)) {
@@ -749,7 +749,7 @@ func main(int $argc, array @argv) int {
             my int $shown = 0;
             my int $i = 0;
             while ($i < scalar(@functions) && $shown < 3) {
-                my str $name = @functions[$i];
+                my str $name = $functions[$i];
                 if (exists(%export_funcs, $name)) {
                     my scalar $info = $export_funcs{$name};
                     my str $ret = $info->{"return"};
@@ -786,7 +786,7 @@ func main(int $argc, array @argv) int {
         # Print individual function examples
         my int $i = 0;
         while ($i < scalar(@functions)) {
-            my str $name = @functions[$i];
+            my str $name = $functions[$i];
 
             say("# --- " . $name . " ---");
 

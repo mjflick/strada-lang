@@ -183,15 +183,15 @@ func main() int {
         return 1;
     }
 
-    my str $cmd = @args[0];
+    my str $cmd = $args[0];
 
     if ($cmd eq "test") {
         if ($argc < 3) {
             say("Usage: ./example test <host> <port>");
             return 1;
         }
-        my str $host = @args[1];
-        my int $port = cast_int(@args[2]);
+        my str $host = $args[1];
+        my int $port = cast_int($args[2]);
         return cmd_test($host, $port);
     }
 
@@ -200,12 +200,12 @@ func main() int {
             say("Usage: ./example send <host> <port> <from> <to> <subject> <body>");
             return 1;
         }
-        my str $host = @args[1];
-        my int $port = cast_int(@args[2]);
-        my str $from = @args[3];
-        my str $to = @args[4];
-        my str $subject = @args[5];
-        my str $body = @args[6];
+        my str $host = $args[1];
+        my int $port = cast_int($args[2]);
+        my str $from = $args[3];
+        my str $to = $args[4];
+        my str $subject = $args[5];
+        my str $body = $args[6];
         return cmd_send($host, $port, $from, $to, $subject, $body);
     }
 
@@ -214,14 +214,14 @@ func main() int {
             say("Usage: ./example send-auth <host> <port> <user> <pass> <from> <to> <subject> <body>");
             return 1;
         }
-        my str $host = @args[1];
-        my int $port = cast_int(@args[2]);
-        my str $user = @args[3];
-        my str $pass = @args[4];
-        my str $from = @args[5];
-        my str $to = @args[6];
-        my str $subject = @args[7];
-        my str $body = @args[8];
+        my str $host = $args[1];
+        my int $port = cast_int($args[2]);
+        my str $user = $args[3];
+        my str $pass = $args[4];
+        my str $from = $args[5];
+        my str $to = $args[6];
+        my str $subject = $args[7];
+        my str $body = $args[8];
         return cmd_send_auth($host, $port, $user, $pass, $from, $to, $subject, $body);
     }
 

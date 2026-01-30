@@ -137,7 +137,7 @@ func extract_name(str $path) str {
     # Remove directory part
     if ($name =~ /\/([^\/]+)$/) {
         my array @caps = captures();
-        $name = @caps[1];
+        $name = $caps[1];
     }
 
     # Remove extension
@@ -199,7 +199,7 @@ func convert_md_to_man(str $input_file, str $name, str $section, str $date, str 
         # H1 heading (# or ===)
         if ($line =~ /^# (.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             if ($first_heading == 1) {
                 # First heading becomes NAME section
                 $first_heading = 0;
@@ -214,7 +214,7 @@ func convert_md_to_man(str $input_file, str $name, str $section, str $date, str 
         # H2 heading (##)
         if ($line =~ /^## (.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . ".SH \"" . escape_man($heading) . "\"\n";
             next;
         }
@@ -222,7 +222,7 @@ func convert_md_to_man(str $input_file, str $name, str $section, str $date, str 
         # H3 heading (###)
         if ($line =~ /^### (.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . ".SS \"" . escape_man($heading) . "\"\n";
             next;
         }
@@ -230,7 +230,7 @@ func convert_md_to_man(str $input_file, str $name, str $section, str $date, str 
         # H4+ heading (####, #####, etc)
         if ($line =~ /^#{4,} (.+)$/) {
             my array @caps = captures();
-            my str $heading = @caps[1];
+            my str $heading = $caps[1];
             $output = $output . ".SS \"" . escape_man($heading) . "\"\n";
             next;
         }
@@ -238,7 +238,7 @@ func convert_md_to_man(str $input_file, str $name, str $section, str $date, str 
         # Unordered list item (- or * at start of line)
         if ($line =~ /^[-*]\s+(.+)$/) {
             my array @caps = captures();
-            my str $item = @caps[1];
+            my str $item = $caps[1];
             if ($in_list == 0) {
                 $in_list = 1;
                 $output = $output . ".RS 2\n";
@@ -251,8 +251,8 @@ func convert_md_to_man(str $input_file, str $name, str $section, str $date, str 
         # Ordered list item (1. 2. etc)
         if ($line =~ /^([0-9]+)\.\s+(.+)$/) {
             my array @caps = captures();
-            my str $num = @caps[1];
-            my str $item = @caps[2];
+            my str $num = $caps[1];
+            my str $item = $caps[2];
             if ($in_list == 0) {
                 $in_list = 1;
                 $output = $output . ".RS 2\n";
@@ -265,7 +265,7 @@ func convert_md_to_man(str $input_file, str $name, str $section, str $date, str 
         # Definition list (term followed by : description)
         if ($line =~ /^([^:]+):\s*$/) {
             my array @caps = captures();
-            my str $term = @caps[1];
+            my str $term = $caps[1];
             $output = $output . ".TP\n.B " . escape_man(trim($term)) . "\n";
             next;
         }
@@ -273,7 +273,7 @@ func convert_md_to_man(str $input_file, str $name, str $section, str $date, str 
         # Indented line (4 spaces or tab) - treat as preformatted
         if ($line =~ /^(    |\t)(.+)$/) {
             my array @caps = captures();
-            my str $content = @caps[2];
+            my str $content = $caps[2];
             $output = $output . ".nf\n" . escape_man($content) . "\n.fi\n";
             next;
         }
@@ -308,7 +308,7 @@ func main(int $argc, array @argv) int {
 
     my int $i = 1;
     while ($i < $argc) {
-        my str $arg = @argv[$i];
+        my str $arg = $argv[$i];
 
         if ($arg eq "--help" || $arg eq "-h") {
             usage();
@@ -318,25 +318,25 @@ func main(int $argc, array @argv) int {
             if ($i >= $argc) {
                 die("--name requires an argument");
             }
-            $name = @argv[$i];
+            $name = $argv[$i];
         } elsif ($arg eq "--section") {
             $i = $i + 1;
             if ($i >= $argc) {
                 die("--section requires an argument");
             }
-            $section = @argv[$i];
+            $section = $argv[$i];
         } elsif ($arg eq "--date") {
             $i = $i + 1;
             if ($i >= $argc) {
                 die("--date requires an argument");
             }
-            $date = @argv[$i];
+            $date = $argv[$i];
         } elsif ($arg eq "--center") {
             $i = $i + 1;
             if ($i >= $argc) {
                 die("--center requires an argument");
             }
-            $center = @argv[$i];
+            $center = $argv[$i];
         } elsif ($arg =~ /^-/) {
             say("Error: Unknown option: " . $arg);
             usage();

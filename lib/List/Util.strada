@@ -76,7 +76,7 @@ Returns the arithmetic mean. Returns 0 for empty list.
 Returns a two-element array with (min, max). Returns empty array for empty list.
 
     my array @range = List::Util::minmax(@data);
-    say("Range: " . @range[0] . " to " . @range[1]);
+    say("Range: " . $range[0] . " to " . $range[1]);
 
 =back
 
@@ -272,7 +272,7 @@ func sum(array @list) num {
     my num $total = 0;
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        $total = $total + @list[$i];
+        $total = $total + $list[$i];
     }
     return $total;
 }
@@ -290,7 +290,7 @@ func product(array @list) num {
     }
     my num $result = 1;
     for (my int $i = 0; $i < $len; $i++) {
-        $result = $result * @list[$i];
+        $result = $result * $list[$i];
     }
     return $result;
 }
@@ -301,10 +301,10 @@ func min(array @list) scalar {
     if ($len == 0) {
         return undef;
     }
-    my num $min = @list[0];
+    my num $min = $list[0];
     for (my int $i = 1; $i < $len; $i++) {
-        if (@list[$i] < $min) {
-            $min = @list[$i];
+        if ($list[$i] < $min) {
+            $min = $list[$i];
         }
     }
     return $min;
@@ -316,10 +316,10 @@ func max(array @list) scalar {
     if ($len == 0) {
         return undef;
     }
-    my num $max = @list[0];
+    my num $max = $list[0];
     for (my int $i = 1; $i < $len; $i++) {
-        if (@list[$i] > $max) {
-            $max = @list[$i];
+        if ($list[$i] > $max) {
+            $max = $list[$i];
         }
     }
     return $max;
@@ -341,14 +341,14 @@ func minmax(array @list) array {
     if ($len == 0) {
         return @result;
     }
-    my num $min = @list[0];
-    my num $max = @list[0];
+    my num $min = $list[0];
+    my num $max = $list[0];
     for (my int $i = 1; $i < $len; $i++) {
-        if (@list[$i] < $min) {
-            $min = @list[$i];
+        if ($list[$i] < $min) {
+            $min = $list[$i];
         }
-        if (@list[$i] > $max) {
-            $max = @list[$i];
+        if ($list[$i] > $max) {
+            $max = $list[$i];
         }
     }
     push(@result, $min);
@@ -364,7 +364,7 @@ func minmax(array @list) array {
 func first_idx(array @list, scalar $value) int {
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        if (@list[$i] == $value) {
+        if ($list[$i] == $value) {
             return $i;
         }
     }
@@ -375,7 +375,7 @@ func first_idx(array @list, scalar $value) int {
 func first_idx_str(array @list, str $value) int {
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        if (@list[$i] eq $value) {
+        if ($list[$i] eq $value) {
             return $i;
         }
     }
@@ -388,7 +388,7 @@ func last_idx(array @list, scalar $value) int {
     for (my int $i = $len - 1; $i >= 0; $i--) {
         $i = $i - 1;
         $i = $i + 1;
-        if (@list[$i] == $value) {
+        if ($list[$i] == $value) {
             return $i;
         }
         $i = $i - 1;
@@ -401,7 +401,7 @@ func last_idx_str(array @list, str $value) int {
     my int $len = scalar(@list);
     my int $i = $len - 1;
     while ($i >= 0) {
-        if (@list[$i] eq $value) {
+        if ($list[$i] eq $value) {
             return $i;
         }
         $i = $i - 1;
@@ -430,7 +430,7 @@ func count(array @list, scalar $value) int {
     my int $n = 0;
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        if (@list[$i] == $value) {
+        if ($list[$i] == $value) {
             $n = $n + 1;
         }
     }
@@ -442,7 +442,7 @@ func count_str(array @list, str $value) int {
     my int $n = 0;
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        if (@list[$i] eq $value) {
+        if ($list[$i] eq $value) {
             $n = $n + 1;
         }
     }
@@ -457,7 +457,7 @@ func count_str(array @list, str $value) int {
 func any(array @list) int {
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        if (@list[$i]) {
+        if ($list[$i]) {
             return 1;
         }
     }
@@ -468,7 +468,7 @@ func any(array @list) int {
 func all(array @list) int {
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        if (!@list[$i]) {
+        if (!$list[$i]) {
             return 0;
         }
     }
@@ -479,7 +479,7 @@ func all(array @list) int {
 func none(array @list) int {
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        if (@list[$i]) {
+        if ($list[$i]) {
             return 0;
         }
     }
@@ -496,9 +496,9 @@ func uniq(array @list) array {
     my hash %seen = ();
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        my str $key = @list[$i];
+        my str $key = $list[$i];
         if (!defined($seen{$key})) {
-            push(@result, @list[$i]);
+            push(@result, $list[$i]);
             $seen{$key} = 1;
         }
     }
@@ -516,7 +516,7 @@ func reverse(array @list) array {
     my int $len = scalar(@list);
     my int $i = $len - 1;
     while ($i >= 0) {
-        push(@result, @list[$i]);
+        push(@result, $list[$i]);
         $i = $i - 1;
     }
     return @result;
@@ -529,16 +529,16 @@ func sort_num(array @list) array {
 
     # Copy to result
     for (my int $i = 0; $i < $len; $i++) {
-        push(@result, @list[$i]);
+        push(@result, $list[$i]);
     }
 
     # Bubble sort (simple, not optimal for large lists)
     for (my int $i = 0; $i < $len - 1; $i++) {
         for (my int $j = 0; $j < $len - $i - 1; $j++) {
-            if (@result[$j] > @result[$j + 1]) {
-                my num $temp = @result[$j];
-                @result[$j] = @result[$j + 1];
-                @result[$j + 1] = $temp;
+            if ($result[$j] > $result[$j + 1]) {
+                my num $temp = $result[$j];
+                $result[$j] = $result[$j + 1];
+                $result[$j + 1] = $temp;
             }
         }
     }
@@ -559,16 +559,16 @@ func sort_str(array @list) array {
 
     # Copy to result
     for (my int $i = 0; $i < $len; $i++) {
-        push(@result, @list[$i]);
+        push(@result, $list[$i]);
     }
 
     # Bubble sort with string comparison
     for (my int $i = 0; $i < $len - 1; $i++) {
         for (my int $j = 0; $j < $len - $i - 1; $j++) {
-            if (@result[$j] gt @result[$j + 1]) {
-                my str $temp = @result[$j];
-                @result[$j] = @result[$j + 1];
-                @result[$j + 1] = $temp;
+            if ($result[$j] gt $result[$j + 1]) {
+                my str $temp = $result[$j];
+                $result[$j] = $result[$j + 1];
+                $result[$j + 1] = $temp;
             }
         }
     }
@@ -583,16 +583,16 @@ func shuffle(array @list) array {
 
     # Copy to result
     for (my int $i = 0; $i < $len; $i++) {
-        push(@result, @list[$i]);
+        push(@result, $list[$i]);
     }
 
     # Fisher-Yates shuffle
     my int $i = $len - 1;
     while ($i > 0) {
         my int $j = sys::rand() % ($i + 1);
-        my scalar $temp = @result[$i];
-        @result[$i] = @result[$j];
-        @result[$j] = $temp;
+        my scalar $temp = $result[$i];
+        $result[$i] = $result[$j];
+        $result[$j] = $temp;
         $i = $i - 1;
     }
 
@@ -607,7 +607,7 @@ func take(int $n, array @list) array {
         $n = $len;
     }
     for (my int $i = 0; $i < $n; $i++) {
-        push(@result, @list[$i]);
+        push(@result, $list[$i]);
     }
     return @result;
 }
@@ -620,7 +620,7 @@ func drop(int $n, array @list) array {
         $n = 0;
     }
     for (my int $i = $n; $i < $len; $i++) {
-        push(@result, @list[$i]);
+        push(@result, $list[$i]);
     }
     return @result;
 }
@@ -636,7 +636,7 @@ func slice(array @list, int $start, int $end) array {
         $end = $len - 1;
     }
     for (my int $i = $start; $i <= $end; $i++) {
-        push(@result, @list[$i]);
+        push(@result, $list[$i]);
     }
     return @result;
 }
@@ -652,8 +652,8 @@ func pairs(array @list) array {
     my int $i = 0;
     while ($i + 1 < $len) {
         my array @pair = ();
-        push(@pair, @list[$i]);
-        push(@pair, @list[$i + 1]);
+        push(@pair, $list[$i]);
+        push(@pair, $list[$i + 1]);
         push(@result, \@pair);
         $i = $i + 2;
     }
@@ -671,10 +671,10 @@ func zip(array @a, array @b) array {
     }
     for (my int $i = 0; $i < $max_len; $i++) {
         if ($i < $len_a) {
-            push(@result, @a[$i]);
+            push(@result, $a[$i]);
         }
         if ($i < $len_b) {
-            push(@result, @b[$i]);
+            push(@result, $b[$i]);
         }
     }
     return @result;
@@ -688,7 +688,7 @@ func join_str(str $sep, array @list) str {
         if ($i > 0) {
             $result = $result . $sep;
         }
-        $result = $result . @list[$i];
+        $result = $result . $list[$i];
     }
     return $result;
 }
@@ -698,13 +698,13 @@ func flatten(array @list) array {
     my array @result = ();
     my int $len = scalar(@list);
     for (my int $i = 0; $i < $len; $i++) {
-        my scalar $elem = @list[$i];
+        my scalar $elem = $list[$i];
         # Check if element is an array reference
         if (ref($elem) eq "ARRAY") {
             my array @inner = @{$elem};
             my int $inner_len = scalar(@inner);
             for (my int $j = 0; $j < $inner_len; $j++) {
-                push(@result, @inner[$j]);
+                push(@result, $inner[$j]);
             }
         } else {
             push(@result, $elem);

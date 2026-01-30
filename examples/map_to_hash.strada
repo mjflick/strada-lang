@@ -17,7 +17,7 @@ func main() int {
     say("\nFlattened pairs array has " . scalar(@pairs) . " elements:");
     my int $i = 0;
     while ($i < scalar(@pairs)) {
-        say("  [" . $i . "]=" . @pairs[$i] . " [" . ($i + 1) . "]=" . @pairs[$i + 1]);
+        say("  [" . $i . "]=" . $pairs[$i] . " [" . ($i + 1) . "]=" . $pairs[$i + 1]);
         $i = $i + 2;
     }
 
@@ -25,7 +25,7 @@ func main() int {
     my hash %lookup = ();
     $i = 0;
     while ($i < scalar(@pairs)) {
-        $lookup{@pairs[$i]} = @pairs[$i + 1];
+        $lookup{$pairs[$i]} = $pairs[$i + 1];
         $i = $i + 2;
     }
 

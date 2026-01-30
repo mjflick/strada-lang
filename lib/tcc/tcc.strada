@@ -123,8 +123,8 @@ Convenience function: compile code and get function pointer.
 Returns array C<[fn_ptr, state]> or C<[0, 0]> on error.
 
     my array @result = tcc::compile_func($code, "process", "runtime");
-    my int $fn = @result[0];
-    my int $state = @result[1];
+    my int $fn = $result[0];
+    my int $state = $result[1];
 
 =head1 EXAMPLE
 
@@ -451,8 +451,8 @@ func compile_func(str $code, str $func_name, str $inc_path) array {
 
     my int $fn = tcc::symbol($state, $func_name);
 
-    @result[0] = $fn;
-    @result[1] = $state;
+    $result[0] = $fn;
+    $result[1] = $state;
 
     return @result;
 }

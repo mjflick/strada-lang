@@ -100,7 +100,7 @@ func list_devices() void {
 
     my int $i = 0;
     while ($i < $count) {
-        my hash %dev = @devices[$i];
+        my hash %dev = $devices[$i];
         my int $vid = $dev{"vid"} + 0;
         my int $pid = $dev{"pid"} + 0;
         my int $bus = $dev{"bus"} + 0;
@@ -215,7 +215,7 @@ func show_device_info(int $vid, int $pid) void {
     my int $i = 0;
 
     while ($i < $num_ifaces) {
-        my hash %iface = @interfaces[$i];
+        my hash %iface = $interfaces[$i];
         say("");
         say("  Interface " . $iface{"interface_number"} . " (alt " . $iface{"alt_setting"} . "):");
         say("    Class: " . class_name($iface{"interface_class"} + 0));
@@ -228,7 +228,7 @@ func show_device_info(int $vid, int $pid) void {
         my int $j = 0;
 
         while ($j < $num_eps) {
-            my hash %ep = @endpoints[$j];
+            my hash %ep = $endpoints[$j];
             say("      Endpoint " . sys::sprintf("0x%02x", $ep{"address"} + 0) . ":");
             say("        Direction: " . $ep{"direction"});
             say("        Type: " . $ep{"type"});
@@ -327,7 +327,7 @@ func main() int {
         return 0;
     }
 
-    my str $cmd = @args[0];
+    my str $cmd = $args[0];
 
     if ($cmd eq "list" || $cmd eq "-l") {
         list_devices();
@@ -338,8 +338,8 @@ func main() int {
             usb::exit();
             return 1;
         }
-        my int $vid = sys::strtol(@args[1], 16);
-        my int $pid = sys::strtol(@args[2], 16);
+        my int $vid = sys::strtol($args[1], 16);
+        my int $pid = sys::strtol($args[2], 16);
         show_device_info($vid, $pid);
     } else if ($cmd eq "status" || $cmd eq "-s") {
         if ($argc < 3) {
@@ -348,8 +348,8 @@ func main() int {
             usb::exit();
             return 1;
         }
-        my int $vid = sys::strtol(@args[1], 16);
-        my int $pid = sys::strtol(@args[2], 16);
+        my int $vid = sys::strtol($args[1], 16);
+        my int $pid = sys::strtol($args[2], 16);
         demo_control_transfer($vid, $pid);
     } else if ($cmd eq "help" || $cmd eq "-h" || $cmd eq "--help") {
         print_usage();

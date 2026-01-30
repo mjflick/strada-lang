@@ -118,7 +118,7 @@ func main() int {
     # Simple list first
     my int $i = 0;
     while ($i < $count) {
-        my hash %dev = @devices[$i];
+        my hash %dev = $devices[$i];
         say($i + 1 . ". " . $dev{"vidpid"} . " on bus " . $dev{"bus"} . " addr " . $dev{"address"});
         $i = $i + 1;
     }
@@ -129,7 +129,7 @@ func main() int {
     # Detailed list
     $i = 0;
     while ($i < $count) {
-        my hash %dev = @devices[$i];
+        my hash %dev = $devices[$i];
         print_device_details(%dev);
         $i = $i + 1;
     }

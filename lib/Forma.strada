@@ -238,7 +238,7 @@ and the template variables hash.
     # Define a helper
     sub double_helper(scalar $args, scalar $vars) str {
         my array @a = @{$args};
-        my int $n = scalar(@a) > 0 ? @a[0] + 0 : 0;
+        my int $n = scalar(@a) > 0 ? $a[0] + 0 : 0;
         return "" . ($n * 2);
     }
 
@@ -1993,8 +1993,8 @@ func process_if_cmp(str $expr, str $op, str $if_body, str $else_body, scalar $va
         return "";
     }
 
-    my str $var_name = @parts[0];
-    my str $compare_val = @parts[1];
+    my str $var_name = $parts[0];
+    my str $compare_val = $parts[1];
 
     my scalar $val = Forma::get_var($var_name, $vars);
     my str $str_val = defined($val) ? "" . $val : "";
@@ -2104,8 +2104,8 @@ func process_range(str $expr, str $body, scalar $vars) str {
         return "";
     }
 
-    my int $start = @parts[0] + 0;
-    my int $end_val = @parts[1] + 0;
+    my int $start = $parts[0] + 0;
+    my int $end_val = $parts[1] + 0;
 
     my str $result = "";
     my int $idx = 0;
@@ -2294,8 +2294,8 @@ func helper_truncate(str $args, scalar $vars) str {
         return "";
     }
 
-    my str $var_name = @parts[0];
-    my int $max_len = @parts[1] + 0;
+    my str $var_name = $parts[0];
+    my int $max_len = $parts[1] + 0;
 
     my str $val = Forma::resolve_var($var_name, $vars);
     if (length($val) <= $max_len) {
@@ -2360,8 +2360,8 @@ func helper_join(str $args, scalar $vars) str {
         return "";
     }
 
-    my str $var_name = @parts[0];
-    my str $separator = @parts[1];
+    my str $var_name = $parts[0];
+    my str $separator = $parts[1];
 
     my scalar $val = Forma::get_var($var_name, $vars);
     if (!defined($val) || ref($val) ne "ARRAY") {
@@ -2391,8 +2391,8 @@ func helper_format_number(str $args, scalar $vars) str {
         return "";
     }
 
-    my str $var_name = @parts[0];
-    my int $decimals = @parts[1] + 0;
+    my str $var_name = $parts[0];
+    my int $decimals = $parts[1] + 0;
 
     my str $val = Forma::resolve_var($var_name, $vars);
     my num $num = $val + 0;
@@ -2770,8 +2770,8 @@ func parse_helper_args(str $args_str, scalar $vars) array {
 func helper_add(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my num $a = Forma::resolve_num(@parts[0], $vars);
-    my num $b = Forma::resolve_num(@parts[1], $vars);
+    my num $a = Forma::resolve_num($parts[0], $vars);
+    my num $b = Forma::resolve_num($parts[1], $vars);
     return Forma::format_num($a + $b);
 }
 
@@ -2779,8 +2779,8 @@ func helper_add(str $args, scalar $vars) str {
 func helper_subtract(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my num $a = Forma::resolve_num(@parts[0], $vars);
-    my num $b = Forma::resolve_num(@parts[1], $vars);
+    my num $a = Forma::resolve_num($parts[0], $vars);
+    my num $b = Forma::resolve_num($parts[1], $vars);
     return Forma::format_num($a - $b);
 }
 
@@ -2788,8 +2788,8 @@ func helper_subtract(str $args, scalar $vars) str {
 func helper_multiply(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my num $a = Forma::resolve_num(@parts[0], $vars);
-    my num $b = Forma::resolve_num(@parts[1], $vars);
+    my num $a = Forma::resolve_num($parts[0], $vars);
+    my num $b = Forma::resolve_num($parts[1], $vars);
     return Forma::format_num($a * $b);
 }
 
@@ -2797,8 +2797,8 @@ func helper_multiply(str $args, scalar $vars) str {
 func helper_divide(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my num $a = Forma::resolve_num(@parts[0], $vars);
-    my num $b = Forma::resolve_num(@parts[1], $vars);
+    my num $a = Forma::resolve_num($parts[0], $vars);
+    my num $b = Forma::resolve_num($parts[1], $vars);
     if ($b == 0) { return "0"; }
     return Forma::format_num($a / $b);
 }
@@ -2807,8 +2807,8 @@ func helper_divide(str $args, scalar $vars) str {
 func helper_mod(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my int $a = Forma::resolve_num(@parts[0], $vars) + 0;
-    my int $b = Forma::resolve_num(@parts[1], $vars) + 0;
+    my int $a = Forma::resolve_num($parts[0], $vars) + 0;
+    my int $b = Forma::resolve_num($parts[1], $vars) + 0;
     if ($b == 0) { return "0"; }
     return "" . ($a % $b);
 }
@@ -2817,8 +2817,8 @@ func helper_mod(str $args, scalar $vars) str {
 func helper_round(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 1) { return ""; }
-    my num $n = Forma::resolve_num(@parts[0], $vars);
-    my int $decimals = scalar(@parts) >= 2 ? @parts[1] + 0 : 0;
+    my num $n = Forma::resolve_num($parts[0], $vars);
+    my int $decimals = scalar(@parts) >= 2 ? $parts[1] + 0 : 0;
     my str $fmt = "%." . $decimals . "f";
     return sprintf($fmt, $n);
 }
@@ -2861,9 +2861,9 @@ func format_num(num $n) str {
 func helper_replace(str $args, scalar $vars) str {
     my array @parts = Forma::parse_three_args($args);
     if (scalar(@parts) < 3) { return ""; }
-    my str $text = @parts[0];
-    my str $find = @parts[1];
-    my str $repl = @parts[2];
+    my str $text = $parts[0];
+    my str $find = $parts[1];
+    my str $repl = $parts[2];
     # If first arg looks like var name, resolve it
     if (!Forma::looks_like_number($text) && index($text, " ") < 0) {
         $text = Forma::resolve_var($text, $vars);
@@ -2888,8 +2888,8 @@ func helper_replace(str $args, scalar $vars) str {
 func helper_contains(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return "0"; }
-    my str $haystack = @parts[0];
-    my str $needle = @parts[1];
+    my str $haystack = $parts[0];
+    my str $needle = $parts[1];
     # Resolve var if needed
     if (!Forma::looks_like_number($haystack) && index($haystack, " ") < 0) {
         $haystack = Forma::resolve_var($haystack, $vars);
@@ -2901,8 +2901,8 @@ func helper_contains(str $args, scalar $vars) str {
 func helper_starts_with(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return "0"; }
-    my str $text = @parts[0];
-    my str $prefix = @parts[1];
+    my str $text = $parts[0];
+    my str $prefix = $parts[1];
     if (!Forma::looks_like_number($text) && index($text, " ") < 0) {
         $text = Forma::resolve_var($text, $vars);
     }
@@ -2915,8 +2915,8 @@ func helper_starts_with(str $args, scalar $vars) str {
 func helper_ends_with(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return "0"; }
-    my str $text = @parts[0];
-    my str $suffix = @parts[1];
+    my str $text = $parts[0];
+    my str $suffix = $parts[1];
     if (!Forma::looks_like_number($text) && index($text, " ") < 0) {
         $text = Forma::resolve_var($text, $vars);
     }
@@ -2930,9 +2930,9 @@ func helper_ends_with(str $args, scalar $vars) str {
 func helper_pad_left(str $args, scalar $vars) str {
     my array @parts = Forma::parse_three_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my str $text = @parts[0];
-    my int $width = @parts[1] + 0;
-    my str $pad_char = scalar(@parts) >= 3 ? @parts[2] : " ";
+    my str $text = $parts[0];
+    my int $width = $parts[1] + 0;
+    my str $pad_char = scalar(@parts) >= 3 ? $parts[2] : " ";
     if (length($pad_char) == 0) { $pad_char = " "; }
     $pad_char = substr($pad_char, 0, 1);  # Use only first char
     # Resolve var if needed
@@ -2949,9 +2949,9 @@ func helper_pad_left(str $args, scalar $vars) str {
 func helper_pad_right(str $args, scalar $vars) str {
     my array @parts = Forma::parse_three_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my str $text = @parts[0];
-    my int $width = @parts[1] + 0;
-    my str $pad_char = scalar(@parts) >= 3 ? @parts[2] : " ";
+    my str $text = $parts[0];
+    my int $width = $parts[1] + 0;
+    my str $pad_char = scalar(@parts) >= 3 ? $parts[2] : " ";
     if (length($pad_char) == 0) { $pad_char = " "; }
     $pad_char = substr($pad_char, 0, 1);
     if (!Forma::looks_like_number($text) && index($text, " ") < 0) {
@@ -2967,8 +2967,8 @@ func helper_pad_right(str $args, scalar $vars) str {
 func helper_repeat(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my str $text = @parts[0];
-    my int $count = @parts[1] + 0;
+    my str $text = $parts[0];
+    my int $count = $parts[1] + 0;
     # Check if original was a quoted literal (starts with " or ')
     my int $pos = 0;
     while ($pos < length($args) && substr($args, $pos, 1) eq " ") { $pos = $pos + 1; }
@@ -3146,8 +3146,8 @@ func helper_strip_tags(str $val) str {
 func helper_date_format(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 2) { return ""; }
-    my str $ts_str = @parts[0];
-    my str $format = @parts[1];
+    my str $ts_str = $parts[0];
+    my str $format = $parts[1];
 
     # Get timestamp
     my int $ts = 0;
@@ -3343,8 +3343,8 @@ func helper_time_ago(str $ts_str, scalar $vars) str {
 func helper_currency(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 1) { return ""; }
-    my str $amount_str = @parts[0];
-    my str $currency = scalar(@parts) >= 2 ? @parts[1] : "USD";
+    my str $amount_str = $parts[0];
+    my str $currency = scalar(@parts) >= 2 ? $parts[1] : "USD";
 
     my num $amount = 0;
     if (Forma::looks_like_number($amount_str)) {
@@ -3378,8 +3378,8 @@ func helper_currency(str $args, scalar $vars) str {
 func helper_percent(str $args, scalar $vars) str {
     my array @parts = Forma::parse_two_args($args);
     if (scalar(@parts) < 1) { return ""; }
-    my str $val_str = @parts[0];
-    my int $decimals = scalar(@parts) >= 2 ? @parts[1] + 0 : 0;
+    my str $val_str = $parts[0];
+    my int $decimals = scalar(@parts) >= 2 ? $parts[1] + 0 : 0;
 
     my num $val = 0;
     if (Forma::looks_like_number($val_str)) {
@@ -3403,9 +3403,9 @@ func helper_percent(str $args, scalar $vars) str {
 func helper_iif(str $args, scalar $vars) str {
     my array @parts = Forma::parse_three_args($args);
     if (scalar(@parts) < 3) { return ""; }
-    my str $cond_str = @parts[0];
-    my str $true_val = @parts[1];
-    my str $false_val = @parts[2];
+    my str $cond_str = $parts[0];
+    my str $true_val = $parts[1];
+    my str $false_val = $parts[2];
 
     # Resolve condition
     my scalar $cond_val = Forma::get_var($cond_str, $vars);

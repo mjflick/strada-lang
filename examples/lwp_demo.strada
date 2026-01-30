@@ -28,7 +28,7 @@ func main() int {
 
     # Check for command line argument
     if (scalar(@ARGV) > 1) {
-        $url = @ARGV[1];
+        $url = $ARGV[1];
     }
 
     say("Fetching: " . $url);

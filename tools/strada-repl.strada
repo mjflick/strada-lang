@@ -443,10 +443,10 @@ func register_function(str $func_def) int {
     my int $i = 0;
     my int $count = scalar(@g_functions);
     while ($i < $count) {
-        my str $existing_name = get_function_name(@g_functions[$i]);
+        my str $existing_name = get_function_name($g_functions[$i]);
         if ($existing_name eq $name) {
             # Replace existing function
-            @g_functions[$i] = $func_def;
+            $g_functions[$i] = $func_def;
             return 1;  # Replaced
         }
         $i = $i + 1;
@@ -465,7 +465,7 @@ func extract_function_def(str $input) array {
     # Find the opening brace
     my int $brace_pos = index($input, "{");
     if ($brace_pos < 0) {
-        @result[0] = $input;
+        $result[0] = $input;
         return @result;
     }
 
@@ -506,16 +506,16 @@ func extract_function_def(str $input) array {
     }
 
     if ($end_pos >= 0) {
-        @result[0] = substr($input, 0, $end_pos + 1);
+        $result[0] = substr($input, 0, $end_pos + 1);
         if ($end_pos + 1 < $len) {
             my str $remainder = substr($input, $end_pos + 1, $len - $end_pos - 1);
             $remainder =~ s/^\s*;\s*//;  # Remove leading semicolon and whitespace
             $remainder =~ s/^\s+//;
             $remainder =~ s/\s+$//;
-            @result[1] = $remainder;
+            $result[1] = $remainder;
         }
     } else {
-        @result[0] = $input;
+        $result[0] = $input;
     }
 
     return @result;
@@ -1282,7 +1282,7 @@ func format_error_display(str $user_input, str $error_output, str $generated_src
 
             my int $ln = $start_line;
             while ($ln <= $end_line) {
-                my str $line_content = @user_lines[$ln];
+                my str $line_content = $user_lines[$ln];
                 my int $display_ln = $ln + 1;
                 my str $prefix = "  " . $display_ln . " | ";
 
@@ -1453,7 +1453,7 @@ func parse_args(array @args) int {
     my int $i = 1;  # Skip program name
     my int $argc = scalar(@args);
     while ($i < $argc) {
-        my str $arg = @args[$i];
+        my str $arg = $args[$i];
 
         if ($arg eq "--help" || $arg eq "-h") {
             print_usage();
@@ -1465,7 +1465,7 @@ func parse_args(array @args) int {
                 say("Error: -L requires a path argument");
                 return 1;
             }
-            my str $path = @args[$i];
+            my str $path = $args[$i];
             add_lib_path($path, 0);
         } elsif ($arg eq "-LL") {
             # Low priority library path - next arg is the path
@@ -1474,7 +1474,7 @@ func parse_args(array @args) int {
                 say("Error: -LL requires a path argument");
                 return 1;
             }
-            my str $path = @args[$i];
+            my str $path = $args[$i];
             add_lib_path($path, 1);
         } elsif ($arg =~ /^-LL/) {
             # -LLpath (no space) - low priority
@@ -1637,7 +1637,7 @@ func main(int $argc, array @argv) int {
     }
 
     # Detect tools directory from argv[0] (where this REPL binary lives)
-    my str $self_path = @argv[0];
+    my str $self_path = $argv[0];
     my str $real_path = sys::realpath($self_path);
     if ($real_path ne "") {
         $g_tools_dir = sys::dirname($real_path);
@@ -1971,12 +1971,12 @@ func main(int $argc, array @argv) int {
                     # Process the line like normal input
                     if (is_function_def($trimmed_line)) {
                         my array @parts = extract_function_def($trimmed_line);
-                        register_function(@parts[0]);
+                        register_function($parts[0]);
                         $g_func_version = $g_func_version + 1;
 
                         # If there's a remainder, evaluate it
-                        if (@parts[1] ne "") {
-                            my scalar $result = eval_input(@parts[1], \%state);
+                        if ($parts[1] ne "") {
+                            my scalar $result = eval_input($parts[1], \%state);
                         }
                     } else {
                         # Regular expression or variable declaration
@@ -2048,7 +2048,7 @@ func main(int $argc, array @argv) int {
         # Check for function definition
         if (is_function_def($input)) {
             my array @parts = extract_function_def($input);
-            my int $replaced = register_function(@parts[0]);
+            my int $replaced = register_function($parts[0]);
             $g_func_version = $g_func_version + 1;
             if ($replaced == 1) {
                 say("Function redefined");
@@ -2057,8 +2057,8 @@ func main(int $argc, array @argv) int {
             }
 
             # If there's a remainder (e.g., "; foo()"), evaluate it
-            if (@parts[1] ne "") {
-                my scalar $result = eval_input(@parts[1], \%state);
+            if ($parts[1] ne "") {
+                my scalar $result = eval_input($parts[1], \%state);
                 if (defined($result)) {
                     say("=> " . format_value($result));
                 }

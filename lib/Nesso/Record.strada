@@ -39,7 +39,7 @@ func update(scalar $self, scalar $attrs) int {
     my int $i = 0;
     my int $n = scalar(@keys);
     while ($i < $n) {
-        my str $key = @keys[$i];
+        my str $key = $keys[$i];
         $self->{$key} = $attrs->{$key};
         $i++;
     }
@@ -67,7 +67,7 @@ func reload(scalar $self) scalar {
         my int $i = 0;
         my int $n = scalar(@keys);
         while ($i < $n) {
-            my str $key = @keys[$i];
+            my str $key = $keys[$i];
             if ($key ne "_nesso") {
                 $self->{$key} = $fresh->{$key};
             }

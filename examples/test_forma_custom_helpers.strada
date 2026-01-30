@@ -7,15 +7,15 @@ func double_helper(scalar $args, scalar $vars) str {
     if (scalar(@a) == 0) {
         return "0";
     }
-    my int $n = @a[0] + 0;
+    my int $n = $a[0] + 0;
     return "" . ($n * 2);
 }
 
 # Define a helper that formats a greeting
 func greet_helper(scalar $args, scalar $vars) str {
     my array @a = @{$args};
-    my str $name = scalar(@a) > 0 ? "" . @a[0] : "World";
-    my str $greeting = scalar(@a) > 1 ? "" . @a[1] : "Hello";
+    my str $name = scalar(@a) > 0 ? "" . $a[0] : "World";
+    my str $greeting = scalar(@a) > 1 ? "" . $a[1] : "Hello";
     return $greeting . ", " . $name . "!";
 }
 
@@ -25,8 +25,8 @@ func custom_join_helper(scalar $args, scalar $vars) str {
     if (scalar(@a) < 2) {
         return "";
     }
-    my scalar $arr = @a[0];
-    my str $sep = "" . @a[1];
+    my scalar $arr = $a[0];
+    my str $sep = "" . $a[1];
 
     if (!defined($arr) || ref($arr) ne "ARRAY") {
         return "";

@@ -92,7 +92,7 @@ func convert_line(str $line) str {
         my array @caps = capture($trimmed, "^foreach\\s+my\\s+\\$([A-Za-z_][A-Za-z0-9_]*)\\b");
         my str $var = "";
         if (size(@caps) > 1) {
-            $var = @caps[1];
+            $var = $caps[1];
         }
         my str $out = $indent . "if (1) {  # TODO: Convert foreach: " . $trimmed;
         if ($var ne "") {
@@ -191,7 +191,7 @@ func convert_file(str $input_path, str $output_path) int {
 
     my int $i = 0;
     while ($i < size(@lines)) {
-        my str $ln = @lines[$i];
+        my str $ln = $lines[$i];
         my str $converted = convert_line($ln);
         $output = $output . $converted . "\n";
         $i = $i + 1;
@@ -211,11 +211,11 @@ func main(int $argc, array @argv) int {
         return 1;
     }
 
-    my str $input = @argv[1];
+    my str $input = $argv[1];
     my str $output = "";
 
     if ($argc >= 3) {
-        $output = @argv[2];
+        $output = $argv[2];
     } else {
         $output = $input;
         $output = replace($output, "\\.pl$", ".strada");

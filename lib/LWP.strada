@@ -342,7 +342,7 @@ func build_query(hash %params) str {
     my array @keys = keys(%params);
     my int $i = 0;
     while ($i < scalar(@keys)) {
-        my str $key = @keys[$i];
+        my str $key = $keys[$i];
         if ($i > 0) {
             $result = $result . "&";
         }
@@ -359,7 +359,7 @@ func parse_headers(str $header_block) hash {
 
     my int $i = 0;
     while ($i < scalar(@lines)) {
-        my str $line = @lines[$i];
+        my str $line = $lines[$i];
         my int $colon = index($line, ":");
         if ($colon > 0) {
             my str $name = substr($line, 0, $colon);
@@ -409,15 +409,15 @@ func parse_response(str $raw) hash {
     # Parse "HTTP/1.1 200 OK"
     my array @status_parts = split(" ", $status_line);
     if (scalar(@status_parts) >= 2) {
-        $response{"protocol"} = @status_parts[0];
-        $response{"status"} = cast_int(@status_parts[1]);
+        $response{"protocol"} = $status_parts[0];
+        $response{"status"} = cast_int($status_parts[1]);
         if (scalar(@status_parts) >= 3) {
             # Join remaining parts for reason phrase
             my str $reason = "";
             my int $i = 2;
             while ($i < scalar(@status_parts)) {
                 if ($i > 2) { $reason = $reason . " "; }
-                $reason = $reason . @status_parts[$i];
+                $reason = $reason . $status_parts[$i];
                 $i = $i + 1;
             }
             $response{"reason"} = $reason;
@@ -517,7 +517,7 @@ func do_request(str $method, str $url, str $body, hash %options) hash {
         my array @hkeys = keys($custom_headers);
         my int $i = 0;
         while ($i < scalar(@hkeys)) {
-            my str $hname = @hkeys[$i];
+            my str $hname = $hkeys[$i];
             $request = $request . $hname . ": " . $custom_headers->{$hname} . "\r\n";
             $i = $i + 1;
         }

@@ -62,7 +62,7 @@ func main() int {
     say("Completing chores:");
     while (%todo) {
         my array @tasks = keys(%todo);
-        my str $task = @tasks[0];
+        my str $task = $tasks[0];
         say("  Done: " . $task . " in " . $todo{$task});
         delete($todo{$task});
     }

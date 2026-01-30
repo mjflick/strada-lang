@@ -455,7 +455,7 @@ func dot_stuff(str $text) str {
     my int $count = size(@lines);
 
     while ($i < $count) {
-        my str $line = @lines[$i];
+        my str $line = $lines[$i];
 
         # Remove any trailing \r
         if (length($line) > 0) {

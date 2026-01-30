@@ -131,7 +131,7 @@ func Attachment_checksum(scalar $self) int {
     my array @bytes = @{$self->{"bytes"}};
     my int $i = 0;
     while ($i < scalar(@bytes)) {
-        $sum = $sum + @bytes[$i];
+        $sum = $sum + $bytes[$i];
         $i = $i + 4;
     }
     return $sum;
@@ -189,7 +189,7 @@ func Payload_touch(scalar $self) int {
     my array @nums = @{$self->{"numbers"}};
     my int $i = 0;
     while ($i < scalar(@nums)) {
-        $sum = $sum + @nums[$i];
+        $sum = $sum + $nums[$i];
         $i = $i + 5;
     }
 
@@ -343,14 +343,14 @@ func Graph_touch(scalar $self) int {
     my array @nodes = @{$self->{"nodes"}};
     my int $i = 0;
     while ($i < scalar(@nodes)) {
-        $sum = $sum + @nodes[$i]->touch();
+        $sum = $sum + $nodes[$i]->touch();
         $i = $i + 3;
     }
 
     my array @edges = @{$self->{"edges"}};
     $i = 0;
     while ($i < scalar(@edges)) {
-        $sum = $sum + @edges[$i]->touch();
+        $sum = $sum + $edges[$i]->touch();
         $i = $i + 5;
     }
 

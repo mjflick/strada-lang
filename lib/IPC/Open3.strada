@@ -213,19 +213,19 @@ func open3(str $cmd) hash {
         # Child process
 
         # Redirect stdin from pipe
-        sys::close_fd(@stdin_pipe[1]);   # Close write end
-        sys::dup2(@stdin_pipe[0], 0);
-        sys::close_fd(@stdin_pipe[0]);
+        sys::close_fd($stdin_pipe[1]);   # Close write end
+        sys::dup2($stdin_pipe[0], 0);
+        sys::close_fd($stdin_pipe[0]);
 
         # Redirect stdout to pipe
-        sys::close_fd(@stdout_pipe[0]);  # Close read end
-        sys::dup2(@stdout_pipe[1], 1);
-        sys::close_fd(@stdout_pipe[1]);
+        sys::close_fd($stdout_pipe[0]);  # Close read end
+        sys::dup2($stdout_pipe[1], 1);
+        sys::close_fd($stdout_pipe[1]);
 
         # Redirect stderr to pipe
-        sys::close_fd(@stderr_pipe[0]);  # Close read end
-        sys::dup2(@stderr_pipe[1], 2);
-        sys::close_fd(@stderr_pipe[1]);
+        sys::close_fd($stderr_pipe[0]);  # Close read end
+        sys::dup2($stderr_pipe[1], 2);
+        sys::close_fd($stderr_pipe[1]);
 
         # Execute the command via shell
         sys::exec("/bin/sh -c '" . $cmd . "'");
@@ -236,14 +236,14 @@ func open3(str $cmd) hash {
         # Parent process
 
         # Close unused ends of pipes
-        sys::close_fd(@stdin_pipe[0]);   # Close read end
-        sys::close_fd(@stdout_pipe[1]);  # Close write end
-        sys::close_fd(@stderr_pipe[1]);  # Close write end
+        sys::close_fd($stdin_pipe[0]);   # Close read end
+        sys::close_fd($stdout_pipe[1]);  # Close write end
+        sys::close_fd($stderr_pipe[1]);  # Close write end
 
         $result{"pid"} = $pid;
-        $result{"stdin"} = @stdin_pipe[1];
-        $result{"stdout"} = @stdout_pipe[0];
-        $result{"stderr"} = @stderr_pipe[0];
+        $result{"stdin"} = $stdin_pipe[1];
+        $result{"stdout"} = $stdout_pipe[0];
+        $result{"stderr"} = $stderr_pipe[0];
     } else {
         $result{"error"} = "Fork failed";
     }
@@ -272,25 +272,25 @@ func open2(str $cmd) hash {
 
     if ($pid == 0) {
         # Child process
-        sys::close_fd(@stdin_pipe[1]);
-        sys::dup2(@stdin_pipe[0], 0);
-        sys::close_fd(@stdin_pipe[0]);
+        sys::close_fd($stdin_pipe[1]);
+        sys::dup2($stdin_pipe[0], 0);
+        sys::close_fd($stdin_pipe[0]);
 
-        sys::close_fd(@stdout_pipe[0]);
-        sys::dup2(@stdout_pipe[1], 1);
-        sys::dup2(@stdout_pipe[1], 2);  # stderr -> stdout
-        sys::close_fd(@stdout_pipe[1]);
+        sys::close_fd($stdout_pipe[0]);
+        sys::dup2($stdout_pipe[1], 1);
+        sys::dup2($stdout_pipe[1], 2);  # stderr -> stdout
+        sys::close_fd($stdout_pipe[1]);
 
         sys::exec("/bin/sh -c '" . $cmd . "'");
         exit(127);
     } elsif ($pid > 0) {
         # Parent process
-        sys::close_fd(@stdin_pipe[0]);
-        sys::close_fd(@stdout_pipe[1]);
+        sys::close_fd($stdin_pipe[0]);
+        sys::close_fd($stdout_pipe[1]);
 
         $result{"pid"} = $pid;
-        $result{"stdin"} = @stdin_pipe[1];
-        $result{"stdout"} = @stdout_pipe[0];
+        $result{"stdin"} = $stdin_pipe[1];
+        $result{"stdout"} = $stdout_pipe[0];
     } else {
         $result{"error"} = "Fork failed";
     }
@@ -311,16 +311,16 @@ func cmd_output(str $cmd) str {
 
     if ($pid == 0) {
         # Child
-        sys::close_fd(@pipe[0]);
-        sys::dup2(@pipe[1], 1);
-        sys::close_fd(@pipe[1]);
+        sys::close_fd($pipe[0]);
+        sys::dup2($pipe[1], 1);
+        sys::close_fd($pipe[1]);
         sys::exec("/bin/sh -c '" . $cmd . "'");
         exit(127);
     } elsif ($pid > 0) {
         # Parent
-        sys::close_fd(@pipe[1]);
-        my str $output = sys::slurp_fd(@pipe[0]);
-        sys::close_fd(@pipe[0]);
+        sys::close_fd($pipe[1]);
+        my str $output = sys::slurp_fd($pipe[0]);
+        sys::close_fd($pipe[0]);
         sys::wait();
         return $output;
     }

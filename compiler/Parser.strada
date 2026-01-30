@@ -1652,11 +1652,14 @@ func parse_postfix(scalar $parser, scalar $left) scalar {
             $left = ast_new_hash_access($left, $key);
         }
         elsif (parser_check($parser, "LBRACKET")) {
-            # Check for invalid %hash[idx] syntax (but allow @arr[idx] for compatibility)
+            # Check for invalid sigil usage with array subscript
             if ($left->{"type"} == NODE_VARIABLE()) {
                 my str $sigil = $left->{"sigil"};
                 if ($sigil eq "%") {
                     parser_error($parser, "cannot use array subscript [idx] on hash variable");
+                }
+                if ($sigil eq "@") {
+                    parser_error($parser, "use $arr[idx] for array element access (array sigil not allowed here)");
                 }
             }
             parser_advance($parser);
@@ -2215,7 +2218,7 @@ func parse_var_decl(scalar $parser) scalar {
         $decl->{"type_name"} = $type_name;
     }
 
-    # Optional initial capacity for arrays: my array @name[size];
+    # Optional initial capacity for arrays: my array $name[size];
     if ($sigil eq "@") {
         if (parser_check($parser, "LBRACKET")) {
             parser_advance($parser);
