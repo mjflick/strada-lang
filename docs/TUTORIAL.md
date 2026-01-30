@@ -374,8 +374,8 @@ Return an array:
 
 ```strada
 func minmax(array @nums) array {
-    my int $min = @nums[0];
-    my int $max = @nums[0];
+    my int $min = $nums[0];
+    my int $max = $nums[0];
 
     foreach my int $n (@nums) {
         if ($n < $min) { $min = $n; }
@@ -387,7 +387,7 @@ func minmax(array @nums) array {
 
 func main() int {
     my array @result = minmax((5, 2, 8, 1, 9));
-    say("Min: " . @result[0] . ", Max: " . @result[1]);
+    say("Min: " . $result[0] . ", Max: " . $result[1]);
     return 0;
 }
 ```
@@ -430,12 +430,12 @@ my array @mixed = (1, "two", 3.0);
 ```strada
 my array @letters = ("a", "b", "c", "d");
 
-say(@letters[0]);   # a (first element)
-say(@letters[2]);   # c (third element)
-say(@letters[-1]);  # d (last element)
+say($letters[0]);   # a (first element)
+say($letters[2]);   # c (third element)
+say($letters[-1]);  # d (last element)
 
 # Modify elements
-@letters[1] = "B";
+$letters[1] = "B";
 ```
 
 ### Array Functions
@@ -472,7 +472,7 @@ foreach my int $n (@nums) {
 
 # Using index
 for (my int $i = 0; $i < size(@nums); $i = $i + 1) {
-    say("Index " . $i . ": " . @nums[$i]);
+    say("Index " . $i . ": " . $nums[$i]);
 }
 ```
 
@@ -807,9 +807,9 @@ $s =~ s/old/new/g;
 ```strada
 my str $date = "2024-01-15";
 my array @parts = capture($date, "(\d+)-(\d+)-(\d+)");
-say("Year: " . @parts[0]);   # 2024
-say("Month: " . @parts[1]);  # 01
-say("Day: " . @parts[2]);    # 15
+say("Year: " . $parts[0]);   # 2024
+say("Month: " . $parts[1]);  # 01
+say("Day: " . $parts[2]);    # 15
 ```
 
 ---

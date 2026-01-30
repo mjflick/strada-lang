@@ -384,7 +384,7 @@ my array @big[1000];          # Pre-allocate for 1000 elements
 push(@arr, "item");           # Add to end
 my scalar $last = pop(@arr);  # Remove from end
 my int $len = size(@arr);     # Length
-my scalar $el = @arr[0];      # Access element
+my scalar $el = $arr[0];      # Access element
 reverse(@arr);                # Reverse in place
 
 # Anonymous array

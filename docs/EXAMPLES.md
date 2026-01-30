@@ -45,13 +45,13 @@ Compile and run:
 ```strada
 # args.strada
 func main() int {
-    say("Program: " . @ARGV[0]);
+    say("Program: " . $ARGV[0]);
     say("Arguments: " . ($ARGC - 1));
 
     if ($ARGC > 1) {
         say("\nArguments:");
         for (my int $i = 1; $i < $ARGC; $i = $i + 1) {
-            say("  " . $i . ": " . @ARGV[$i]);
+            say("  " . $i . ": " . $ARGV[$i]);
         }
     }
 
@@ -284,7 +284,7 @@ func main() int {
         return 1;
     }
 
-    my str $filename = @ARGV[1];
+    my str $filename = $ARGV[1];
     my str $content = sys::slurp($filename);
 
     if (!defined($content)) {
@@ -331,17 +331,17 @@ Charlie,35,Chicago";
     my array @lines = split("\n", $csv_data);
 
     # Get headers
-    my array @headers = parse_csv_line(@lines[0]);
+    my array @headers = parse_csv_line($lines[0]);
     say("Headers: " . join(", ", @headers));
 
     # Parse data rows
     my array @records = ();
     for (my int $i = 1; $i < size(@lines); $i = $i + 1) {
-        my array @fields = parse_csv_line(@lines[$i]);
+        my array @fields = parse_csv_line($lines[$i]);
         my scalar $record = {};
 
         for (my int $j = 0; $j < size(@headers); $j = $j + 1) {
-            $record->{@headers[$j]} = @fields[$j];
+            $record->{$headers[$j]} = $fields[$j];
         }
 
         push(@records, $record);
@@ -486,9 +486,9 @@ func main() int {
     my array @parts = capture($date, "(\d{4})-(\d{2})-(\d{2})");
 
     if (size(@parts) >= 3) {
-        say("Year: " . @parts[0]);
-        say("Month: " . @parts[1]);
-        say("Day: " . @parts[2]);
+        say("Year: " . $parts[0]);
+        say("Month: " . $parts[1]);
+        say("Day: " . $parts[2]);
     }
 
     # Parse email
@@ -497,8 +497,8 @@ func main() int {
 
     if (size(@email_parts) >= 2) {
         say("\nEmail parts:");
-        say("  User: " . @email_parts[0]);
-        say("  Domain: " . @email_parts[1]);
+        say("  User: " . $email_parts[0]);
+        say("  Domain: " . $email_parts[1]);
     }
 
     return 0;
@@ -1260,9 +1260,9 @@ func calculate(str $expr) num {
         throw "Invalid expression. Use: num op num";
     }
 
-    my num $a = cast_num(@parts[0]);
-    my str $op = @parts[1];
-    my num $b = cast_num(@parts[2]);
+    my num $a = cast_num($parts[0]);
+    my str $op = $parts[1];
+    my num $b = cast_num($parts[2]);
 
     if ($op eq "+") {
         return $a + $b;

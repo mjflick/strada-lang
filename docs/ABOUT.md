@@ -79,7 +79,7 @@ Full regex support with familiar syntax:
 ```strada
 if ($line =~ /^Hello, (.+)!$/) {
     my array @caps = captures();
-    say("Greeting: " . @caps[1]);
+    say("Greeting: " . $caps[1]);
 }
 
 $text =~ s/foo/bar/g;

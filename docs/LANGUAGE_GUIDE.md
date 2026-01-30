@@ -421,7 +421,7 @@ SEARCH: while (1) {
     }
 
     for (my int $i = 0; $i < size(@patterns); $i = $i + 1) {
-        if ($line =~ /@patterns[$i]/) {
+        if ($line =~ /$patterns[$i]/) {
             say("Found match!");
             last SEARCH;   # Exit the outer while loop
         }
@@ -827,7 +827,7 @@ my int $len = size(@items);
 
 # Iterate
 for (my int $i = 0; $i < size(@items); $i = $i + 1) {
-    say(@items[$i]);
+    say($items[$i]);
 }
 ```
 
@@ -896,7 +896,7 @@ my array @pairs = map { $_ => 1 } @fruits;
 my hash %h = ();
 my int $i = 0;
 while ($i < scalar(@pairs)) {
-    $h{@pairs[$i]} = @pairs[$i + 1];
+    $h{$pairs[$i]} = $pairs[$i + 1];
     $i = $i + 2;
 }
 ```
@@ -2812,7 +2812,7 @@ func main() int {
     
     say("\nColors:");
     for (my int $i = 0; $i < size(@colors); $i = $i + 1) {
-        say("  - " . @colors[$i]);
+        say("  - " . $colors[$i]);
     }
     
     # Hashes

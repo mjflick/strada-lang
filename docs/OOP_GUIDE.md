@@ -159,10 +159,10 @@ my scalar $cfg3 = Config_new("app", 1, 1);     # both on
 ```strada
 func Shape_create(str $type, array @args) scalar {
     if ($type eq "circle") {
-        return Circle_new(@args[0]);
+        return Circle_new($args[0]);
     }
     if ($type eq "rectangle") {
-        return Rectangle_new(@args[0], @args[1]);
+        return Rectangle_new($args[0], $args[1]);
     }
     return undef;
 }
@@ -505,7 +505,7 @@ func Serializable_serialize(scalar $self) str {
 func Serializable_deserialize(scalar $self, str $data) void {
     if ($data =~ /^CONTENT:(.*)/) {
         my array @parts = capture($data, "^CONTENT:(.*)");
-        $self->{"content"} = @parts[0];
+        $self->{"content"} = $parts[0];
     }
 }
 
@@ -879,13 +879,13 @@ package ShapeFactory;
 func ShapeFactory_create(str $type, array @args) scalar {
     switch ($type) {
         case "circle" {
-            return Circle_new(@args[0]);
+            return Circle_new($args[0]);
         }
         case "rectangle" {
-            return Rectangle_new(@args[0], @args[1]);
+            return Rectangle_new($args[0], $args[1]);
         }
         case "triangle" {
-            return Triangle_new(@args[0], @args[1], @args[2]);
+            return Triangle_new($args[0], $args[1], $args[2]);
         }
         default {
             die("Unknown shape: " . $type);

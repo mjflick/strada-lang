@@ -288,7 +288,7 @@ func main() int {
 
     my int $i = 0;
     while ($i < scalar(@points)) {
-        Point_print(@points[$i]);
+        Point_print($points[$i]);
         $i++;
     }
 

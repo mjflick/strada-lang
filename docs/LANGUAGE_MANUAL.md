@@ -572,15 +572,15 @@ my array @mixed = (1, "two", 3.0);
 ### 8.2 Access
 
 ```strada
-@arr[INDEX]             # Get element (0-based)
-@arr[-1]                # Last element
-@arr[-2]                # Second to last
+$arr[INDEX]             # Get element (0-based)
+$arr[-1]                # Last element
+$arr[-2]                # Second to last
 ```
 
 ### 8.3 Modification
 
 ```strada
-@arr[INDEX] = VALUE;    # Set element
+$arr[INDEX] = VALUE;    # Set element
 push(@arr, VALUE);      # Add to end
 pop(@arr);              # Remove from end
 unshift(@arr, VALUE);   # Add to beginning
@@ -608,7 +608,7 @@ foreach my TYPE $var (@arr) {
 }
 
 for (my int $i = 0; $i < size(@arr); $i = $i + 1) {
-    # Access @arr[$i]
+    # Access $arr[$i]
 }
 ```
 

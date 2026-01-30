@@ -126,10 +126,10 @@ my str $date = "2024-01-15";
 
 if ($date =~ /(\d{4})-(\d{2})-(\d{2})/) {
     my array @parts = captures();
-    say("Full match: " . @parts[0]);   # 2024-01-15
-    say("Year: " . @parts[1]);         # 2024
-    say("Month: " . @parts[2]);        # 01
-    say("Day: " . @parts[3]);          # 15
+    say("Full match: " . $parts[0]);   # 2024-01-15
+    say("Year: " . $parts[1]);         # 2024
+    say("Month: " . $parts[2]);        # 01
+    say("Day: " . $parts[3]);          # 15
 }
 ```
 
@@ -264,7 +264,7 @@ func extract_urls(str $text) array {
     # This is simplified - real URL matching is more complex
     while ($text =~ /(https?:\/\/[^\s]+)/) {
         my array @cap = captures();
-        push(@urls, @cap[1]);
+        push(@urls, $cap[1]);
         $text =~ s/https?:\/\/[^\s]+//;
     }
     return @urls;
@@ -329,7 +329,7 @@ Strada uses POSIX Extended Regular Expressions. Some Perl features are not avail
 ### Captures Not Working
 
 1. Ensure pattern actually matched before calling `captures()`
-2. Remember `@captures[0]` is the full match, groups start at index 1
+2. Remember `$captures[0]` is the full match, groups start at index 1
 3. Captures are cleared on each match - save them if needed
 
 ```strada
