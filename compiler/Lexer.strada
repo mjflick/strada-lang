@@ -1082,6 +1082,7 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "gt") { return "STR_GT"; }
     if ($text eq "le") { return "STR_LE"; }
     if ($text eq "ge") { return "STR_GE"; }
+    if ($text eq "cmp") { return "STR_CMP"; }
     
     # Types
     if ($text eq "int") { return "TYPE_INT"; }

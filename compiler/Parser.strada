@@ -235,6 +235,10 @@ func parse_var_name(scalar $parser) str {
         parser_advance($parser);
         return "ge";
     }
+    if ($type_str eq "STR_CMP") {
+        parser_advance($parser);
+        return "cmp";
+    }
 
     # Control flow keywords
     if ($type_str eq "IF") {
@@ -1842,6 +1846,10 @@ func parse_relational(scalar $parser) scalar {
             parser_advance($parser);
             my scalar $right = parse_shift($parser);
             $left = ast_new_binary_op("<=>", $left, $right);
+        } elsif ($type eq "STR_CMP") {
+            parser_advance($parser);
+            my scalar $right = parse_shift($parser);
+            $left = ast_new_binary_op("cmp", $left, $right);
         } else {
             return $left;
         }

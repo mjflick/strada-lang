@@ -942,14 +942,35 @@ func gen_str_cmp(scalar $cg, scalar $expr, str $op) void {
     }
 
     # Case 3: Neither side is a string literal - use standard comparison
-    # Must free the strada_to_str() results to avoid memory leaks
-    emit($cg, "({ char *__cmp_ls = strada_to_str(");
-    gen_expression($cg, $left);
-    emit($cg, "); char *__cmp_rs = strada_to_str(");
-    gen_expression($cg, $right);
-    emit($cg, "); int __cmp_res = strcmp(__cmp_ls, __cmp_rs) ");
-    emit($cg, $cmp_op);
-    emit($cg, "; free(__cmp_ls); free(__cmp_rs); strada_new_int(__cmp_res); })");
+    # Must free both the strada_to_str() results AND the StradaValue temporaries
+    my int $left_needs_cleanup = needs_temp_cleanup($cg, $left);
+    my int $right_needs_cleanup = needs_temp_cleanup($cg, $right);
+
+    if ($cg->{"cleanup_enabled"} == 1 && ($left_needs_cleanup == 1 || $right_needs_cleanup == 1)) {
+        emit($cg, "({ StradaValue *__cmp_lv = ");
+        gen_expression($cg, $left);
+        emit($cg, "; StradaValue *__cmp_rv = ");
+        gen_expression($cg, $right);
+        emit($cg, "; char *__cmp_ls = strada_to_str(__cmp_lv); char *__cmp_rs = strada_to_str(__cmp_rv); ");
+        emit($cg, "int __cmp_res = strcmp(__cmp_ls, __cmp_rs) ");
+        emit($cg, $cmp_op);
+        emit($cg, "; free(__cmp_ls); free(__cmp_rs); ");
+        if ($left_needs_cleanup == 1) {
+            emit($cg, "strada_decref(__cmp_lv); ");
+        }
+        if ($right_needs_cleanup == 1) {
+            emit($cg, "strada_decref(__cmp_rv); ");
+        }
+        emit($cg, "strada_new_int(__cmp_res); })");
+    } else {
+        emit($cg, "({ char *__cmp_ls = strada_to_str(");
+        gen_expression($cg, $left);
+        emit($cg, "); char *__cmp_rs = strada_to_str(");
+        gen_expression($cg, $right);
+        emit($cg, "); int __cmp_res = strcmp(__cmp_ls, __cmp_rs) ");
+        emit($cg, $cmp_op);
+        emit($cg, "; free(__cmp_ls); free(__cmp_rs); strada_new_int(__cmp_res); })");
+    }
 }
 
 # Emit a C string literal with proper escaping
@@ -1516,7 +1537,7 @@ func needs_temp_cleanup(scalar $cg, scalar $expr) int {
     my int $type = $expr->{"type"};
 
     # Literals always create owned StradaValue*
-    if ($type == NODE_INT_LITERAL() || $type == NODE_NUM_LITERAL() || $type == NODE_STR_LITERAL()) {
+    if ($type == NODE_INT_LITERAL() || $type == NODE_NUM_LITERAL() || $type == NODE_STR_LITERAL() || $type == NODE_UNDEF()) {
         return 1;
     }
 
@@ -1530,7 +1551,7 @@ func needs_temp_cleanup(scalar $cg, scalar $expr) int {
             $op eq "&&" || $op eq "||" || $op eq "//" || $op eq "&" || $op eq "|" ||
             $op eq "^" || $op eq "<<" || $op eq ">>" ||
             $op eq "eq" || $op eq "ne" || $op eq "lt" || $op eq "gt" ||
-            $op eq "le" || $op eq "ge") {
+            $op eq "le" || $op eq "ge" || $op eq "<=>" || $op eq "cmp") {
             return 1;
         }
     }
@@ -2252,11 +2273,61 @@ func gen_expression(scalar $cg, scalar $expr) void {
             gen_str_cmp($cg, $expr, "ge");
         } elsif ($op eq "<=>") {
             # Spaceship operator: returns -1, 0, or 1
-            emit($cg, "strada_new_int(({ double __l = strada_to_num(");
-            gen_expression($cg, $expr->{"left"});
-            emit($cg, "); double __r = strada_to_num(");
-            gen_expression($cg, $expr->{"right"});
-            emit($cg, "); (__l < __r) ? -1 : ((__l > __r) ? 1 : 0); }))");
+            # Must cleanup StradaValue temporaries from operands
+            my scalar $left = $expr->{"left"};
+            my scalar $right = $expr->{"right"};
+            my int $left_needs_cleanup = needs_temp_cleanup($cg, $left);
+            my int $right_needs_cleanup = needs_temp_cleanup($cg, $right);
+
+            if ($cg->{"cleanup_enabled"} == 1 && ($left_needs_cleanup == 1 || $right_needs_cleanup == 1)) {
+                emit($cg, "({ StradaValue *__sp_lv = ");
+                gen_expression($cg, $left);
+                emit($cg, "; StradaValue *__sp_rv = ");
+                gen_expression($cg, $right);
+                emit($cg, "; double __l = strada_to_num(__sp_lv); double __r = strada_to_num(__sp_rv); ");
+                if ($left_needs_cleanup == 1) {
+                    emit($cg, "strada_decref(__sp_lv); ");
+                }
+                if ($right_needs_cleanup == 1) {
+                    emit($cg, "strada_decref(__sp_rv); ");
+                }
+                emit($cg, "strada_new_int((__l < __r) ? -1 : ((__l > __r) ? 1 : 0)); })");
+            } else {
+                emit($cg, "strada_new_int(({ double __l = strada_to_num(");
+                gen_expression($cg, $left);
+                emit($cg, "); double __r = strada_to_num(");
+                gen_expression($cg, $right);
+                emit($cg, "); (__l < __r) ? -1 : ((__l > __r) ? 1 : 0); }))");
+            }
+        } elsif ($op eq "cmp") {
+            # String comparison operator: returns -1, 0, or 1
+            # Must free strada_to_str results AND cleanup StradaValue temporaries
+            my scalar $left = $expr->{"left"};
+            my scalar $right = $expr->{"right"};
+            my int $left_needs_cleanup = needs_temp_cleanup($cg, $left);
+            my int $right_needs_cleanup = needs_temp_cleanup($cg, $right);
+
+            if ($cg->{"cleanup_enabled"} == 1 && ($left_needs_cleanup == 1 || $right_needs_cleanup == 1)) {
+                emit($cg, "({ StradaValue *__cmp_lv = ");
+                gen_expression($cg, $left);
+                emit($cg, "; StradaValue *__cmp_rv = ");
+                gen_expression($cg, $right);
+                emit($cg, "; char *__sl = strada_to_str(__cmp_lv); char *__sr = strada_to_str(__cmp_rv); ");
+                emit($cg, "int __cmp_res = strcmp(__sl, __sr); free(__sl); free(__sr); ");
+                if ($left_needs_cleanup == 1) {
+                    emit($cg, "strada_decref(__cmp_lv); ");
+                }
+                if ($right_needs_cleanup == 1) {
+                    emit($cg, "strada_decref(__cmp_rv); ");
+                }
+                emit($cg, "strada_new_int((__cmp_res < 0) ? -1 : ((__cmp_res > 0) ? 1 : 0)); })");
+            } else {
+                emit($cg, "strada_new_int(({ char *__sl = strada_to_str(");
+                gen_expression($cg, $left);
+                emit($cg, "); char *__sr = strada_to_str(");
+                gen_expression($cg, $right);
+                emit($cg, "); int __cmp_res = strcmp(__sl, __sr); free(__sl); free(__sr); (__cmp_res < 0) ? -1 : ((__cmp_res > 0) ? 1 : 0); }))");
+            }
         } elsif ($op eq "=~") {
             # Regex match with string pattern (no flags)
             emit($cg, "strada_new_int(strada_regex_match_with_capture(strada_to_str(");
@@ -9037,7 +9108,7 @@ func gen_expression(scalar $cg, scalar $expr) void {
         emit($cg, "for (int __j_" . $sort_id . " = 0; __j_" . $sort_id . " < __sort_len_" . $sort_id . " - __i_" . $sort_id . " - 1; __j_" . $sort_id . "++) { ");
         emit($cg, "StradaValue *__sort_a_ = strada_array_get(strada_deref_array(__sort_result_" . $sort_id . "), __j_" . $sort_id . "); ");
         emit($cg, "StradaValue *__sort_b_ = strada_array_get(strada_deref_array(__sort_result_" . $sort_id . "), __j_" . $sort_id . " + 1); ");
-        emit($cg, "int __cmp_" . $sort_id . " = strada_to_int(");
+        emit($cg, "StradaValue *__cmp_sv_" . $sort_id . " = ");
 
         # Set flag to enable $a/$b magic variables
         $cg->{"in_sort_block"} = 1;
@@ -9055,7 +9126,7 @@ func gen_expression(scalar $cg, scalar $expr) void {
         # Reset flag
         $cg->{"in_sort_block"} = 0;
 
-        emit($cg, "); ");
+        emit($cg, "; int __cmp_" . $sort_id . " = strada_to_int(__cmp_sv_" . $sort_id . "); strada_decref(__cmp_sv_" . $sort_id . "); ");
         emit($cg, "if (__cmp_" . $sort_id . " > 0) { ");
         emit($cg, "StradaValue *__tmp_" . $sort_id . " = strada_array_get(strada_deref_array(__sort_result_" . $sort_id . "), __j_" . $sort_id . "); ");
         emit($cg, "strada_array_set(strada_deref_array(__sort_result_" . $sort_id . "), __j_" . $sort_id . ", strada_array_get(strada_deref_array(__sort_result_" . $sort_id . "), __j_" . $sort_id . " + 1)); ");
