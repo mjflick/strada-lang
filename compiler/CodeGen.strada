@@ -11732,13 +11732,36 @@ func gen_version_info(scalar $cg, scalar $program, int $has_main) void {
 # This runs automatically when the library is loaded (dlopen)
 func gen_global_constructor(scalar $cg) void {
     my int $global_count = $cg->{"global_count"};
-    if ($global_count == 0) {
+    my int $num_oop_pkgs = get_oop_pkg_count($cg);
+
+    # Only generate constructor if there are globals or OOP methods
+    if ($global_count == 0 && $num_oop_pkgs == 0) {
         return;
     }
 
     emit($cg, "\n/* Shared library global initialization */\n");
     emit($cg, "__attribute__((constructor))\n");
     emit($cg, "static void __strada_init_globals(void) {\n");
+
+    # Initialize OOP method registration for all packages that have methods
+    if ($num_oop_pkgs > 0) {
+        my scalar $oop_pkgs = get_oop_packages($cg);
+        emit($cg, "    /* Initialize OOP method registration */\n");
+        my int $oop_i = 0;
+        while ($oop_i < $num_oop_pkgs) {
+            my str $oop_pkg = $oop_pkgs->[$oop_i];
+            my str $c_oop_pkg = sanitize_name($oop_pkg);
+            emit($cg, "    __" . $c_oop_pkg . "_oop_init();\n");
+            $oop_i = $oop_i + 1;
+        }
+        emit($cg, "\n");
+    }
+
+    # Early return if no globals to initialize
+    if ($global_count == 0) {
+        emit($cg, "}\n");
+        return;
+    }
 
     my scalar $globals = $cg->{"globals"};
     my int $g = 0;
