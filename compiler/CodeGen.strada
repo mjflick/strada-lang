@@ -3038,6 +3038,19 @@ func gen_expression(scalar $cg, scalar $expr) void {
             return;
         }
 
+        if ($name eq "sys::exit") {
+            emit($cg, "(strada_exit(strada_to_int(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ")), strada_undef_static())");
+            return;
+        }
+
+        if ($name eq "sys::argv") {
+            emit($cg, "ARGV");
+            return;
+        }
+
         # Pipe and IPC functions
         if ($name eq "sys::pipe") {
             emit($cg, "strada_pipe()");
@@ -5995,12 +6008,12 @@ func gen_expression(scalar $cg, scalar $expr) void {
         
         # socket_send - use binary-safe version that handles NUL bytes
         if ($name eq "sys::socket_send") {
-            emit($cg, "strada_socket_send_sv(");
+            emit($cg, "strada_new_int(strada_socket_send_sv(");
             my scalar $args = $expr->{"args"};
             gen_expression($cg, $args->[0]);
             emit($cg, ", ");
             gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            emit($cg, "))");
             return;
         }
         

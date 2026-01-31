@@ -497,6 +497,54 @@ func write(int $conn, str $data) int {
     return $result;
 }
 
+# Read binary data from SSL connection (handles NUL bytes)
+# Use this for protocols like LDAP/BER that may contain NUL bytes
+func read_binary(int $conn, int $max_len) str {
+    my str $result = "";
+    __C__ {
+        SSLConnection *c = (SSLConnection*)(intptr_t)strada_to_int(conn);
+        int max = (int)strada_to_int(max_len);
+        if (!c || !c->ssl) {
+            result = strada_new_str_len("", 0);
+        } else {
+            char *buffer = malloc(max + 1);
+            if (!buffer) {
+                result = strada_new_str_len("", 0);
+            } else {
+                int n = SSL_read(c->ssl, buffer, max);
+                if (n <= 0) {
+                    free(buffer);
+                    result = strada_new_str_len("", 0);
+                } else {
+                    // Use binary-safe string creation
+                    result = strada_new_str_len(buffer, n);
+                    free(buffer);
+                }
+            }
+        }
+    }
+    return $result;
+}
+
+# Write binary data to SSL connection (handles NUL bytes)
+# Use this for protocols like LDAP/BER that may contain NUL bytes
+func write_binary(int $conn, str $data) int {
+    my int $result = 0;
+    __C__ {
+        SSLConnection *c = (SSLConnection*)(intptr_t)strada_to_int(conn);
+        if (!c || !c->ssl) {
+            result = strada_new_int(-1);
+        } else {
+            // Get binary data with proper length (not strlen)
+            int len = strada_str_len(data);
+            const char *data_str = strada_to_str(data);
+            int written = SSL_write(c->ssl, data_str, len);
+            result = strada_new_int(written);
+        }
+    }
+    return $result;
+}
+
 # Close SSL connection
 func close(int $conn) void {
     __C__ {
