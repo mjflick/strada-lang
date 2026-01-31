@@ -362,9 +362,11 @@ static char strada_md5_b64_result[23];
 func md5(str $data) str {
     my str $result = "";
     __C__ {
-        const char *input = strada_to_str(data);
+        char *input = strada_to_str(data);
         int len = strada_str_len(data);
         strada_md5_compute((const uint8_t *)input, len, strada_md5_last_digest);
+        free(input);
+        strada_decref(result);
         result = strada_new_str_len((const char*)strada_md5_last_digest, 16);
     }
     return $result;
@@ -381,7 +383,7 @@ func md5(str $data) str {
 func md5_hex(str $data) str {
     my str $result = "";
     __C__ {
-        const char *input = strada_to_str(data);
+        char *input = strada_to_str(data);
         int len = strada_str_len(data);
         uint8_t digest[16];
         int i;
@@ -393,6 +395,8 @@ func md5_hex(str $data) str {
         }
         strada_md5_hex_result[32] = '\0';
 
+        free(input);
+        strada_decref(result);
         result = strada_new_str(strada_md5_hex_result);
     }
     return $result;
@@ -410,13 +414,15 @@ func md5_hex(str $data) str {
 func md5_base64(str $data) str {
     my str $result = "";
     __C__ {
-        const char *input = strada_to_str(data);
+        char *input = strada_to_str(data);
         int len = strada_str_len(data);
         uint8_t digest[16];
 
         strada_md5_compute((const uint8_t *)input, len, digest);
         strada_md5_base64_encode_16(digest, strada_md5_b64_result);
 
+        free(input);
+        strada_decref(result);
         result = strada_new_str(strada_md5_b64_result);
     }
     return $result;

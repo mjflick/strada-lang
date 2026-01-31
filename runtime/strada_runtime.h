@@ -922,6 +922,8 @@ StradaValue* strada_srand(StradaValue *seed);
 StradaValue* strada_srandom(StradaValue *seed);
 StradaValue* strada_libc_rand(void);
 StradaValue* strada_libc_random(void);
+StradaValue* strada_random_bytes(StradaValue *num_bytes);
+StradaValue* strada_random_bytes_hex(StradaValue *num_bytes);
 
 /* Advanced signals */
 StradaValue* strada_sigprocmask(StradaValue *how, StradaValue *set);

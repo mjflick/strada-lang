@@ -7025,6 +7025,37 @@ func gen_expression(scalar $cg, scalar $expr) void {
             return;
         }
 
+        # Cryptographic random bytes from /dev/urandom
+        if ($name eq "sys::random_bytes") {
+            my scalar $args = $expr->{"args"};
+            my scalar $arg0 = $args->[0];
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg0) == 1) {
+                emit($cg, "({ StradaValue *__arg_tmp = ");
+                gen_expression($cg, $arg0);
+                emit($cg, "; StradaValue *__res = strada_random_bytes(__arg_tmp); strada_decref(__arg_tmp); __res; })");
+            } else {
+                emit($cg, "strada_random_bytes(");
+                gen_expression($cg, $arg0);
+                emit($cg, ")");
+            }
+            return;
+        }
+
+        if ($name eq "sys::random_bytes_hex") {
+            my scalar $args = $expr->{"args"};
+            my scalar $arg0 = $args->[0];
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg0) == 1) {
+                emit($cg, "({ StradaValue *__arg_tmp = ");
+                gen_expression($cg, $arg0);
+                emit($cg, "; StradaValue *__res = strada_random_bytes_hex(__arg_tmp); strada_decref(__arg_tmp); __res; })");
+            } else {
+                emit($cg, "strada_random_bytes_hex(");
+                gen_expression($cg, $arg0);
+                emit($cg, ")");
+            }
+            return;
+        }
+
         # Advanced signals
         if ($name eq "sys::sigprocmask") {
             emit($cg, "strada_sigprocmask(");

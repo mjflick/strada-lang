@@ -9881,6 +9881,85 @@ StradaValue* strada_libc_random(void) {
     return strada_new_int((long)random());
 }
 
+/* Generate cryptographically secure random bytes from /dev/urandom
+ * Returns hex string of requested length (2 chars per byte)
+ * Returns empty string on failure
+ */
+StradaValue* strada_random_bytes_hex(StradaValue *num_bytes_sv) {
+    int num_bytes = (int)strada_to_int(num_bytes_sv);
+    if (num_bytes <= 0 || num_bytes > 1024) {
+        return strada_new_str("");
+    }
+
+    uint8_t *buffer = malloc(num_bytes);
+    char *hex = malloc(num_bytes * 2 + 1);
+    if (!buffer || !hex) {
+        free(buffer);
+        free(hex);
+        return strada_new_str("");
+    }
+
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd < 0) {
+        free(buffer);
+        free(hex);
+        return strada_new_str("");
+    }
+
+    ssize_t n = read(fd, buffer, num_bytes);
+    close(fd);
+
+    if (n != num_bytes) {
+        free(buffer);
+        free(hex);
+        return strada_new_str("");
+    }
+
+    for (int i = 0; i < num_bytes; i++) {
+        sprintf(&hex[i*2], "%02x", buffer[i]);
+    }
+    hex[num_bytes * 2] = '\0';
+
+    StradaValue *result = strada_new_str(hex);
+    free(buffer);
+    free(hex);
+    return result;
+}
+
+/* Generate cryptographically secure random bytes from /dev/urandom
+ * Returns raw binary string of requested length
+ * Returns empty string on failure
+ */
+StradaValue* strada_random_bytes(StradaValue *num_bytes_sv) {
+    int num_bytes = (int)strada_to_int(num_bytes_sv);
+    if (num_bytes <= 0 || num_bytes > 1024) {
+        return strada_new_str_len("", 0);
+    }
+
+    uint8_t *buffer = malloc(num_bytes);
+    if (!buffer) {
+        return strada_new_str_len("", 0);
+    }
+
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd < 0) {
+        free(buffer);
+        return strada_new_str_len("", 0);
+    }
+
+    ssize_t n = read(fd, buffer, num_bytes);
+    close(fd);
+
+    if (n != num_bytes) {
+        free(buffer);
+        return strada_new_str_len("", 0);
+    }
+
+    StradaValue *result = strada_new_str_len((char *)buffer, num_bytes);
+    free(buffer);
+    return result;
+}
+
 /* ===== ADVANCED SIGNALS ===== */
 
 StradaValue* strada_sigprocmask(StradaValue *how, StradaValue *set) {
