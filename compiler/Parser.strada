@@ -3234,9 +3234,33 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
     my scalar $mod_parser = parser_new($tokens);
     my scalar $mod_program = ast_new_program();
 
+    # Copy lib_paths from parent program so nested use statements work
+    my scalar $parent_lib_paths = $program->{"lib_paths"};
+    my int $parent_lib_count = $program->{"lib_path_count"};
+    my int $lpi = 0;
+    while ($lpi < $parent_lib_count) {
+        ast_add_lib_path($mod_program, $parent_lib_paths->[$lpi]);
+        $lpi = $lpi + 1;
+    }
+
+    # Share loaded_modules with parent to prevent infinite recursion
+    $mod_program->{"loaded_modules"} = $program->{"loaded_modules"};
+
     # Parse the module's contents
     while (!parser_check($mod_parser, "EOF")) {
-        if (parser_check($mod_parser, "FUNC")) {
+        if (parser_check($mod_parser, "USE")) {
+            # Handle nested use statements
+            parse_use($mod_parser, $mod_program);
+        } elsif (parser_check($mod_parser, "IMPORT_LIB")) {
+            # Handle nested import_lib statements
+            parse_import_lib($mod_parser, $mod_program);
+        } elsif (parser_check($mod_parser, "IMPORT_OBJECT")) {
+            # Handle nested import_object statements
+            parse_import_object($mod_parser, $mod_program);
+        } elsif (parser_check($mod_parser, "IMPORT_ARCHIVE")) {
+            # Handle nested import_archive statements
+            parse_import_archive($mod_parser, $mod_program);
+        } elsif (parser_check($mod_parser, "FUNC")) {
             my scalar $fn = parse_function($mod_parser);
             ast_add_function($mod_program, $fn);
         } elsif (parser_check($mod_parser, "PACKAGE")) {
@@ -3270,6 +3294,26 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
             my str $c_code = $tok->{"value"};
             parser_advance($mod_parser);
             ast_add_c_block($mod_program, $c_code);
+        } elsif (parser_check($mod_parser, "PRIVATE")) {
+            # private func in module
+            parser_advance($mod_parser);
+            if (parser_check($mod_parser, "FUNC")) {
+                my scalar $fn = parse_function($mod_parser);
+                $fn->{"is_private"} = 1;
+                ast_add_function($mod_program, $fn);
+            } else {
+                parser_error($mod_parser, "expected 'func' after 'private'");
+            }
+        } elsif (parser_check($mod_parser, "ASYNC")) {
+            # async func in module
+            parser_advance($mod_parser);
+            if (parser_check($mod_parser, "FUNC")) {
+                my scalar $fn = parse_function($mod_parser);
+                $fn->{"is_async"} = 1;
+                ast_add_function($mod_program, $fn);
+            } else {
+                parser_error($mod_parser, "expected 'func' after 'async'");
+            }
         } elsif (parser_check($mod_parser, "HASH")) {
             # Skip comments that look like hash
             parser_advance($mod_parser);
@@ -3304,6 +3348,15 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
     while ($i < $count) {
         my scalar $fn = $mod_funcs->[$i];
         my str $fn_name = $fn->{"name"};
+
+        # Check if function already has a qualified name (from nested use)
+        my int $has_qualifier = index($fn_name, "::");
+        if ($has_qualifier >= 0) {
+            # Already qualified - don't re-prefix, just add to program
+            ast_add_function($program, $fn);
+            $i = $i + 1;
+            next;
+        }
 
         # Store original name and package
         $fn->{"original_name"} = $fn_name;
@@ -3351,6 +3404,33 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
     while ($i < $count) {
         my scalar $gvar = $mod_globals->[$i];
         ast_add_global($program, $gvar);
+        $i = $i + 1;
+    }
+
+    # Merge import_libs from module
+    my scalar $mod_import_libs = $mod_program->{"import_libs"};
+    $i = 0;
+    $count = $mod_program->{"import_lib_count"};
+    while ($i < $count) {
+        ast_add_import_lib($program, $mod_import_libs->[$i]);
+        $i = $i + 1;
+    }
+
+    # Merge import_objects from module
+    my scalar $mod_import_objects = $mod_program->{"import_objects"};
+    $i = 0;
+    $count = $mod_program->{"import_object_count"};
+    while ($i < $count) {
+        ast_add_import_object($program, $mod_import_objects->[$i]);
+        $i = $i + 1;
+    }
+
+    # Merge import_archives from module
+    my scalar $mod_import_archives = $mod_program->{"import_archives"};
+    $i = 0;
+    $count = $mod_program->{"import_archive_count"};
+    while ($i < $count) {
+        ast_add_import_archive($program, $mod_import_archives->[$i]);
         $i = $i + 1;
     }
 }
