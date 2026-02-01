@@ -77,6 +77,7 @@ test_run "$EXAMPLES_DIR/test_clone.strada" "test_clone" "Clone"
 
 # Test: Try/catch
 test_run "$EXAMPLES_DIR/test_try_catch.strada" "test_try_catch" "Try/catch"
+test_output_contains "$SCRIPT_DIR/test_exception_rethrow.strada" "test_exception_rethrow" "PASS: All 5 exceptions caught" "Exception re-throw"
 
 # Test: Goto and loop labels
 test_run "$EXAMPLES_DIR/test_goto.strada" "test_goto" "Goto"

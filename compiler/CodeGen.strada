@@ -146,6 +146,7 @@ func codegen_new(str $filename, int $debug_info, int $enable_profiling) scalar {
     $cg{"cleanup_enabled"} = 1;  # Enable scope-based memory cleanup
     $cg{"returns_struct"} = 0;   # Track if current function returns struct
     $cg{"try_depth"} = 0;        # Track nesting depth in try blocks (for proper cleanup on return)
+    $cg{"catch_cleanup_count"} = 0;  # Track catch vars on cleanup stack (for proper cleanup on throw)
     # Track label-to-scope-depth for proper cleanup on labeled break/continue
     my hash %label_depths = ();
     $cg{"label_depths"} = \%label_depths;
@@ -441,6 +442,15 @@ func scope_emit_all_cleanup(scalar $cg) void {
         emit_scope_struct_cleanup($cg, $struct_str, $struct_count);
 
         $d = $d - 1;
+    }
+
+    # Pop catch variables from cleanup stack (already decref'd by scope cleanup above)
+    # This is needed for proper cleanup order when throwing from inside a catch block
+    my int $ccc = $cg->{"catch_cleanup_count"} + 0;
+    while ($ccc > 0) {
+        emit_indent($cg);
+        emit($cg, "strada_cleanup_pop();\n");
+        $ccc = $ccc - 1;
     }
 
     # Also pop and decref function parameters (we incref'd and pushed them at function entry)
@@ -10634,16 +10644,16 @@ func gen_statement(scalar $cg, scalar $stmt) void {
 
     # Try/Catch statement with typed exceptions
     if ($type == NODE_TRY_CATCH()) {
-        emit_indent($cg);
-        emit($cg, "if (setjmp(*STRADA_TRY_PUSH()) == 0) {\n");
-        indent($cg);
-        scope_push($cg);
-
-        # Save cleanup stack depth at try entry so we can restore on normal exit
+        # Save cleanup stack depth BEFORE the try block so it's accessible in catch
         my int $cleanup_var_id = $cg->{"try_cleanup_counter"} + 0;
         $cg->{"try_cleanup_counter"} = $cleanup_var_id + 1;
         emit_indent($cg);
         emit($cg, "int __cleanup_mark_" . $cleanup_var_id . " = strada_cleanup_mark();\n");
+
+        emit_indent($cg);
+        emit($cg, "if (setjmp(*STRADA_TRY_PUSH()) == 0) {\n");
+        indent($cg);
+        scope_push($cg);
 
         # Track that we're inside a try block (for proper cleanup on return)
         my int $try_depth = $cg->{"try_depth"};
@@ -10677,9 +10687,10 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         emit_indent($cg);
         emit($cg, "STRADA_TRY_POP();\n");
 
-        # Drain any pending cleanup args from function calls that threw
+        # Drain pending cleanup args from function calls that threw, but only
+        # back to the mark saved at try entry (don't drain caller's items!)
         emit_indent($cg);
-        emit($cg, "strada_cleanup_drain();\n");
+        emit($cg, "strada_cleanup_drain_to(__cleanup_mark_" . $cleanup_var_id . ");\n");
 
         # Get the exception into a temporary variable
         emit_indent($cg);
@@ -10730,6 +10741,9 @@ func gen_statement(scalar $cg, scalar $stmt) void {
             # Push to cleanup stack in case we throw from inside this catch block
             emit_indent($cg);
             emit($cg, "strada_cleanup_push(" . $catch_var . ");\n");
+            # Track that we have a catch var on the cleanup stack (for throw handling)
+            my int $ccc = $cg->{"catch_cleanup_count"} + 0;
+            $cg->{"catch_cleanup_count"} = $ccc + 1;
 
             # Generate catch block statements
             my scalar $catch_stmts = $catch_block->{"statements"};
@@ -10742,6 +10756,8 @@ func gen_statement(scalar $cg, scalar $stmt) void {
             # Pop catch variable from cleanup stack (normal exit, scope_pop will decref)
             emit_indent($cg);
             emit($cg, "strada_cleanup_pop();\n");
+            # Decrement catch cleanup count since we popped the catch var
+            $cg->{"catch_cleanup_count"} = $cg->{"catch_cleanup_count"} - 1;
             scope_pop($cg);
             dedent($cg);
 
@@ -10772,29 +10788,72 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # Note: We intentionally don't emit scope cleanup before throw because:
     # 1. If inside a try block, the longjmp will skip any cleanup anyway
     # 2. The catch handler is responsible for cleanup via strada_decref on exception var
-    # 3. Emitting cleanup here was causing variables from outer scopes to be decremented
-    # HOWEVER: We MUST decref function parameters before throwing, because they were
-    # incref'd at function entry and the normal function epilogue won't run.
-    # We also need to pop them from the cleanup stack (they were pushed at entry).
+    # 3. Before throwing, we MUST clean up ALL local variables in scope AND function
+    #    parameters, because the normal function epilogue/scope cleanup won't run.
+    #    This is especially important when re-throwing from a catch block, where
+    #    variables declared before the try block would otherwise leak.
+    # 4. IMPORTANT: We must evaluate the throw expression BEFORE cleanup, because the
+    #    expression may reference local variables. Then cleanup, then throw.
+    # 5. We must incref the throw value before cleanup to protect it, because the
+    #    cleanup might decref a variable that IS the throw value (e.g., re-throwing $e).
+    #    The incref balances the cleanup's decref; strada_throw_value takes ownership.
     if ($type == NODE_THROW()) {
-        # Pop and decref function parameters before throwing
-        my int $pn_count = $cg->{"func_param_count"} + 0;
-        if ($pn_count > 0) {
-            my scalar $param_names = $cg->{"func_param_names"};
-            my int $pn_i = 0;
-            while ($pn_i < $pn_count) {
-                my str $pname = $param_names->[$pn_i];
-                emit_indent($cg);
-                emit($cg, "strada_cleanup_pop();\n");
-                emit_indent($cg);
-                emit($cg, "strada_decref(" . $pname . ");\n");
-                $pn_i = $pn_i + 1;
+        my int $td = $cg->{"try_depth"} + 0;
+        my int $ccc = $cg->{"catch_cleanup_count"} + 0;
+
+        if ($ccc > 0) {
+            # We're in a catch block (possibly inside an outer try) - need to clean up
+            # catch scope and pop catch vars, but if inside outer try, don't clean
+            # outer scopes (outer catch will handle cleanup via drain)
+            emit_indent($cg);
+            emit($cg, "{ StradaValue *__throw_val = ");
+            gen_expression($cg, $stmt->{"expr"});
+            emit($cg, ";\n");
+            indent($cg);
+            emit_indent($cg);
+            emit($cg, "strada_incref(__throw_val);\n");
+            if ($td == 0) {
+                # Not inside any outer try - clean up everything
+                scope_emit_all_cleanup($cg);
+            } else {
+                # Inside an outer try - only clean up catch scope and catch vars
+                scope_emit_cleanup($cg);
+                # Pop catch vars from cleanup stack
+                my int $cv = $ccc;
+                while ($cv > 0) {
+                    emit_indent($cg);
+                    emit($cg, "strada_cleanup_pop();\n");
+                    $cv = $cv - 1;
+                }
             }
+            emit_indent($cg);
+            emit($cg, "strada_throw_value(__throw_val); }\n");
+            dedent($cg);
+            return;
         }
+
+        if ($td > 0) {
+            # We're inside a try block (not a catch) - local catch will handle cleanup
+            # Don't do any scope cleanup here; just throw
+            emit_indent($cg);
+            emit($cg, "strada_throw_value(");
+            gen_expression($cg, $stmt->{"expr"});
+            emit($cg, ");\n");
+            return;
+        }
+
+        # We're outside any try/catch - exiting the function, full cleanup
         emit_indent($cg);
-        emit($cg, "strada_throw_value(");
+        emit($cg, "{ StradaValue *__throw_val = ");
         gen_expression($cg, $stmt->{"expr"});
-        emit($cg, ");\n");
+        emit($cg, ";\n");
+        indent($cg);
+        emit_indent($cg);
+        emit($cg, "strada_incref(__throw_val);\n");
+        scope_emit_all_cleanup($cg);
+        emit_indent($cg);
+        emit($cg, "strada_throw_value(__throw_val); }\n");
+        dedent($cg);
         return;
     }
 
