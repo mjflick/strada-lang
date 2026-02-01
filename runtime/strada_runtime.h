@@ -475,6 +475,14 @@ StradaValue* strada_get_exception(void);
 void strada_clear_exception(void);
 int strada_in_try_block(void);
 
+/* Pending cleanup for function call args and local vars in try blocks */
+void strada_cleanup_push(StradaValue *sv);
+void strada_cleanup_pop(void);
+void strada_cleanup_drain(void);
+int strada_cleanup_mark(void);         /* Get current depth */
+void strada_cleanup_restore(int mark); /* Restore to depth (no decref) */
+void strada_cleanup_drain_to(int mark); /* Drain to depth (with decref) */
+
 /* Macros for try/catch - used by generated code */
 #define STRADA_TRY_PUSH() (strada_try_depth < STRADA_MAX_TRY_DEPTH ? \
     (strada_try_stack[strada_try_depth].active = 1, &strada_try_stack[strada_try_depth++].buf) : NULL)

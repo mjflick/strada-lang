@@ -2347,7 +2347,12 @@ int strada_defined_bool(StradaValue *sv) {
 
 StradaValue* strada_ref(StradaValue *sv) {
     if (!sv) return strada_new_str("");
-    
+
+    /* If blessed, return the blessed package name (like Perl) */
+    if (sv->blessed_package) {
+        return strada_new_str(sv->blessed_package);
+    }
+
     switch (sv->type) {
         case STRADA_ARRAY:
             return strada_new_str("ARRAY");
@@ -2367,6 +2372,50 @@ StradaTryContext strada_try_stack[STRADA_MAX_TRY_DEPTH];
 int strada_try_depth = 0;
 char *strada_exception_msg = NULL;
 StradaValue *strada_exception_value = NULL;  /* Typed exception support */
+
+/* Pending cleanup for function call args in try blocks */
+#define STRADA_MAX_PENDING_CLEANUP 64
+static StradaValue *strada_pending_cleanup[STRADA_MAX_PENDING_CLEANUP];
+static int strada_pending_cleanup_count = 0;
+
+void strada_cleanup_push(StradaValue *sv) {
+    if (strada_pending_cleanup_count < STRADA_MAX_PENDING_CLEANUP) {
+        strada_pending_cleanup[strada_pending_cleanup_count++] = sv;
+    }
+}
+
+void strada_cleanup_pop(void) {
+    if (strada_pending_cleanup_count > 0) {
+        strada_pending_cleanup_count--;
+    }
+}
+
+void strada_cleanup_drain(void) {
+    while (strada_pending_cleanup_count > 0) {
+        StradaValue *sv = strada_pending_cleanup[--strada_pending_cleanup_count];
+        if (sv) strada_decref(sv);
+    }
+}
+
+/* Get current cleanup stack depth (for saving at try entry) */
+int strada_cleanup_mark(void) {
+    return strada_pending_cleanup_count;
+}
+
+/* Restore cleanup stack to a saved depth (pop without decref, for normal try exit) */
+void strada_cleanup_restore(int mark) {
+    if (mark >= 0 && mark <= strada_pending_cleanup_count) {
+        strada_pending_cleanup_count = mark;
+    }
+}
+
+/* Drain cleanup stack down to a saved depth (decref and pop, for exception) */
+void strada_cleanup_drain_to(int mark) {
+    while (strada_pending_cleanup_count > mark) {
+        StradaValue *sv = strada_pending_cleanup[--strada_pending_cleanup_count];
+        if (sv) strada_decref(sv);
+    }
+}
 
 int strada_in_try_block(void) {
     return strada_try_depth > 0 && strada_try_stack[strada_try_depth - 1].active;
@@ -6849,9 +6898,31 @@ const char* strada_reftype(StradaValue *ref) {
     /* Get type of referenced value - returns uppercase like Perl's ref() */
     if (!ref) return "";
 
+    /* If blessed, return the blessed package name (like Perl) */
+    if (ref->blessed_package) {
+        return ref->blessed_package;
+    }
+
     if (ref->type == STRADA_REF) {
         StradaValue *target = ref->value.rv;
         if (!target) return "";
+
+        /* Follow reference chain until we reach non-REF value */
+        /* This handles cases like \@arr where @arr is already a reference */
+        int depth = 0;
+        while (target->type == STRADA_REF && target->value.rv && depth < 10) {
+            /* Check for blessed package at each level */
+            if (target->blessed_package) {
+                return target->blessed_package;
+            }
+            target = target->value.rv;
+            depth++;
+        }
+
+        /* Check if final target is blessed */
+        if (target->blessed_package) {
+            return target->blessed_package;
+        }
         switch (target->type) {
             case STRADA_ARRAY: return "ARRAY";
             case STRADA_HASH: return "HASH";
@@ -6864,7 +6935,13 @@ const char* strada_reftype(StradaValue *ref) {
         }
     }
 
-    return "";
+    /* For non-ref types, return type name */
+    switch (ref->type) {
+        case STRADA_ARRAY: return "ARRAY";
+        case STRADA_HASH: return "HASH";
+        case STRADA_CLOSURE: return "CODE";
+        default: return "";
+    }
 }
 
 StradaValue* strada_ref_scalar(StradaValue **ptr) {
@@ -8827,6 +8904,41 @@ StradaValue* strada_method_call(StradaValue *obj, const char *method, StradaValu
     }
 
     if (!oop_initialized) strada_oop_init();
+
+    /* Handle UNIVERSAL methods: isa and can */
+    if (strcmp(method, "isa") == 0) {
+        /* $obj->isa("ClassName") - check if object is of a type */
+        StradaValue *result;
+        if (args && args->type == STRADA_ARRAY && args->value.av && args->value.av->size > 0) {
+            StradaValue *classname = args->value.av->elements[0];
+            if (classname && classname->type == STRADA_STR && classname->value.pv) {
+                result = strada_new_int(strada_isa(obj, classname->value.pv) ? 1 : 0);
+            } else {
+                result = strada_new_int(0);
+            }
+        } else {
+            result = strada_new_int(0);
+        }
+        if (args) strada_decref(args);
+        return result;
+    }
+
+    if (strcmp(method, "can") == 0) {
+        /* $obj->can("method_name") - check if object can do a method */
+        StradaValue *result;
+        if (args && args->type == STRADA_ARRAY && args->value.av && args->value.av->size > 0) {
+            StradaValue *methname = args->value.av->elements[0];
+            if (methname && methname->type == STRADA_STR && methname->value.pv) {
+                result = strada_new_int(strada_can(obj, methname->value.pv) ? 1 : 0);
+            } else {
+                result = strada_new_int(0);
+            }
+        } else {
+            result = strada_new_int(0);
+        }
+        if (args) strada_decref(args);
+        return result;
+    }
 
     StradaMethod func = oop_lookup_method(obj->blessed_package, method);
     if (!func) {
