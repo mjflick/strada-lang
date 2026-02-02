@@ -3771,7 +3771,7 @@ func gen_expression(scalar $cg, scalar $expr) void {
             if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
                 emit($cg, "({ StradaValue *__dl_args = ");
                 gen_expression($cg, $arg1);
-                emit($cg, "; int64_t __dl_res = strada_dl_call_int_sv(");
+                emit($cg, "; StradaValue *__dl_res = strada_dl_call_int_sv(");
                 gen_expression($cg, $args->[0]);
                 emit($cg, ", __dl_args); strada_decref(__dl_args); __dl_res; })");
             } else {
@@ -5586,7 +5586,7 @@ func gen_expression(scalar $cg, scalar $expr) void {
             if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
                 emit($cg, "({ StradaValue *__dl_args = ");
                 gen_expression($cg, $arg1);
-                emit($cg, "; int64_t __dl_res = strada_dl_call_int_sv(");
+                emit($cg, "; StradaValue *__dl_res = strada_dl_call_int_sv(");
                 gen_expression($cg, $args->[0]);
                 emit($cg, ", __dl_args); strada_decref(__dl_args); __dl_res; })");
             } else {
