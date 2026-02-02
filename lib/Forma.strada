@@ -498,10 +498,16 @@ func render_string(str $template, scalar $vars) str {
             }
         }
 
-        # Check for {{#if ...}}
+        # Check for {{#if ...}} but NOT {{#if_eq}}, {{#if_ne}}, etc.
         if ($i + 5 < $len) {
             my str $check_if = substr($template, $i, 5);
             if ($check_if eq "{{#if") {
+                # Make sure this is {{#if and not {{#if_eq, {{#if_ne, etc.
+                my str $next_ch = "";
+                if ($i + 5 < $len) {
+                    $next_ch = substr($template, $i + 5, 1);
+                }
+                if ($next_ch ne "_") {
                 # Find the closing }} of the opening tag
                 my int $tag_end = Forma::find_closing($template, $i + 5);
                 if ($tag_end > $i + 5) {
@@ -533,6 +539,7 @@ func render_string(str $template, scalar $vars) str {
                         $i = $block_end + 7;
                         next;
                     }
+                }
                 }
             }
         }
