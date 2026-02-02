@@ -202,3 +202,15 @@ test_output_contains "$EXAMPLES_DIR/test_lwp.strada" "test_lwp" "All LWP tests p
 EXTRA_LDFLAGS="-lsqlite3"
 test_output_contains "lib/Nesso/test_nesso.strada" "test_nesso" "PASS: All Nesso tests passed" "Nesso ORM"
 EXTRA_LDFLAGS=""
+
+# Test: Nested use statements (modules that use other modules)
+test_output_contains "$SCRIPT_DIR/test_nested_use.strada" "test_nested_use" "All nested use tests passed" "Nested use"
+
+# Test: OOP with nested use statements
+test_output_contains "$SCRIPT_DIR/test_nested_oop.strada" "test_nested_oop" "All nested OOP tests passed" "Nested OOP"
+
+# Test: OOP with import_lib
+test_import_lib "$SCRIPT_DIR/test_import_lib_oop.strada" "test_import_lib_oop" "$SCRIPT_DIR/nested_use_test/OOPLib.strada" "OOPLib" "import_lib OOP"
+
+# Test: OOP with import_object
+test_import_object "$SCRIPT_DIR/test_import_object_oop.strada" "test_import_object_oop" "$SCRIPT_DIR/nested_use_test/OOPLib.strada" "OOPLib" "import_object OOP"

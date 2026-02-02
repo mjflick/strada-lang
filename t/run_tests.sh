@@ -159,7 +159,8 @@ compile_strada() {
     fi
 
     # Compile C to executable
-    if ! gcc -o "$exe_file" "$c_file" "$RUNTIME" -I"$RUNTIME_H" -ldl -lm ${EXTRA_LDFLAGS:-} > "$BUILD_DIR/${name}_gcc.log" 2>&1; then
+    # Note: -rdynamic exports symbols so shared libraries can use the executable's runtime
+    if ! gcc -rdynamic -o "$exe_file" "$c_file" "$RUNTIME" -I"$RUNTIME_H" -ldl -lm ${EXTRA_LDFLAGS:-} > "$BUILD_DIR/${name}_gcc.log" 2>&1; then
         return 2
     fi
 
@@ -387,12 +388,18 @@ test_import_lib() {
     fi
 
     # Compile library C to .so
-    if ! gcc -shared -fPIC -rdynamic "$lib_c" -o "$lib_so" "$PROJECT_DIR/runtime/strada_runtime.c" -I"$RUNTIME_H" -ldl -lm > "$BUILD_DIR/${lib_name}_gcc.log" 2>&1; then
+    # Note: Don't include runtime source - the library uses the executable's runtime symbols
+    if ! gcc -shared -fPIC "$lib_c" -o "$lib_so" -I"$RUNTIME_H" -ldl -lm > "$BUILD_DIR/${lib_name}_gcc.log" 2>&1; then
         FAILED=$((FAILED + 1))
         local err=$(cat "$BUILD_DIR/${lib_name}_gcc.log" 2>/dev/null | head -1)
         log_fail "run: $desc" "Library .so compile failed: $err"
         return 1
     fi
+
+    # Create examples directory in BUILD_DIR and symlink the .so file
+    # This ensures the relative path "examples/LibName.so" works when running from BUILD_DIR
+    mkdir -p "$BUILD_DIR/examples"
+    ln -sf "$lib_so" "$BUILD_DIR/examples/${lib_name}.so"
 
     # Now compile and run the test
     if ! compile_strada "$src" "$name"; then

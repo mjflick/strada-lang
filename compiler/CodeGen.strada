@@ -11968,6 +11968,17 @@ func gen_program(scalar $cg, scalar $program) void {
                 emit($cg, "            fprintf(stderr, \"import_lib: failed to load " . $so_path . ": %s\\n\", dlerror());\n");
                 emit($cg, "            exit(1);\n");
                 emit($cg, "        }\n");
+                # Call OOP init functions for any packages in this library
+                my scalar $oop_inits = $lib_info->{"oop_init_funcs"};
+                if ($oop_inits) {
+                    my int $oop_count = size($oop_inits);
+                    my int $oi = 0;
+                    while ($oi < $oop_count) {
+                        my str $oop_fn = $oop_inits->[$oi];
+                        emit($cg, "        { void (*__oop_init)(void) = (void (*)(void))dlsym(__import_lib_" . $safe_lib . "_handle, \"" . $oop_fn . "\"); if (__oop_init) __oop_init(); }\n");
+                        $oi = $oi + 1;
+                    }
+                }
                 emit($cg, "    }\n");
 
                 # Lazy lookup the function pointer

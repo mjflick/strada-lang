@@ -3567,6 +3567,8 @@ func parse_import_lib(scalar $parser, scalar $program) void {
 }
 
 # Find .so file in lib paths (lib_file is the full filename, e.g., "MyLib.so")
+# Returns the path to the .so file (may be relative)
+# Note: The test harness creates the necessary directory structure so relative paths work
 func find_so_file(scalar $program, str $lib_file) str {
     my scalar $lib_paths = $program->{"lib_paths"};
     my int $i = 0;
@@ -3599,6 +3601,9 @@ func parse_export_metadata(str $lib_name, str $so_path, str $metadata) scalar {
     my array @functions = ();
     my int $fn_count = 0;
 
+    # Track unique package names for OOP init functions
+    my hash %packages = ();
+
     # Parse metadata line by line manually (bootstrap doesn't support split well)
     my int $meta_len = length($metadata);
     my int $pos = 0;
@@ -3621,12 +3626,36 @@ func parse_export_metadata(str $lib_name, str $so_path, str $metadata) scalar {
             if ($fn_info != 0) {
                 push(@functions, $fn_info);
                 $fn_count = $fn_count + 1;
+
+                # Extract package name from function name (e.g., Counter_new -> Counter)
+                my str $fn_name = $fn_info->{"name"};
+                my int $us_pos = index($fn_name, "_");
+                if ($us_pos > 0) {
+                    my str $pkg = substr($fn_name, 0, $us_pos);
+                    # Only add if first char is uppercase (looks like a class name)
+                    my str $first = substr($pkg, 0, 1);
+                    if ($first ge "A" && $first le "Z") {
+                        $packages{$pkg} = 1;
+                    }
+                }
             }
         }
     }
 
     $lib_info{"functions"} = \@functions;
     $lib_info{"function_count"} = $fn_count;
+
+    # Build list of OOP init function names
+    my array @oop_inits = ();
+    my scalar $pkg_keys = keys(%packages);
+    my int $pkg_count = size($pkg_keys);
+    my int $pi = 0;
+    while ($pi < $pkg_count) {
+        my str $pkg = $pkg_keys->[$pi];
+        push(@oop_inits, "__" . $pkg . "_oop_init");
+        $pi = $pi + 1;
+    }
+    $lib_info{"oop_init_funcs"} = \@oop_inits;
 
     return \%lib_info;
 }
