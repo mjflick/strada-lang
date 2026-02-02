@@ -110,6 +110,28 @@ func main() int {
     }
     say("    PASS");
 
+    # Test empty anonymous hash assigned to scalar
+    say("  Empty anonymous hash to scalar...");
+    $i = 0;
+    while ($i < $iterations) {
+        my scalar $empty = {};
+        my array @k = keys($empty);
+        if (size(@k) != 0) {
+            say("    FAIL: empty anon hash keys");
+            return 1;
+        }
+        # Test reassignment
+        my scalar $x = {};
+        $x = { "a" => 1, "b" => 2 };
+        my array @k2 = keys($x);
+        if (size(@k2) != 2) {
+            say("    FAIL: reassigned hash keys");
+            return 1;
+        }
+        $i = $i + 1;
+    }
+    say("    PASS");
+
     # Test nested hashes
     say("  Nested hashes...");
     $i = 0;

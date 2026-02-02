@@ -9344,12 +9344,13 @@ func gen_expression(scalar $cg, scalar $expr) void {
                         my scalar $elems = $val->{"elements"};
                         my int $elem_count = $val->{"element_count"};
                         emit($cg, "StradaValue *__ah_arr" . $t . " = strada_new_array(); ");
-                        # Add elements if any
+                        # Add elements with proper refcount management
                         my int $e = 0;
                         while ($e < $elem_count) {
-                            emit($cg, "strada_array_push(__ah_arr" . $t . "->value.av, ");
+                            emit($cg, "StradaValue *__ah_ael" . $t . "_" . $e . " = ");
                             gen_expression($cg, $elems->[$e]);
-                            emit($cg, "); ");
+                            emit($cg, "; strada_array_push(__ah_arr" . $t . "->value.av, __ah_ael" . $t . "_" . $e . "); ");
+                            emit($cg, "strada_decref(__ah_ael" . $t . "_" . $e . "); ");
                             $e = $e + 1;
                         }
                         emit($cg, "StradaValue *__ah_val" . $t . " = strada_new_ref(__ah_arr" . $t . ", '@'); ");
@@ -9360,12 +9361,13 @@ func gen_expression(scalar $cg, scalar $expr) void {
                         my scalar $inner_values = $val->{"values"};
                         my int $inner_pair_count = $val->{"pair_count"};
                         emit($cg, "StradaValue *__ah_hsh" . $t . " = strada_new_hash(); ");
-                        # Add key-value pairs if any
+                        # Add key-value pairs with proper refcount management
                         my int $p = 0;
                         while ($p < $inner_pair_count) {
-                            emit($cg, "strada_hash_set(__ah_hsh" . $t . "->value.hv, \"" . $inner_keys->[$p] . "\", ");
+                            emit($cg, "StradaValue *__ah_hel" . $t . "_" . $p . " = ");
                             gen_expression($cg, $inner_values->[$p]);
-                            emit($cg, "); ");
+                            emit($cg, "; strada_hash_set(__ah_hsh" . $t . "->value.hv, \"" . $inner_keys->[$p] . "\", __ah_hel" . $t . "_" . $p . "); ");
+                            emit($cg, "strada_decref(__ah_hel" . $t . "_" . $p . "); ");
                             $p = $p + 1;
                         }
                         emit($cg, "StradaValue *__ah_val" . $t . " = strada_new_ref(__ah_hsh" . $t . ", '%'); ");
@@ -9458,11 +9460,13 @@ func gen_expression(scalar $cg, scalar $expr) void {
                         my scalar $inner_elems = $elem->{"elements"};
                         my int $inner_elem_count = $elem->{"element_count"};
                         emit($cg, "StradaValue *__aa_arr" . $t . " = strada_new_array(); ");
+                        # Create temps for inner elements, push, then decref
                         my int $e = 0;
                         while ($e < $inner_elem_count) {
-                            emit($cg, "strada_array_push(__aa_arr" . $t . "->value.av, ");
+                            emit($cg, "StradaValue *__aa_inner" . $t . "_" . $e . " = ");
                             gen_expression($cg, $inner_elems->[$e]);
-                            emit($cg, "); ");
+                            emit($cg, "; strada_array_push(__aa_arr" . $t . "->value.av, __aa_inner" . $t . "_" . $e . "); ");
+                            emit($cg, "strada_decref(__aa_inner" . $t . "_" . $e . "); ");
                             $e = $e + 1;
                         }
                         emit($cg, "StradaValue *__aa_el" . $t . " = strada_new_ref(__aa_arr" . $t . ", '@'); ");
@@ -9472,11 +9476,13 @@ func gen_expression(scalar $cg, scalar $expr) void {
                         my scalar $inner_values = $elem->{"values"};
                         my int $inner_pair_count = $elem->{"pair_count"};
                         emit($cg, "StradaValue *__aa_hsh" . $t . " = strada_new_hash(); ");
+                        # Create temps for inner values, set, then decref
                         my int $p = 0;
                         while ($p < $inner_pair_count) {
-                            emit($cg, "strada_hash_set(__aa_hsh" . $t . "->value.hv, \"" . $inner_keys->[$p] . "\", ");
+                            emit($cg, "StradaValue *__aa_hval" . $t . "_" . $p . " = ");
                             gen_expression($cg, $inner_values->[$p]);
-                            emit($cg, "); ");
+                            emit($cg, "; strada_hash_set(__aa_hsh" . $t . "->value.hv, \"" . $inner_keys->[$p] . "\", __aa_hval" . $t . "_" . $p . "); ");
+                            emit($cg, "strada_decref(__aa_hval" . $t . "_" . $p . "); ");
                             $p = $p + 1;
                         }
                         emit($cg, "StradaValue *__aa_el" . $t . " = strada_new_ref(__aa_hsh" . $t . ", '%'); ");

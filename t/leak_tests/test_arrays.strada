@@ -111,6 +111,26 @@ func main() int {
     }
     say("    PASS");
 
+    # Test empty anonymous array assigned to scalar
+    say("  Empty anonymous array to scalar...");
+    $i = 0;
+    while ($i < $iterations) {
+        my scalar $empty = [];
+        if (size($empty) != 0) {
+            say("    FAIL: empty anon array size");
+            return 1;
+        }
+        # Test reassignment
+        my scalar $x = [];
+        $x = [1, 2, 3];
+        if (size($x) != 3) {
+            say("    FAIL: reassigned array size");
+            return 1;
+        }
+        $i = $i + 1;
+    }
+    say("    PASS");
+
     # Test reverse
     say("  reverse()...");
     $i = 0;
