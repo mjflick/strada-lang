@@ -46,7 +46,6 @@ func NODE_DEREF_SCALAR() int { return 24; }
 func NODE_ANON_HASH() int { return 25; }
 func NODE_ANON_ARRAY() int { return 26; }
 func NODE_EXTERN_FUNC() int { return 27; }
-func NODE_STRUCT() int { return 28; }
 func NODE_USE() int { return 29; }
 func NODE_FIELD_ACCESS() int { return 30; }
 func NODE_FUNC_REF() int { return 31; }
@@ -92,7 +91,6 @@ func TYPE_ARRAY() int { return 4; }
 func TYPE_HASH() int { return 5; }
 func TYPE_SCALAR() int { return 6; }
 func TYPE_VOID() int { return 7; }
-func TYPE_STRUCT() int { return 8; }
 func TYPE_FUNCPTR() int { return 9; }
 
 # Explicit sized types for extern functions (C interop)
@@ -139,7 +137,6 @@ func ast_get_line(scalar $node) int {
 func ast_new_program() scalar {
     my scalar $node = ast_new_node(NODE_PROGRAM());
     my array @funcs = ();
-    my array @structs = ();
     my array @enums = ();
     my array @uses = ();
     my array @imports = ();
@@ -147,7 +144,6 @@ func ast_new_program() scalar {
     my array @lib_paths = ();
     my hash %loaded_modules = ();
     $node->{"functions"} = \@funcs;
-    $node->{"structs"} = \@structs;
     $node->{"enums"} = \@enums;
     $node->{"uses"} = \@uses;
     $node->{"imports"} = \@imports;
@@ -156,7 +152,6 @@ func ast_new_program() scalar {
     $node->{"lib_path_count"} = 0;
     $node->{"loaded_modules"} = \%loaded_modules;
     $node->{"function_count"} = 0;
-    $node->{"struct_count"} = 0;
     $node->{"enum_count"} = 0;
     $node->{"use_count"} = 0;
     $node->{"import_count"} = 0;
@@ -203,13 +198,6 @@ func ast_add_global(scalar $program, scalar $var_decl) void {
     my scalar $globals = $program->{"globals"};
     push($globals, $var_decl);
     $program->{"global_count"} = $program->{"global_count"} + 1;
-}
-
-# Add struct to program
-func ast_add_struct(scalar $program, scalar $st) void {
-    my scalar $structs = $program->{"structs"};
-    push($structs, $st);
-    $program->{"struct_count"} = $program->{"struct_count"} + 1;
 }
 
 # Add enum to program
@@ -301,29 +289,6 @@ func ast_new_extern_func(str $name) scalar {
     $node->{"is_extern"} = 1;
     $node->{"is_c_extern"} = 0;  # 0 = StradaValue* wrapper, 1 = raw C types
     return $node;
-}
-
-# Create struct node
-func ast_new_struct(str $name) scalar {
-    my scalar $node = ast_new_node(NODE_STRUCT());
-    my array @fields = ();
-    $node->{"name"} = $name;
-    $node->{"fields"} = \@fields;
-    $node->{"field_count"} = 0;
-    return $node;
-}
-
-# Add field to struct
-# funcptr_return is optional - pass -1 for non-funcptr fields
-func ast_add_field(scalar $st, str $name, int $field_type, str $sigil, int $funcptr_return) void {
-    my hash %field = ();
-    $field{"name"} = $name;
-    $field{"field_type"} = $field_type;
-    $field{"sigil"} = $sigil;
-    $field{"funcptr_return"} = $funcptr_return;
-    my scalar $fields = $st->{"fields"};
-    push($fields, \%field);
-    $st->{"field_count"} = $st->{"field_count"} + 1;
 }
 
 # Create enum node
@@ -929,7 +894,7 @@ func ast_new_readline(str $varname) scalar {
 }
 
 # Destructuring assignment: my ($a, $b, $c) = @arr;
-# vars is array of hashes with: name, sigil, var_type, type_name (for structs)
+# vars is array of hashes with: name, sigil, var_type
 # is_decl is 1 if this is a declaration (has 'my'), 0 for plain assignment
 # var_count is passed explicitly to avoid bootstrap compiler limitations
 func ast_new_destructure(scalar $vars, int $var_count, scalar $init, int $is_decl) scalar {

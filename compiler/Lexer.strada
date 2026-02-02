@@ -1054,7 +1054,6 @@ func lex_keyword_or_ident(str $text) str {
     if ($text eq "private") { return "PRIVATE"; }
     if ($text eq "async") { return "ASYNC"; }
     if ($text eq "await") { return "AWAIT"; }
-    if ($text eq "struct") { return "STRUCT"; }
     if ($text eq "enum") { return "ENUM"; }
     if ($text eq "package") { return "PACKAGE"; }
     if ($text eq "version") { return "VERSION"; }

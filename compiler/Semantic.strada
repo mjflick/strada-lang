@@ -675,9 +675,7 @@ func get_builtins() scalar {
 func ctx_new() scalar {
     my hash %ctx = ();
     my hash %funcs = ();
-    my hash %structs = ();
     $ctx{"functions"} = \%funcs;
-    $ctx{"structs"} = \%structs;
     $ctx{"builtins"} = get_builtins();
     $ctx{"scope"} = scope_new(0);
     $ctx{"current_func"} = 0;
@@ -719,41 +717,6 @@ func register_functions(scalar $ctx, scalar $ast) void {
         $info{"is_variadic"} = $fn->{"is_variadic"};
         $info{"line"} = $line;
         $ctx->{"functions"}->{$name} = \%info;
-    }
-}
-
-func register_structs(scalar $ctx, scalar $ast) void {
-    my scalar $structs = $ast->{"structs"};
-    my int $count = $ast->{"struct_count"};
-
-    for (my int $i = 0; $i < $count; $i = $i + 1) {
-        my scalar $st = $structs->[$i];
-        my str $name = $st->{"name"};
-        my int $line = ast_get_line($st);
-
-        # Check for duplicate struct
-        my scalar $existing_st = $ctx->{"structs"}->{$name};
-        my int $already_exists = $existing_st->{"is_registered"};
-        if ($already_exists == 1) {
-            semantic_error("struct '" . $name . "' already defined", $line);
-        }
-
-        # Build field map
-        my hash %fields = ();
-        my scalar $field_list = $st->{"fields"};
-        my int $field_count = $st->{"field_count"};
-        for (my int $j = 0; $j < $field_count; $j = $j + 1) {
-            my scalar $field = $field_list->[$j];
-            $fields{$field->{"name"}} = $field->{"field_type"};
-        }
-
-        # Register struct
-        my hash %info = ();
-        $info{"is_registered"} = 1;
-        $info{"fields"} = \%fields;
-        $info{"field_count"} = $field_count;
-        $info{"line"} = $line;
-        $ctx->{"structs"}->{$name} = \%info;
     }
 }
 
@@ -1171,16 +1134,6 @@ func analyze_statement(scalar $ctx, scalar $stmt) void {
         my str $sigil = $stmt->{"sigil"};
         my int $var_type = $stmt->{"var_type"};
 
-        # Check for struct type validity
-        if ($var_type == TYPE_STRUCT()) {
-            my str $type_name = $stmt->{"type_name"};
-            my scalar $struct_info = $ctx->{"structs"}->{$type_name};
-            my int $struct_exists = $struct_info->{"is_registered"};
-            if ($struct_exists != 1) {
-                semantic_error("undefined struct type '" . $type_name . "'", $line);
-            }
-        }
-
         # Check for redeclaration in current scope
         my scalar $current_scope = $ctx->{"scope"};
         my scalar $scope_vars = $current_scope->{"vars"};
@@ -1393,9 +1346,8 @@ func semantic_analyze(scalar $ast, int $show_warnings) void {
     my scalar $ctx = ctx_new();
     $ctx->{"show_warnings"} = $show_warnings;
 
-    # First pass: register all functions, structs, and globals
+    # First pass: register all functions and globals
     register_functions($ctx, $ast);
-    register_structs($ctx, $ast);
     register_globals($ctx, $ast);
     register_import_lib_functions($ctx, $ast);
     register_import_object_functions($ctx, $ast);

@@ -311,10 +311,6 @@ func parse_var_name(scalar $parser) str {
         parser_advance($parser);
         return "extern";
     }
-    if ($type_str eq "STRUCT") {
-        parser_advance($parser);
-        return "struct";
-    }
     if ($type_str eq "PACKAGE") {
         parser_advance($parser);
         return "package";
@@ -462,13 +458,6 @@ func parse_type(scalar $parser) int {
         return TYPE_LONG_DOUBLE();
     }
 
-    # Struct name (IDENT) - return TYPE_STRUCT and store name
-    if ($type_str eq "IDENT") {
-        $parser->{"last_type_name"} = $tok->{"value"};
-        parser_advance($parser);
-        return TYPE_STRUCT();
-    }
-    
     # Function pointer type: func(...) ReturnType
     if ($type_str eq "FUNC") {
         parser_advance($parser);
@@ -2213,11 +2202,6 @@ func parse_var_decl(scalar $parser) scalar {
     my scalar $decl = ast_new_var_decl($name, $var_type, $sigil);
     ast_set_line($decl, $decl_line);
 
-    # Store struct type name if applicable
-    if ($var_type == TYPE_STRUCT()) {
-        $decl->{"type_name"} = $type_name;
-    }
-
     # Optional initial capacity for arrays: my array $name[size];
     if ($sigil eq "@") {
         if (parser_check($parser, "LBRACKET")) {
@@ -2699,7 +2683,6 @@ func is_c_keyword(str $name) int {
     if ($name eq "register") { return 1; }
     if ($name eq "volatile") { return 1; }
     if ($name eq "auto") { return 1; }
-    if ($name eq "struct") { return 1; }
     if ($name eq "union") { return 1; }
     if ($name eq "enum") { return 1; }
     if ($name eq "typedef") { return 1; }
@@ -2807,11 +2790,6 @@ func parse_function(scalar $parser) scalar {
             
             my scalar $param = ast_new_param($pname_tok->{"value"}, $param_type, $sigil);
             $param->{"is_variadic"} = $is_variadic;
-            
-            # Store struct type name if applicable
-            if ($param_type == TYPE_STRUCT()) {
-                $param->{"type_name"} = $param_type_name;
-            }
             
             # Check for default value
             if (parser_check($parser, "ASSIGN")) {
@@ -2998,42 +2976,6 @@ func parse_extern_c_block(scalar $parser, scalar $program) void {
     }
 
     parser_expect($parser, "RBRACE");
-}
-
-# Parse struct definition
-func parse_struct(scalar $parser) scalar {
-    my int $struct_line = parser_current_line($parser);
-    parser_expect($parser, "STRUCT");
-
-    my scalar $name_tok = parser_current($parser);
-    parser_expect($parser, "IDENT");
-
-    my scalar $st = ast_new_struct($name_tok->{"value"});
-    ast_set_line($st, $struct_line);
-
-    parser_expect($parser, "LBRACE");
-    
-    while (!parser_check($parser, "RBRACE")) {
-        # Fields in structs don't have sigils: "int x;" not "int $x;"
-        my int $field_type = parse_type($parser);
-
-        # Get funcptr_return if this is a function pointer field
-        my int $funcptr_return = -1;
-        if ($field_type == TYPE_FUNCPTR()) {
-            $funcptr_return = $parser->{"last_funcptr_return"};
-        }
-
-        my scalar $field_tok = parser_current($parser);
-        parser_expect($parser, "IDENT");
-
-        ast_add_field($st, $field_tok->{"value"}, $field_type, "$", $funcptr_return);
-
-        parser_expect($parser, "SEMI");
-    }
-    
-    parser_expect($parser, "RBRACE");
-
-    return $st;
 }
 
 # Parse enum declaration
@@ -3267,9 +3209,6 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
             parse_package($mod_parser, $mod_program);
         } elsif (parser_check($mod_parser, "VERSION")) {
             parse_version($mod_parser, $mod_program);
-        } elsif (parser_check($mod_parser, "STRUCT")) {
-            my scalar $st = parse_struct($mod_parser);
-            ast_add_struct($mod_program, $st);
         } elsif (parser_check($mod_parser, "ENUM")) {
             my scalar $en = parse_enum($mod_parser);
             ast_add_enum($mod_program, $en);
@@ -3374,16 +3313,6 @@ func load_module(scalar $program, str $mod_name, str $file_path) void {
         # Add to main program
         ast_add_function($program, $fn);
 
-        $i = $i + 1;
-    }
-
-    # Merge structs
-    my scalar $mod_structs = $mod_program->{"structs"};
-    $i = 0;
-    $count = $mod_program->{"struct_count"};
-    while ($i < $count) {
-        my scalar $st = $mod_structs->[$i];
-        ast_add_struct($program, $st);
         $i = $i + 1;
     }
 
@@ -4131,9 +4060,6 @@ func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) sca
                 $fn->{"package"} = $pkg;
                 ast_add_function($program, $fn);
             }
-        } elsif (parser_check($parser, "STRUCT")) {
-            my scalar $st = parse_struct($parser);
-            ast_add_struct($program, $st);
         } elsif (parser_check($parser, "ENUM")) {
             my scalar $en = parse_enum($parser);
             ast_add_enum($program, $en);
@@ -4161,7 +4087,7 @@ func parse_program(scalar $parser, scalar $lib_paths, scalar $lib_paths_low) sca
             parser_advance($parser);
             ast_add_c_block($program, $c_code);
         } else {
-            parser_error($parser, "expected function, extern, struct, enum, package, inherit, use, import_lib, import_object, import_archive, __C__, or variable declaration");
+            parser_error($parser, "expected function, extern, enum, package, inherit, use, import_lib, import_object, import_archive, __C__, or variable declaration");
         }
     }
 

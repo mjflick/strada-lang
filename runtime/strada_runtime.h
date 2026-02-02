@@ -566,24 +566,6 @@ void* strada_cstruct_ptr(StradaValue *sv);
 void strada_cstruct_set_field(StradaValue *sv, const char *field, size_t offset, void *value, size_t size);
 void* strada_cstruct_get_field(StradaValue *sv, const char *field, size_t offset, size_t size);
 
-/* Inline struct definition support */
-typedef struct StradaStructDef {
-    char *name;
-    size_t total_size;
-    int field_count;
-    char **field_names;
-    char **field_types;
-    size_t *field_offsets;
-    size_t *field_sizes;
-} StradaStructDef;
-
-StradaStructDef* strada_struct_define(const char *name);
-void strada_struct_add_field(StradaStructDef *def, const char *field_name, const char *type);
-void strada_struct_finalize(StradaStructDef *def);
-StradaValue* strada_struct_create(StradaStructDef *def);
-void strada_struct_set(StradaValue *sv, StradaStructDef *def, const char *field, StradaValue *value);
-StradaValue* strada_struct_get(StradaValue *sv, StradaStructDef *def, const char *field);
-
 /* C pointer support */
 StradaValue* strada_cpointer_new(void *ptr);
 void* strada_cpointer_get(StradaValue *sv);

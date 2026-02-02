@@ -113,8 +113,6 @@ func codegen_new(str $filename, int $debug_info, int $enable_profiling) scalar {
     $cg{"in_map_block"} = 0;  # Track if inside map block (for $_)
     $cg{"in_sort_block"} = 0; # Track if inside sort block (for $a, $b)
     $cg{"in_grep_block"} = 0; # Track if inside grep block (for $_)
-    $cg{"struct_vars"} = {};  # Map variable name -> struct type name
-    $cg{"struct_defs"} = {};  # Map struct name -> struct definition with field info
     $cg{"anon_func_counter"} = 0;  # Counter for unique anonymous function names
     $cg{"anon_func_decls"} = "";   # Forward declarations for anonymous functions
     $cg{"anon_func_defs"} = "";    # Function definitions for anonymous functions
@@ -144,18 +142,11 @@ func codegen_new(str $filename, int $debug_info, int $enable_profiling) scalar {
     $cg{"scope_counts"} = \@scope_counts;
     $cg{"scope_depth"} = 0;
     $cg{"cleanup_enabled"} = 1;  # Enable scope-based memory cleanup
-    $cg{"returns_struct"} = 0;   # Track if current function returns struct
     $cg{"try_depth"} = 0;        # Track nesting depth in try blocks (for proper cleanup on return)
     $cg{"catch_cleanup_count"} = 0;  # Track catch vars on cleanup stack (for proper cleanup on throw)
     # Track label-to-scope-depth for proper cleanup on labeled break/continue
     my hash %label_depths = ();
     $cg{"label_depths"} = \%label_depths;
-    # Struct scope tracking - stores "name:type,name:type" format for struct vars needing cleanup
-    my array @scope_struct_vars = ();
-    my array @scope_struct_counts = ();
-    $cg{"scope_struct_vars"} = \@scope_struct_vars;
-    $cg{"scope_struct_counts"} = \@scope_struct_counts;
-    $cg{"skip_struct_cleanup"} = "";  # Struct var name to skip during cleanup (for returns)
     return \%cg;
 }
 
@@ -167,13 +158,9 @@ func scope_push(scalar $cg) void {
     }
     my scalar $vars = $cg->{"scope_vars"};
     my scalar $counts = $cg->{"scope_counts"};
-    my scalar $struct_vars = $cg->{"scope_struct_vars"};
-    my scalar $struct_counts = $cg->{"scope_struct_counts"};
     my int $depth = $cg->{"scope_depth"};
     push($vars, "");  # Empty scope
     push($counts, 0);
-    push($struct_vars, "");  # Empty struct scope
-    push($struct_counts, 0);
     $cg->{"scope_depth"} = $depth + 1;
 }
 
@@ -199,29 +186,6 @@ func scope_track_var(scalar $cg, str $name) void {
     $counts->[$depth - 1] = $count + 1;
 }
 
-# Track a struct variable in the current scope (stored as "name:type" format)
-func scope_track_struct_var(scalar $cg, str $name, str $struct_type) void {
-    my int $enabled = $cg->{"cleanup_enabled"};
-    if ($enabled == 0) {
-        return;
-    }
-    my int $depth = $cg->{"scope_depth"};
-    if ($depth == 0) {
-        return;
-    }
-    my scalar $vars = $cg->{"scope_struct_vars"};
-    my scalar $counts = $cg->{"scope_struct_counts"};
-    my str $current = $vars->[$depth - 1];
-    my int $count = $counts->[$depth - 1];
-    my str $entry = $name . ":" . $struct_type;
-    if ($count == 0) {
-        $vars->[$depth - 1] = $entry;
-    } else {
-        $vars->[$depth - 1] = $current . "," . $entry;
-    }
-    $counts->[$depth - 1] = $count + 1;
-}
-
 # Emit cleanup for current scope and pop it
 func scope_pop(scalar $cg) void {
     my int $enabled = $cg->{"cleanup_enabled"};
@@ -234,22 +198,13 @@ func scope_pop(scalar $cg) void {
     }
     my scalar $vars = $cg->{"scope_vars"};
     my scalar $counts = $cg->{"scope_counts"};
-    my scalar $struct_vars = $cg->{"scope_struct_vars"};
-    my scalar $struct_counts = $cg->{"scope_struct_counts"};
     my str $scope_str = $vars->[$depth - 1];
     my int $count = $counts->[$depth - 1];
 
     emit_scope_decref($cg, $scope_str, $count);
 
-    # Also cleanup struct variables
-    my str $struct_str = $struct_vars->[$depth - 1];
-    my int $struct_count = $struct_counts->[$depth - 1];
-    emit_scope_struct_cleanup($cg, $struct_str, $struct_count);
-
     pop($vars);
     pop($counts);
-    pop($struct_vars);
-    pop($struct_counts);
     $cg->{"scope_depth"} = $depth - 1;
 }
 
@@ -318,81 +273,6 @@ func emit_scope_decref(scalar $cg, str $scope_str, int $count) void {
     }
 }
 
-# Helper to emit cleanup for struct variables in a scope
-# Format is "name:type,name:type"
-func emit_scope_struct_cleanup(scalar $cg, str $scope_str, int $count) void {
-    if ($count == 0 || length($scope_str) == 0) {
-        return;
-    }
-
-    my scalar $struct_defs = $cg->{"struct_defs"};
-
-    my int $pos = 0;
-    my int $len = length($scope_str);
-    my str $entry = "";
-    while ($pos <= $len) {
-        if ($pos == $len) {
-            if (length($entry) > 0) {
-                emit_struct_var_cleanup($cg, $entry, $struct_defs);
-            }
-            $pos = $pos + 1;
-        } else {
-            my str $ch = substr($scope_str, $pos, 1);
-            if ($ch eq ",") {
-                if (length($entry) > 0) {
-                    emit_struct_var_cleanup($cg, $entry, $struct_defs);
-                }
-                $entry = "";
-            } else {
-                $entry = $entry . $ch;
-            }
-            $pos = $pos + 1;
-        }
-    }
-}
-
-# Emit cleanup for a single struct variable (entry format: "name:type")
-func emit_struct_var_cleanup(scalar $cg, str $entry, scalar $struct_defs) void {
-    # Parse "name:type" format
-    my int $colon_pos = index($entry, ":");
-    if ($colon_pos < 0) {
-        return;
-    }
-    my str $var_name = substr($entry, 0, $colon_pos);
-    my str $struct_type = substr($entry, $colon_pos + 1, length($entry) - $colon_pos - 1);
-
-    # Skip if this is the struct being returned
-    my str $skip = $cg->{"skip_struct_cleanup"};
-    if (length($skip) > 0 && $var_name eq $skip) {
-        return;
-    }
-
-    # Check if we have info about this struct type (avoid exists() for bootstrap compatibility)
-    my scalar $struct_info = $struct_defs->{$struct_type};
-    if ($struct_info) {
-        # Decref all StradaValue* fields (non-funcptr fields)
-        my scalar $field_names = $struct_info->{"field_names"};
-        my int $field_count = $struct_info->{"field_count"};
-        my scalar $fields = $struct_info->{"fields"};
-
-        my int $f = 0;
-        while ($f < $field_count) {
-            my str $fname = $field_names->[$f];
-            my scalar $finfo = $fields->{$fname};
-            # Only decref non-funcptr fields (they're StradaValue*)
-            if ($finfo->{"is_funcptr"} == 0) {
-                emit_indent($cg);
-                emit($cg, "if (" . $var_name . "->" . $fname . ") strada_decref(" . $var_name . "->" . $fname . ");\n");
-            }
-            $f = $f + 1;
-        }
-    }
-
-    # Free the struct itself
-    emit_indent($cg);
-    emit($cg, "free(" . $var_name . ");\n");
-}
-
 # Emit cleanup for current scope without popping (for early returns)
 func scope_emit_cleanup(scalar $cg) void {
     my int $enabled = $cg->{"cleanup_enabled"};
@@ -408,13 +288,6 @@ func scope_emit_cleanup(scalar $cg) void {
     my str $scope_str = $vars->[$depth - 1];
     my int $count = $counts->[$depth - 1];
     emit_scope_decref($cg, $scope_str, $count);
-
-    # Also cleanup struct variables
-    my scalar $struct_vars = $cg->{"scope_struct_vars"};
-    my scalar $struct_counts = $cg->{"scope_struct_counts"};
-    my str $struct_str = $struct_vars->[$depth - 1];
-    my int $struct_count = $struct_counts->[$depth - 1];
-    emit_scope_struct_cleanup($cg, $struct_str, $struct_count);
 }
 
 # Emit cleanup for all scopes (for return statements)
@@ -426,8 +299,6 @@ func scope_emit_all_cleanup(scalar $cg) void {
     my int $depth = $cg->{"scope_depth"};
     my scalar $vars = $cg->{"scope_vars"};
     my scalar $counts = $cg->{"scope_counts"};
-    my scalar $struct_vars = $cg->{"scope_struct_vars"};
-    my scalar $struct_counts = $cg->{"scope_struct_counts"};
 
     # Emit cleanup from innermost to outermost scope
     my int $d = $depth;
@@ -435,11 +306,6 @@ func scope_emit_all_cleanup(scalar $cg) void {
         my str $scope_str = $vars->[$d - 1];
         my int $count = $counts->[$d - 1];
         emit_scope_decref($cg, $scope_str, $count);
-
-        # Also cleanup struct variables
-        my str $struct_str = $struct_vars->[$d - 1];
-        my int $struct_count = $struct_counts->[$d - 1];
-        emit_scope_struct_cleanup($cg, $struct_str, $struct_count);
 
         $d = $d - 1;
     }
@@ -479,8 +345,6 @@ func scope_emit_cleanup_to_depth(scalar $cg, int $target_depth) void {
     my int $depth = $cg->{"scope_depth"};
     my scalar $vars = $cg->{"scope_vars"};
     my scalar $counts = $cg->{"scope_counts"};
-    my scalar $struct_vars = $cg->{"scope_struct_vars"};
-    my scalar $struct_counts = $cg->{"scope_struct_counts"};
 
     # Emit cleanup from innermost scope down to (but not including) target_depth
     my int $d = $depth;
@@ -488,11 +352,6 @@ func scope_emit_cleanup_to_depth(scalar $cg, int $target_depth) void {
         my str $scope_str = $vars->[$d - 1];
         my int $count = $counts->[$d - 1];
         emit_scope_decref($cg, $scope_str, $count);
-
-        # Also cleanup struct variables
-        my str $struct_str = $struct_vars->[$d - 1];
-        my int $struct_count = $struct_counts->[$d - 1];
-        emit_scope_struct_cleanup($cg, $struct_str, $struct_count);
 
         $d = $d - 1;
     }
@@ -1281,7 +1140,6 @@ func type_to_c(int $type) str {
     if ($type == TYPE_HASH()) { return "StradaValue*"; }
     if ($type == TYPE_SCALAR()) { return "StradaValue*"; }
     if ($type == TYPE_VOID()) { return "void"; }
-    if ($type == TYPE_STRUCT()) { return "void*"; }  # Struct pointer
     if ($type == TYPE_FUNCPTR()) { return "void*"; }  # Function pointer
     return "StradaValue*";
 }
@@ -8972,137 +8830,12 @@ func gen_expression(scalar $cg, scalar $expr) void {
     }
     
     # Method call ($obj->method(args)) - Perl-style blessed reference method dispatch
-    # OR struct function pointer call ($struct->funcptr(args))
     if ($type == NODE_METHOD_CALL()) {
         my int $arg_count = $expr->{"arg_count"};
         my str $method = $expr->{"method"};
         my scalar $obj = $expr->{"object"};
 
-        # Check if this is a struct function pointer call
-        # The object will be a FIELD_ACCESS node (e.g., $calc->operation)
-        # whose object is a VAR_REF to a struct variable
-        my int $is_funcptr_call = 0;
-        my int $funcptr_return_type = -1;  # -1 = unknown, TYPE_VOID() = void
-        if ($obj->{"type"} == NODE_FIELD_ACCESS()) {
-            my scalar $struct_obj = $obj->{"object"};
-            if ($struct_obj->{"type"} == NODE_VARIABLE()) {
-                my str $var_name = $struct_obj->{"name"};
-                my scalar $struct_vars = $cg->{"struct_vars"};
-                if ($struct_vars->{$var_name}) {
-                    my str $struct_type = $struct_vars->{$var_name};
-                    my scalar $struct_defs = $cg->{"struct_defs"};
-                    if ($struct_defs->{$struct_type}) {
-                        my scalar $struct_info = $struct_defs->{$struct_type};
-                        my scalar $field_info = $struct_info->{"fields"}->{$method};
-                        if ($field_info && $field_info->{"is_funcptr"}) {
-                            $is_funcptr_call = 1;
-                            $funcptr_return_type = $field_info->{"funcptr_return"};
-                        }
-                    }
-                }
-            }
-        }
-
-        if ($is_funcptr_call) {
-            # Generate direct function pointer call with proper cast
-            # Use correct return type based on funcptr_return_type
-            my int $is_void_return = $funcptr_return_type == TYPE_VOID();
-            my scalar $args = $expr->{"args"};
-
-            # Check if any arguments need cleanup (produce temp values)
-            my int $needs_arg_cleanup = 0;
-            if ($cg->{"cleanup_enabled"} == 1 && $arg_count > 0) {
-                for (my int $ca = 0; $ca < $arg_count; $ca = $ca + 1) {
-                    if (needs_temp_cleanup($cg, $args->[$ca]) == 1) {
-                        $needs_arg_cleanup = 1;
-                    }
-                }
-            }
-
-            if ($needs_arg_cleanup == 1) {
-                # Wrap in statement expression to capture and cleanup args
-                emit($cg, "({ ");
-
-                # Capture each argument
-                for (my int $ca = 0; $ca < $arg_count; $ca = $ca + 1) {
-                    emit($cg, "StradaValue *__fpa" . $ca . " = ");
-                    gen_expression($cg, $args->[$ca]);
-                    emit($cg, "; ");
-                }
-
-                # Generate the call
-                if ($is_void_return) {
-                    emit($cg, "((void(*)(");
-                } else {
-                    emit($cg, "StradaValue *__fpret = ((StradaValue*(*)(");
-                }
-                if ($arg_count == 0) {
-                    emit($cg, "void");
-                } else {
-                    my int $p = 0;
-                    while ($p < $arg_count) {
-                        if ($p > 0) {
-                            emit($cg, ", ");
-                        }
-                        emit($cg, "StradaValue*");
-                        $p = $p + 1;
-                    }
-                }
-                emit($cg, "))");
-                gen_expression($cg, $obj);
-                emit($cg, ")(");
-                for (my int $pa = 0; $pa < $arg_count; $pa = $pa + 1) {
-                    if ($pa > 0) {
-                        emit($cg, ", ");
-                    }
-                    emit($cg, "__fpa" . $pa);
-                }
-                emit($cg, "); ");
-
-                # Cleanup captured arguments
-                for (my int $da = 0; $da < $arg_count; $da = $da + 1) {
-                    emit($cg, "strada_decref(__fpa" . $da . "); ");
-                }
-
-                # Return result (for non-void returns)
-                if ($is_void_return) {
-                    emit($cg, "})");
-                } else {
-                    emit($cg, "__fpret; })");
-                }
-            } else {
-                # No argument cleanup needed - simple call
-                if ($is_void_return) {
-                    emit($cg, "((void(*)(");
-                } else {
-                    emit($cg, "((StradaValue*(*)(");
-                }
-                if ($arg_count == 0) {
-                    emit($cg, "void");
-                } else {
-                    my int $p = 0;
-                    while ($p < $arg_count) {
-                        if ($p > 0) {
-                            emit($cg, ", ");
-                        }
-                        emit($cg, "StradaValue*");
-                        $p = $p + 1;
-                    }
-                }
-                emit($cg, "))");
-                gen_expression($cg, $obj);
-                emit($cg, ")(");
-                my int $i = 0;
-                while ($i < $arg_count) {
-                    if ($i > 0) {
-                        emit($cg, ", ");
-                    }
-                    gen_expression($cg, $args->[$i]);
-                    $i = $i + 1;
-                }
-                emit($cg, ")");
-            }
-        } else {
+        {
             # OOP method call - use base_object (the original object, not field access)
             # Generate: strada_method_call(obj, "method", strada_pack_args(count, arg1, arg2, ...))
 
@@ -10031,30 +9764,7 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         # Escape C keywords in variable names (e.g., $for -> v_for)
         my str $c_name = escape_c_keyword($stmt->{"name"});
 
-        # Struct type
-        if ($var_type == TYPE_STRUCT()) {
-            my str $type_name = $stmt->{"type_name"};
-            # Register this variable as a struct type for function pointer detection
-            $cg->{"struct_vars"}->{$stmt->{"name"}} = $type_name;
-            # Track struct variable for scope-based cleanup
-            scope_track_struct_var($cg, $c_name, $type_name);
-            emit($cg, $type_name . " *" . $c_name);
-            if ($stmt->{"init"}) {
-                my scalar $init = $stmt->{"init"};
-                # Handle clone() for structs specially
-                if ($init->{"type"} == NODE_CALL() && $init->{"name"} eq "clone") {
-                    emit($cg, " = malloc(sizeof(" . $type_name . ")); memcpy(" . $c_name . ", ");
-                    my scalar $args = $init->{"args"};
-                    gen_expression($cg, $args->[0]);
-                    emit($cg, ", sizeof(" . $type_name . "))");
-                } else {
-                    emit($cg, " = ");
-                    gen_expression($cg, $init);
-                }
-            } else {
-                emit($cg, " = malloc(sizeof(" . $type_name . "))");
-            }
-        } elsif ($sigil eq "%" || $var_type == TYPE_HASH()) {
+        if ($sigil eq "%" || $var_type == TYPE_HASH()) {
             emit_sv_ptr_decl($cg, $c_name);
             if ($stmt->{"init"}) {
                 emit($cg, " = ");
@@ -10173,18 +9883,16 @@ func gen_statement(scalar $cg, scalar $stmt) void {
             }
         }
         emit($cg, ";\n");
-        # Track variable for scope cleanup (only StradaValue*, not structs)
+        # Track variable for scope cleanup
         # Use escaped name for C code generation
-        if ($var_type != TYPE_STRUCT()) {
-            scope_track_var($cg, $c_name);
-            # If inside a try block, also push to cleanup stack for exception safety
-            # The cleanup_restore at normal try exit will remove without decref
-            # The cleanup_drain on exception will decref properly
-            my int $in_try = $cg->{"try_depth"} + 0;
-            if ($in_try > 0) {
-                emit_indent($cg);
-                emit($cg, "strada_cleanup_push(" . $c_name . ");\n");
-            }
+        scope_track_var($cg, $c_name);
+        # If inside a try block, also push to cleanup stack for exception safety
+        # The cleanup_restore at normal try exit will remove without decref
+        # The cleanup_drain on exception will decref properly
+        my int $in_try = $cg->{"try_depth"} + 0;
+        if ($in_try > 0) {
+            emit_indent($cg);
+            emit($cg, "strada_cleanup_push(" . $c_name . ");\n");
         }
         return;
     }
@@ -10570,7 +10278,6 @@ func gen_statement(scalar $cg, scalar $stmt) void {
     # Return statement
     if ($type == NODE_RETURN_STMT()) {
         my int $in_main = $cg->{"in_main"};
-        my int $returns_struct = $cg->{"returns_struct"};
         my int $cleanup_enabled = $cg->{"cleanup_enabled"};
         my int $profiling = $cg->{"enable_profiling"};
         my str $func_name = $cg->{"current_func_name"};
@@ -10588,65 +10295,32 @@ func gen_statement(scalar $cg, scalar $stmt) void {
             return;
         }
 
-        # main() and struct-returning functions - evaluate return value, cleanup, then return
-        if ($in_main == 1 || $returns_struct == 1) {
+        # main() - evaluate return value, cleanup, then return
+        if ($in_main == 1) {
             if ($stmt->{"value"}) {
                 # Evaluate return expression BEFORE cleanup to avoid use-after-free
                 emit_indent($cg);
-                if ($in_main == 1) {
-                    if ($stmt->{"value"}->{"type"} == NODE_INT_LITERAL()) {
-                        # Simple literal - can emit directly after cleanup
-                        if ($cleanup_enabled == 1) {
-                            scope_emit_all_cleanup($cg);
-                        }
-                        emit_try_cleanup($cg);
-                        emit_indent($cg);
-                        emit($cg, "return " . $stmt->{"value"}->{"value"} . ";\n");
-                    } else {
-                        # Complex expression - evaluate first, then cleanup
-                        emit($cg, "{ int __main_ret = strada_to_int(");
-                        gen_expression($cg, $stmt->{"value"});
-                        emit($cg, ");\n");
-                        indent($cg);
-                        if ($cleanup_enabled == 1) {
-                            scope_emit_all_cleanup($cg);
-                        }
-                        emit_try_cleanup($cg);
-                        emit_indent($cg);
-                        emit($cg, "return __main_ret; }\n");
-                        dedent($cg);
+                if ($stmt->{"value"}->{"type"} == NODE_INT_LITERAL()) {
+                    # Simple literal - can emit directly after cleanup
+                    if ($cleanup_enabled == 1) {
+                        scope_emit_all_cleanup($cg);
                     }
+                    emit_try_cleanup($cg);
+                    emit_indent($cg);
+                    emit($cg, "return " . $stmt->{"value"}->{"value"} . ";\n");
                 } else {
-                    # Struct return - evaluate first
-                    # If returning a struct variable, exclude it from cleanup
-                    my str $skip_struct_var = "";
-                    my scalar $ret_val = $stmt->{"value"};
-                    if ($ret_val->{"type"} == NODE_VARIABLE()) {
-                        my str $vname = $ret_val->{"name"};
-                        my scalar $sv = $cg->{"struct_vars"};
-                        if ($sv->{$vname}) {
-                            $skip_struct_var = escape_c_keyword($vname);
-                        }
-                    }
-                    $cg->{"skip_struct_cleanup"} = $skip_struct_var;
-
-                    emit($cg, "{ ");
-                    my str $ret_type = $cg->{"current_func_return_type_str"};
-                    if (length($ret_type) == 0) {
-                        $ret_type = "void*";
-                    }
-                    emit($cg, $ret_type . " __struct_ret = ");
+                    # Complex expression - evaluate first, then cleanup
+                    emit($cg, "{ int __main_ret = strada_to_int(");
                     gen_expression($cg, $stmt->{"value"});
-                    emit($cg, ";\n");
+                    emit($cg, ");\n");
                     indent($cg);
                     if ($cleanup_enabled == 1) {
                         scope_emit_all_cleanup($cg);
                     }
                     emit_try_cleanup($cg);
                     emit_indent($cg);
-                    emit($cg, "return __struct_ret; }\n");
+                    emit($cg, "return __main_ret; }\n");
                     dedent($cg);
-                    $cg->{"skip_struct_cleanup"} = "";
                 }
             } else {
                 # No return value - cleanup then return
@@ -10728,38 +10402,10 @@ func gen_statement(scalar $cg, scalar $stmt) void {
         emit_indent($cg);
         my scalar $expr = $stmt->{"expr"};
 
-        # Check if this is a void-returning struct function pointer call
-        my int $is_void_funcptr = 0;
-        if ($expr->{"type"} == NODE_METHOD_CALL()) {
-            my scalar $obj = $expr->{"object"};
-            my str $method = $expr->{"method"};
-            if ($obj->{"type"} == NODE_FIELD_ACCESS()) {
-                my scalar $struct_obj = $obj->{"object"};
-                if ($struct_obj->{"type"} == NODE_VARIABLE()) {
-                    my str $var_name = $struct_obj->{"name"};
-                    my scalar $struct_vars = $cg->{"struct_vars"};
-                    if ($struct_vars->{$var_name}) {
-                        my str $struct_type = $struct_vars->{$var_name};
-                        my scalar $struct_defs = $cg->{"struct_defs"};
-                        if ($struct_defs->{$struct_type}) {
-                            my scalar $struct_info = $struct_defs->{$struct_type};
-                            my scalar $field_info = $struct_info->{"fields"}->{$method};
-                            if ($field_info && $field_info->{"is_funcptr"}) {
-                                if ($field_info->{"funcptr_return"} == TYPE_VOID()) {
-                                    $is_void_funcptr = 1;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         # Check if expression produces owned value that must be freed
         # This includes increment/decrement, method calls, and other temp values
-        # But NOT void-returning struct function pointer calls
-        if ($is_void_funcptr == 0 && ($expr->{"type"} == NODE_INCREMENT() ||
-            ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $expr) == 1))) {
+        if ($expr->{"type"} == NODE_INCREMENT() ||
+            ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $expr) == 1)) {
             emit($cg, "({ StradaValue *__expr_tmp = ");
             gen_expression($cg, $expr);
             emit($cg, "; strada_decref(__expr_tmp); });\n");
@@ -11174,13 +10820,6 @@ func gen_function(scalar $cg, scalar $fn) void {
     }
     $cg->{"is_destroy_method"} = $is_destroy;
 
-    # Track if function returns a struct (for return statement handling)
-    if ($ret_type_id == TYPE_STRUCT()) {
-        $cg->{"returns_struct"} = 1;
-    } else {
-        $cg->{"returns_struct"} = 0;
-    }
-
     # Special case for main
     if ($name eq "main") {
         $cg->{"in_main"} = 1;
@@ -11272,14 +10911,7 @@ func gen_function(scalar $cg, scalar $fn) void {
                 my scalar $init = $gvar->{"init"};
 
                 emit($cg, "    " . $name . " = ");
-                if ($var_type == TYPE_STRUCT()) {
-                    my str $type_name = $gvar->{"type_name"};
-                    if ($init) {
-                        gen_expression($cg, $init);
-                    } else {
-                        emit($cg, "malloc(sizeof(" . $type_name . "))");
-                    }
-                } elsif ($sigil eq "%" || $var_type == TYPE_HASH()) {
+                if ($sigil eq "%" || $var_type == TYPE_HASH()) {
                     if ($init) {
                         # Handle empty () which parser returns as anon_hash
                         if ($init->{"type"} == NODE_ANON_HASH() && $init->{"pair_count"} == 0) {
@@ -11344,13 +10976,7 @@ func gen_function(scalar $cg, scalar $fn) void {
             my scalar $param = $params->[$i];
             my int $ptype = $param->{"param_type"};
             my str $c_param_name = escape_c_keyword($param->{"name"});
-            if ($ptype == TYPE_STRUCT()) {
-                # Register struct-typed parameter for function pointer detection
-                $cg->{"struct_vars"}->{$param->{"name"}} = $param->{"type_name"};
-                emit($cg, $param->{"type_name"} . " *" . $c_param_name);
-            } else {
-                emit($cg, type_to_c($ptype) . " " . $c_param_name);
-            }
+            emit($cg, type_to_c($ptype) . " " . $c_param_name);
             $i = $i + 1;
         }
 
@@ -11388,17 +11014,14 @@ func gen_function(scalar $cg, scalar $fn) void {
             my int $param_i = 0;
             while ($param_i < $fn->{"param_count"}) {
                 my scalar $param = $params->[$param_i];
-                my int $ptype = $param->{"param_type"};
-                if ($ptype != TYPE_STRUCT()) {
-                    my str $c_param_name = escape_c_keyword($param->{"name"});
-                    $cg->{"func_params"}->{$param->{"name"}} = 1;
-                    my int $pc = $cg->{"func_param_count"};
-                    $cg->{"func_param_names"}->[$pc] = $c_param_name;
-                    $cg->{"func_param_count"} = $pc + 1;
-                    emit($cg, "strada_incref(" . $c_param_name . ");\n");
-                    # Push to cleanup stack for exception unwinding
-                    emit($cg, "strada_cleanup_push(" . $c_param_name . ");\n");
-                }
+                my str $c_param_name = escape_c_keyword($param->{"name"});
+                $cg->{"func_params"}->{$param->{"name"}} = 1;
+                my int $pc = $cg->{"func_param_count"};
+                $cg->{"func_param_names"}->[$pc] = $c_param_name;
+                $cg->{"func_param_count"} = $pc + 1;
+                emit($cg, "strada_incref(" . $c_param_name . ");\n");
+                # Push to cleanup stack for exception unwinding
+                emit($cg, "strada_cleanup_push(" . $c_param_name . ");\n");
                 $param_i = $param_i + 1;
             }
         }
@@ -11440,15 +11063,6 @@ func gen_function(scalar $cg, scalar $fn) void {
         # Clear func_params
         $cg->{"func_params"} = {};
 
-        # Clear struct_vars for parameters (they go out of scope)
-        $i = 0;
-        while ($i < $fn->{"param_count"}) {
-            my scalar $param = $params->[$i];
-            if ($param->{"param_type"} == TYPE_STRUCT()) {
-                $cg->{"struct_vars"}->{$param->{"name"}} = "";
-            }
-            $i = $i + 1;
-        }
         emit($cg, "\n\n");
     }
 }
@@ -11505,11 +11119,7 @@ func gen_async_function(scalar $cg, scalar $fn) void {
         my scalar $p = $params->[$i];
         my str $c_param_name = escape_c_keyword($p->{"name"});
         my int $ptype = $p->{"param_type"};
-        if ($ptype == TYPE_STRUCT()) {
-            emit($cg, $p->{"type_name"} . " *" . $c_param_name);
-        } else {
-            emit($cg, type_to_c($ptype) . " " . $c_param_name);
-        }
+        emit($cg, type_to_c($ptype) . " " . $c_param_name);
         $i = $i + 1;
     }
     if ($param_count == 0) { emit($cg, "void"); }
@@ -11615,12 +11225,7 @@ func gen_program(scalar $cg, scalar $program) void {
             my int $var_type = $gvar->{"var_type"};
             my str $name = $gvar->{"name"};
 
-            if ($var_type == TYPE_STRUCT()) {
-                my str $type_name = $gvar->{"type_name"};
-                emit($cg, $type_name . " *" . $name . " = NULL;\n");
-            } else {
-                emit($cg, "StradaValue *" . $name . " = NULL;\n");
-            }
+            emit($cg, "StradaValue *" . $name . " = NULL;\n");
             $g = $g + 1;
         }
         emit($cg, "\n");
@@ -11629,62 +11234,6 @@ func gen_program(scalar $cg, scalar $program) void {
     # Store globals in codegen context for initialization in main
     $cg->{"globals"} = $program->{"globals"};
     $cg->{"global_count"} = $program->{"global_count"};
-
-    # Build struct definitions map for later use (function pointer detection)
-    my scalar $structs = $program->{"structs"};
-    my int $s = 0;
-    while ($s < $program->{"struct_count"}) {
-        my scalar $st = $structs->[$s];
-        my str $struct_name = $st->{"name"};
-        my hash %struct_info = ();
-        $struct_info{"fields"} = {};
-
-        my scalar $fields = $st->{"fields"};
-        my array @field_names = ();
-        my int $f = 0;
-        while ($f < $st->{"field_count"}) {
-            my scalar $field = $fields->[$f];
-            my int $ftype = $field->{"field_type"};
-            my str $fname = $field->{"name"};
-            my hash %field_info = ();
-            $field_info{"is_funcptr"} = $ftype == TYPE_FUNCPTR();
-            $field_info{"funcptr_return"} = $field->{"funcptr_return"};
-            $field_info{"field_type"} = $ftype;
-            $struct_info{"fields"}->{$fname} = \%field_info;
-            push(@field_names, $fname);
-            $f = $f + 1;
-        }
-        $struct_info{"field_names"} = \@field_names;
-        $struct_info{"field_count"} = $st->{"field_count"};
-        $cg->{"struct_defs"}->{$struct_name} = \%struct_info;
-        $s = $s + 1;
-    }
-
-    # Generate struct definitions
-    $s = 0;
-    while ($s < $program->{"struct_count"}) {
-        my scalar $st = $structs->[$s];
-        emit($cg, "typedef struct {\n");
-
-        my scalar $fields = $st->{"fields"};
-        my int $f = 0;
-        while ($f < $st->{"field_count"}) {
-            my scalar $field = $fields->[$f];
-            my int $ftype = $field->{"field_type"};
-
-            if ($ftype == TYPE_FUNCPTR()) {
-                # Function pointer field - generate as void pointer for now
-                # In a full implementation, we'd track the exact signature
-                emit($cg, "    void *" . $field->{"name"} . ";\n");
-            } else {
-                emit($cg, "    StradaValue *" . $field->{"name"} . ";\n");
-            }
-            $f = $f + 1;
-        }
-
-        emit($cg, "} " . $st->{"name"} . ";\n\n");
-        $s = $s + 1;
-    }
 
     # Generate enum definitions
     my scalar $enums = $program->{"enums"};
@@ -12004,11 +11553,7 @@ func gen_program(scalar $cg, scalar $program) void {
                 my scalar $param = $params->[$j];
                 my int $ptype = $param->{"param_type"};
                 my str $c_pname = escape_c_keyword($param->{"name"});
-                if ($ptype == TYPE_STRUCT()) {
-                    emit($cg, $param->{"type_name"} . " *" . $c_pname);
-                } else {
-                    emit($cg, type_to_c($ptype) . " " . $c_pname);
-                }
+                emit($cg, type_to_c($ptype) . " " . $c_pname);
                 $j = $j + 1;
             }
 
@@ -12283,11 +11828,7 @@ func gen_program(scalar $cg, scalar $program) void {
                     my scalar $param = $params->[$j];
                     my int $ptype = $param->{"param_type"};
                     my str $c_pname = escape_c_keyword($param->{"name"});
-                    if ($ptype == TYPE_STRUCT()) {
-                        emit($cg, $param->{"type_name"} . " *" . $c_pname);
-                    } else {
-                        emit($cg, type_to_c($ptype) . " " . $c_pname);
-                    }
+                    emit($cg, type_to_c($ptype) . " " . $c_pname);
                     $j = $j + 1;
                 }
                 if ($fn->{"param_count"} == 0) {
@@ -12462,14 +12003,7 @@ func gen_global_constructor(scalar $cg) void {
         emit($cg, "    if (" . $name . " == NULL) {\n");
         emit($cg, "        " . $name . " = ");
 
-        if ($var_type == TYPE_STRUCT()) {
-            my str $type_name = $gvar->{"type_name"};
-            if ($init) {
-                gen_expression($cg, $init);
-            } else {
-                emit($cg, "malloc(sizeof(" . $type_name . "))");
-            }
-        } elsif ($sigil eq "%" || $var_type == TYPE_HASH()) {
+        if ($sigil eq "%" || $var_type == TYPE_HASH()) {
             if ($init) {
                 # Handle empty () which parser returns as anon_hash
                 if ($init->{"type"} == NODE_ANON_HASH() && $init->{"pair_count"} == 0) {

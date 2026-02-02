@@ -2422,43 +2422,6 @@ __C__ {
 }
 ```
 
-### Native Structs
-
-```strada
-struct Point {
-    i32 x;
-    i32 y;
-}
-
-func main() int {
-    my Point $p = Point{};
-    $p->x = 10;
-    $p->y = 20;
-    say($p->x);  # 10
-    return 0;
-}
-```
-
-### Function Pointers
-
-```strada
-struct Callback {
-    func(int, int) int handler;
-}
-
-func my_handler(int $a, int $b) int {
-    return $a + $b;
-}
-
-func main() int {
-    my Callback $cb = Callback{};
-    $cb->handler = &my_handler;
-    my int $result = $cb->handler(10, 20);
-    say($result);  # 30
-    return 0;
-}
-```
-
 ### Raw C Code Blocks
 
 For maximum control, embed raw C code directly using `__C__ { }`:

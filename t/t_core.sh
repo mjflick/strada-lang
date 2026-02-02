@@ -13,9 +13,6 @@ test_exit_code "$EXAMPLES_DIR/test_exit_error.strada" "test_exit_error" 1 "Exit 
 # Test: String functions - check for key output patterns
 test_output_contains "$EXAMPLES_DIR/test_strings.strada" "test_strings" "All tests passed" "String functions"
 
-# Test: Struct demo
-test_run "$EXAMPLES_DIR/struct_demo.strada" "struct_demo" "Struct demo"
-
 # Test: Control flow
 test_run "$EXAMPLES_DIR/control_flow_demo.strada" "control_flow_demo" "Control flow"
 
@@ -67,14 +64,6 @@ test_import_object "$EXAMPLES_DIR/test_import_object_variadic.strada" "test_impo
 # Test: Negative indexing
 test_run "$EXAMPLES_DIR/negative_index.strada" "negative_index" "Negative index"
 
-# Test: Function pointers and callbacks
-test_run "$EXAMPLES_DIR/test_funcptr.strada" "test_funcptr" "Function pointers"
-test_run "$EXAMPLES_DIR/test_callbacks.strada" "test_callbacks" "Callbacks"
-test_output_contains "$EXAMPLES_DIR/test_void_funcptr.strada" "test_void_funcptr" "PASS: All void function pointer tests completed" "Void funcptr"
-
-# Test: Type introspection
-test_run "$EXAMPLES_DIR/test_clone.strada" "test_clone" "Clone"
-
 # Test: Try/catch
 test_run "$EXAMPLES_DIR/test_try_catch.strada" "test_try_catch" "Try/catch"
 test_output_contains "$SCRIPT_DIR/test_exception_rethrow.strada" "test_exception_rethrow" "PASS: All 5 exceptions caught" "Exception re-throw"
@@ -122,11 +111,6 @@ test_compile "$EXAMPLES_DIR/test_signals.strada" "test_signals" "Signal handling
 
 # Test: C integration
 test_run "$EXAMPLES_DIR/c_shared_lib.strada" "c_shared_lib" "C shared library"
-
-# Test: Struct types
-test_run "$EXAMPLES_DIR/test_struct.strada" "test_struct" "Struct types"
-test_run "$EXAMPLES_DIR/test_struct_types.strada" "test_struct_types" "Struct type system"
-test_run "$EXAMPLES_DIR/native_struct_full.strada" "native_struct_full" "Native structs full"
 
 # Test: New libc functions (2026-01-03)
 test_run "$EXAMPLES_DIR/test_math.strada" "test_math" "Math functions"

@@ -23,8 +23,7 @@ Strada provides multiple ways to integrate with C:
 |--------|----------|------------|
 | Dynamic FFI | Call existing C libraries at runtime | Easy |
 | StradaValue FFI | C libraries designed for Strada | Medium |
-| Extern functions | Inline C in Strada | Medium |
-| Native structs | Direct C struct access | Medium |
+| `__C__` blocks | Inline C in Strada | Medium |
 | Embedding | Call Strada from C programs | Advanced |
 
 ---
@@ -361,93 +360,6 @@ func main() int {
 | `strada_new_num(n)` | Create StradaValue* from double |
 | `strada_new_str(s)` | Create StradaValue* from string |
 | `&strada_undef` | Return undef value |
-
----
-
-## Native Structs
-
-### Defining Native Structs
-
-```strada
-# Define a struct matching C layout
-native struct Point {
-    int x;
-    int y;
-}
-
-native struct Rectangle {
-    Point origin;
-    int width;
-    int height;
-}
-```
-
-### Using Native Structs
-
-```strada
-func main() int {
-    # Create struct
-    my scalar $p = Point_new();
-    $p->x = 10;
-    $p->y = 20;
-
-    say("Point: (" . $p->x . ", " . $p->y . ")");
-
-    # Nested structs
-    my scalar $rect = Rectangle_new();
-    $rect->origin->x = 5;
-    $rect->origin->y = 5;
-    $rect->width = 100;
-    $rect->height = 50;
-
-    return 0;
-}
-```
-
-### Passing Structs to C Functions
-
-Using `__C__` blocks to interface with C functions:
-
-```strada
-__C__ {
-    #include <math.h>
-
-    typedef struct {
-        int64_t x;
-        int64_t y;
-    } CPoint;
-
-    static double calc_distance(CPoint *p1, CPoint *p2) {
-        double dx = p2->x - p1->x;
-        double dy = p2->y - p1->y;
-        return sqrt(dx*dx + dy*dy);
-    }
-}
-
-native struct Point {
-    int x;
-    int y;
-}
-
-func point_distance(scalar $p1, scalar $p2) num {
-    __C__ {
-        CPoint *cp1 = (CPoint*)strada_to_cstruct_ptr(p1);
-        CPoint *cp2 = (CPoint*)strada_to_cstruct_ptr(p2);
-        return strada_new_num(calc_distance(cp1, cp2));
-    }
-}
-
-func main() int {
-    my scalar $p1 = Point_new();
-    my scalar $p2 = Point_new();
-    $p1->x = 0; $p1->y = 0;
-    $p2->x = 3; $p2->y = 4;
-
-    my num $dist = point_distance($p1, $p2);
-    say("Distance: " . $dist);  # 5.0
-    return 0;
-}
-```
 
 ---
 
