@@ -493,6 +493,91 @@ test_import_object() {
     fi
 }
 
+# Test: import_archive test (requires compiling a library to .a first)
+test_import_archive() {
+    local src="$1"
+    local name="$2"
+    local lib_src="$3"
+    local lib_name="$4"
+    local desc="${5:-$name}"
+    local timeout_secs="${6:-5}"
+
+    TOTAL=$((TOTAL + 1))
+
+    # First compile the library to .a file in examples dir
+    local lib_c="$EXAMPLES_DIR/${lib_name}.c"
+    local lib_o="$EXAMPLES_DIR/${lib_name}.o"
+    local lib_runtime_o="$EXAMPLES_DIR/${lib_name}_runtime.o"
+    local lib_a="$EXAMPLES_DIR/${lib_name}.a"
+
+    # Compile library source to C
+    if ! timeout 30 "$STRADAC" "$lib_src" "$lib_c" > "$BUILD_DIR/${lib_name}_strada.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${lib_name}_strada.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Library compile failed: $err"
+        return 1
+    fi
+
+    # Compile library C to .o
+    if ! gcc -c -fPIC "$lib_c" -o "$lib_o" -I"$RUNTIME_H" > "$BUILD_DIR/${lib_name}_gcc.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${lib_name}_gcc.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Library .o compile failed: $err"
+        return 1
+    fi
+
+    # Compile runtime to .o for archive
+    if ! gcc -c "$PROJECT_DIR/runtime/strada_runtime.c" -o "$lib_runtime_o" -I"$RUNTIME_H" > "$BUILD_DIR/${lib_name}_runtime_gcc.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${lib_name}_runtime_gcc.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Runtime .o compile failed: $err"
+        return 1
+    fi
+
+    # Create archive
+    if ! ar rcs "$lib_a" "$lib_o" "$lib_runtime_o" > "$BUILD_DIR/${lib_name}_ar.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${lib_name}_ar.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Archive creation failed: $err"
+        return 1
+    fi
+
+    # Compile test source to C
+    local c_file="$BUILD_DIR/${name}.c"
+    local exe_file="$BUILD_DIR/${name}"
+
+    if ! timeout 30 "$STRADAC" "$src" "$c_file" > "$BUILD_DIR/${name}_strada.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${name}_strada.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "Compile failed: $err"
+        return 1
+    fi
+
+    # Compile C to executable - archive includes runtime, so skip separate runtime
+    if ! gcc -rdynamic -o "$exe_file" "$c_file" "$lib_a" -I"$RUNTIME_H" -ldl -lm -lpthread > "$BUILD_DIR/${name}_gcc.log" 2>&1; then
+        FAILED=$((FAILED + 1))
+        local err=$(cat "$BUILD_DIR/${name}_gcc.log" 2>/dev/null | head -1)
+        log_fail "run: $desc" "GCC compile failed: $err"
+        return 1
+    fi
+
+    run_program "$name" "$timeout_secs"
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        PASSED=$((PASSED + 1))
+        log_pass "run: $desc"
+        return 0
+    else
+        FAILED=$((FAILED + 1))
+        log_fail "run: $desc" "Exit code: $exit_code"
+        if [ $VERBOSE -eq 1 ]; then
+            cat "$BUILD_DIR/${name}.out" | head -20
+        fi
+        return 1
+    fi
+}
+
 # ============================================================
 # Main Test Execution
 # ============================================================

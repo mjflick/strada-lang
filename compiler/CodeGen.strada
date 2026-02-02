@@ -3765,42 +3765,82 @@ func gen_expression(scalar $cg, scalar $expr) void {
         }
 
         if ($name eq "sys::dl_call_int_sv") {
-            emit($cg, "strada_dl_call_int_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, ", ");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            my scalar $arg1 = $args->[1];
+            # Clean up the args array if it's a temporary (like anonymous array)
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
+                emit($cg, "({ StradaValue *__dl_args = ");
+                gen_expression($cg, $arg1);
+                emit($cg, "; int64_t __dl_res = strada_dl_call_int_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", __dl_args); strada_decref(__dl_args); __dl_res; })");
+            } else {
+                emit($cg, "strada_dl_call_int_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", ");
+                gen_expression($cg, $arg1);
+                emit($cg, ")");
+            }
             return;
         }
 
         if ($name eq "sys::dl_call_str_sv") {
-            emit($cg, "strada_dl_call_str_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, ", ");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            my scalar $arg1 = $args->[1];
+            # Clean up the args array if it's a temporary (like anonymous array)
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
+                emit($cg, "({ StradaValue *__dl_args = ");
+                gen_expression($cg, $arg1);
+                emit($cg, "; StradaValue *__dl_res = strada_dl_call_str_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", __dl_args); strada_decref(__dl_args); __dl_res; })");
+            } else {
+                emit($cg, "strada_dl_call_str_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", ");
+                gen_expression($cg, $arg1);
+                emit($cg, ")");
+            }
             return;
         }
 
         if ($name eq "sys::dl_call_void_sv") {
-            emit($cg, "strada_dl_call_void_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, ", ");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            my scalar $arg1 = $args->[1];
+            # Clean up the args array if it's a temporary (like anonymous array)
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
+                emit($cg, "({ StradaValue *__dl_args = ");
+                gen_expression($cg, $arg1);
+                emit($cg, "; strada_dl_call_void_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", __dl_args); strada_decref(__dl_args); })");
+            } else {
+                emit($cg, "strada_dl_call_void_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", ");
+                gen_expression($cg, $arg1);
+                emit($cg, ")");
+            }
             return;
         }
 
         if ($name eq "sys::dl_call_sv") {
-            emit($cg, "strada_dl_call_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, ", ");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            my scalar $arg1 = $args->[1];
+            # Clean up the args array if it's a temporary (like anonymous array)
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
+                emit($cg, "({ StradaValue *__dl_args = ");
+                gen_expression($cg, $arg1);
+                emit($cg, "; StradaValue *__dl_res = strada_dl_call_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", __dl_args); strada_decref(__dl_args); __dl_res; })");
+            } else {
+                emit($cg, "strada_dl_call_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", ");
+                gen_expression($cg, $arg1);
+                emit($cg, ")");
+            }
             return;
         }
 
@@ -5540,44 +5580,84 @@ func gen_expression(scalar $cg, scalar $expr) void {
 
         # dl_call_int_sv - call function passing StradaValue* directly, returns int
         if ($name eq "sys::dl_call_int_sv") {
-            emit($cg, "strada_dl_call_int_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, ", ");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            my scalar $arg1 = $args->[1];
+            # Clean up the args array if it's a temporary (like anonymous array)
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
+                emit($cg, "({ StradaValue *__dl_args = ");
+                gen_expression($cg, $arg1);
+                emit($cg, "; int64_t __dl_res = strada_dl_call_int_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", __dl_args); strada_decref(__dl_args); __dl_res; })");
+            } else {
+                emit($cg, "strada_dl_call_int_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", ");
+                gen_expression($cg, $arg1);
+                emit($cg, ")");
+            }
             return;
         }
 
         # dl_call_str_sv - call function passing StradaValue* directly, returns string
         if ($name eq "sys::dl_call_str_sv") {
-            emit($cg, "strada_dl_call_str_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, ", ");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            my scalar $arg1 = $args->[1];
+            # Clean up the args array if it's a temporary (like anonymous array)
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
+                emit($cg, "({ StradaValue *__dl_args = ");
+                gen_expression($cg, $arg1);
+                emit($cg, "; StradaValue *__dl_res = strada_dl_call_str_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", __dl_args); strada_decref(__dl_args); __dl_res; })");
+            } else {
+                emit($cg, "strada_dl_call_str_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", ");
+                gen_expression($cg, $arg1);
+                emit($cg, ")");
+            }
             return;
         }
 
         # dl_call_void_sv - call function passing StradaValue* directly, no return
         if ($name eq "sys::dl_call_void_sv") {
-            emit($cg, "strada_dl_call_void_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, ", ");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            my scalar $arg1 = $args->[1];
+            # Clean up the args array if it's a temporary (like anonymous array)
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
+                emit($cg, "({ StradaValue *__dl_args = ");
+                gen_expression($cg, $arg1);
+                emit($cg, "; strada_dl_call_void_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", __dl_args); strada_decref(__dl_args); })");
+            } else {
+                emit($cg, "strada_dl_call_void_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", ");
+                gen_expression($cg, $arg1);
+                emit($cg, ")");
+            }
             return;
         }
 
         if ($name eq "sys::dl_call_sv") {
-            emit($cg, "strada_dl_call_sv(");
             my scalar $args = $expr->{"args"};
-            gen_expression($cg, $args->[0]);
-            emit($cg, ", ");
-            gen_expression($cg, $args->[1]);
-            emit($cg, ")");
+            my scalar $arg1 = $args->[1];
+            # Clean up the args array if it's a temporary (like anonymous array)
+            if ($cg->{"cleanup_enabled"} == 1 && needs_temp_cleanup($cg, $arg1) == 1) {
+                emit($cg, "({ StradaValue *__dl_args = ");
+                gen_expression($cg, $arg1);
+                emit($cg, "; StradaValue *__dl_res = strada_dl_call_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", __dl_args); strada_decref(__dl_args); __dl_res; })");
+            } else {
+                emit($cg, "strada_dl_call_sv(");
+                gen_expression($cg, $args->[0]);
+                emit($cg, ", ");
+                gen_expression($cg, $arg1);
+                emit($cg, ")");
+            }
             return;
         }
 
@@ -9253,12 +9333,47 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, "({ ");
 
             # Create temps for values that need cleanup
+            # For anonymous arrays/hashes, use explicit new + new_ref pattern to avoid heap corruption
             my int $t = 0;
             while ($t < $pair_count) {
                 if (needs_temp_cleanup($cg, $values->[$t]) == 1) {
-                    emit($cg, "StradaValue *__ah_val" . $t . " = ");
-                    gen_expression($cg, $values->[$t]);
-                    emit($cg, "; ");
+                    my scalar $val = $values->[$t];
+                    if ($val->{"type"} == NODE_ANON_ARRAY()) {
+                        # Anonymous array: create explicit array + ref pattern
+                        # This avoids the strada_ref_create_take issue that can cause heap corruption
+                        my scalar $elems = $val->{"elements"};
+                        my int $elem_count = $val->{"element_count"};
+                        emit($cg, "StradaValue *__ah_arr" . $t . " = strada_new_array(); ");
+                        # Add elements if any
+                        my int $e = 0;
+                        while ($e < $elem_count) {
+                            emit($cg, "strada_array_push(__ah_arr" . $t . "->value.av, ");
+                            gen_expression($cg, $elems->[$e]);
+                            emit($cg, "); ");
+                            $e = $e + 1;
+                        }
+                        emit($cg, "StradaValue *__ah_val" . $t . " = strada_new_ref(__ah_arr" . $t . ", '@'); ");
+                    } elsif ($val->{"type"} == NODE_ANON_HASH()) {
+                        # Anonymous hash: create explicit hash + ref pattern
+                        # This avoids the strada_ref_create_take issue that can cause heap corruption
+                        my scalar $inner_keys = $val->{"keys"};
+                        my scalar $inner_values = $val->{"values"};
+                        my int $inner_pair_count = $val->{"pair_count"};
+                        emit($cg, "StradaValue *__ah_hsh" . $t . " = strada_new_hash(); ");
+                        # Add key-value pairs if any
+                        my int $p = 0;
+                        while ($p < $inner_pair_count) {
+                            emit($cg, "strada_hash_set(__ah_hsh" . $t . "->value.hv, \"" . $inner_keys->[$p] . "\", ");
+                            gen_expression($cg, $inner_values->[$p]);
+                            emit($cg, "); ");
+                            $p = $p + 1;
+                        }
+                        emit($cg, "StradaValue *__ah_val" . $t . " = strada_new_ref(__ah_hsh" . $t . ", '%'); ");
+                    } else {
+                        emit($cg, "StradaValue *__ah_val" . $t . " = ");
+                        gen_expression($cg, $val);
+                        emit($cg, "; ");
+                    }
                 }
                 $t = $t + 1;
             }
@@ -9278,9 +9393,18 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, "); ");
 
             # Decref temps to balance the incref from strada_hash_set
+            # For anonymous arrays/hashes, also decref the underlying container
             my int $d = 0;
             while ($d < $pair_count) {
                 if (needs_temp_cleanup($cg, $values->[$d]) == 1) {
+                    my scalar $val = $values->[$d];
+                    if ($val->{"type"} == NODE_ANON_ARRAY()) {
+                        # Decref both the ref and the underlying array
+                        emit($cg, "strada_decref(__ah_arr" . $d . "); ");
+                    } elsif ($val->{"type"} == NODE_ANON_HASH()) {
+                        # Decref both the ref and the underlying hash
+                        emit($cg, "strada_decref(__ah_hsh" . $d . "); ");
+                    }
                     emit($cg, "strada_decref(__ah_val" . $d . "); ");
                 }
                 $d = $d + 1;
@@ -9324,12 +9448,43 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, "({ ");
 
             # Create temps for elements that need cleanup
+            # For anonymous arrays/hashes, use explicit new + new_ref pattern to avoid heap corruption
             my int $t = 0;
             while ($t < $elem_count) {
                 if (needs_temp_cleanup($cg, $elems->[$t]) == 1) {
-                    emit($cg, "StradaValue *__aa_el" . $t . " = ");
-                    gen_expression($cg, $elems->[$t]);
-                    emit($cg, "; ");
+                    my scalar $elem = $elems->[$t];
+                    if ($elem->{"type"} == NODE_ANON_ARRAY()) {
+                        # Anonymous array: create explicit array + ref pattern
+                        my scalar $inner_elems = $elem->{"elements"};
+                        my int $inner_elem_count = $elem->{"element_count"};
+                        emit($cg, "StradaValue *__aa_arr" . $t . " = strada_new_array(); ");
+                        my int $e = 0;
+                        while ($e < $inner_elem_count) {
+                            emit($cg, "strada_array_push(__aa_arr" . $t . "->value.av, ");
+                            gen_expression($cg, $inner_elems->[$e]);
+                            emit($cg, "); ");
+                            $e = $e + 1;
+                        }
+                        emit($cg, "StradaValue *__aa_el" . $t . " = strada_new_ref(__aa_arr" . $t . ", '@'); ");
+                    } elsif ($elem->{"type"} == NODE_ANON_HASH()) {
+                        # Anonymous hash: create explicit hash + ref pattern
+                        my scalar $inner_keys = $elem->{"keys"};
+                        my scalar $inner_values = $elem->{"values"};
+                        my int $inner_pair_count = $elem->{"pair_count"};
+                        emit($cg, "StradaValue *__aa_hsh" . $t . " = strada_new_hash(); ");
+                        my int $p = 0;
+                        while ($p < $inner_pair_count) {
+                            emit($cg, "strada_hash_set(__aa_hsh" . $t . "->value.hv, \"" . $inner_keys->[$p] . "\", ");
+                            gen_expression($cg, $inner_values->[$p]);
+                            emit($cg, "); ");
+                            $p = $p + 1;
+                        }
+                        emit($cg, "StradaValue *__aa_el" . $t . " = strada_new_ref(__aa_hsh" . $t . ", '%'); ");
+                    } else {
+                        emit($cg, "StradaValue *__aa_el" . $t . " = ");
+                        gen_expression($cg, $elem);
+                        emit($cg, "; ");
+                    }
                 }
                 $t = $t + 1;
             }
@@ -9349,9 +9504,16 @@ func gen_expression(scalar $cg, scalar $expr) void {
             emit($cg, "); ");
 
             # Decref temps to balance the incref from strada_array_push
+            # For anonymous arrays/hashes, also decref the underlying container
             my int $d = 0;
             while ($d < $elem_count) {
                 if (needs_temp_cleanup($cg, $elems->[$d]) == 1) {
+                    my scalar $elem = $elems->[$d];
+                    if ($elem->{"type"} == NODE_ANON_ARRAY()) {
+                        emit($cg, "strada_decref(__aa_arr" . $d . "); ");
+                    } elsif ($elem->{"type"} == NODE_ANON_HASH()) {
+                        emit($cg, "strada_decref(__aa_hsh" . $d . "); ");
+                    }
                     emit($cg, "strada_decref(__aa_el" . $d . "); ");
                 }
                 $d = $d + 1;
