@@ -1525,7 +1525,8 @@ func is_truthy(scalar $val) int {
 }
 
 # Find matching block end tag (handles nesting)
-# block_type is "each", "if", or "with"
+# block_type is "each", "if", "if_eq", "if_ne", etc.
+# Optimized to use index() instead of character-by-character scanning
 func find_block_end(str $template, int $start, str $block_type) int {
     my int $len = length($template);
     my int $i = $start;
@@ -1536,6 +1537,14 @@ func find_block_end(str $template, int $start, str $block_type) int {
     my int $close_len = length($close_tag);
 
     while ($i < $len && $depth > 0) {
+        # Find next {{ using index() - much faster than char-by-char
+        my str $remaining = substr($template, $i);
+        my int $next_brace = index($remaining, "{{");
+        if ($next_brace < 0) {
+            return -1;
+        }
+        $i = $i + $next_brace;
+
         # Check for nested open tag
         if ($i + $open_len <= $len) {
             my str $check_open = substr($template, $i, $open_len);
@@ -1559,18 +1568,29 @@ func find_block_end(str $template, int $start, str $block_type) int {
             }
         }
 
-        $i = $i + 1;
+        # Move past this {{ to find the next one
+        $i = $i + 2;
     }
 
     return -1;
 }
 
 # Find {{else}} at current nesting level
+# Optimized to use index() instead of character-by-character scanning
 func find_else(str $template, int $start, int $block_end) int {
     my int $i = $start;
     my int $depth = 0;
+    my str $search_region = substr($template, $start, $block_end - $start);
 
     while ($i < $block_end) {
+        # Find next {{ using index() - much faster than char-by-char
+        my str $remaining = substr($template, $i, $block_end - $i);
+        my int $next_brace = index($remaining, "{{");
+        if ($next_brace < 0) {
+            return -1;
+        }
+        $i = $i + $next_brace;
+
         # Track nested #if blocks
         if ($i + 5 <= $block_end) {
             my str $check = substr($template, $i, 5);
@@ -1598,7 +1618,8 @@ func find_else(str $template, int $start, int $block_end) int {
             }
         }
 
-        $i = $i + 1;
+        # Move past this {{ to find the next one
+        $i = $i + 2;
     }
 
     return -1;
