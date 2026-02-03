@@ -6203,6 +6203,17 @@ func gen_expression(scalar $cg, scalar $expr) void {
             return;
         }
 
+        # socket_set_nonblocking - set or clear non-blocking mode on a socket
+        if ($name eq "sys::socket_set_nonblocking") {
+            emit($cg, "strada_new_int(strada_socket_set_nonblocking(");
+            my scalar $args = $expr->{"args"};
+            gen_expression($cg, $args->[0]);
+            emit($cg, ", strada_to_int(");
+            gen_expression($cg, $args->[1]);
+            emit($cg, ")))");
+            return;
+        }
+
         # UDP socket functions
 
         # udp_socket - create a UDP socket

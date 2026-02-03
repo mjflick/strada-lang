@@ -663,6 +663,7 @@ StradaValue* strada_socket_client(const char *host, int port);
 StradaValue* strada_socket_select(StradaValue *sockets, int timeout_ms);
 int strada_socket_fd(StradaValue *sock);
 StradaValue* strada_select_fds(StradaValue *fds, int timeout_ms);
+int strada_socket_set_nonblocking(StradaValue *sock, int nonblock);
 
 /* UDP socket functions */
 StradaValue* strada_udp_socket(void);

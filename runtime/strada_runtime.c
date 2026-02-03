@@ -2868,6 +2868,27 @@ int strada_socket_fd(StradaValue *sock) {
     return -1;
 }
 
+/* socket_set_nonblocking - set or clear non-blocking mode on a socket
+ * nonblock: 1 to set non-blocking, 0 to clear it
+ * Returns 0 on success, -1 on error
+ */
+int strada_socket_set_nonblocking(StradaValue *sock, int nonblock) {
+    if (!sock || sock->type != STRADA_SOCKET || !sock->value.sock) {
+        return -1;
+    }
+    int fd = sock->value.sock->fd;
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+        return -1;
+    }
+    if (nonblock) {
+        flags |= O_NONBLOCK;
+    } else {
+        flags &= ~O_NONBLOCK;
+    }
+    return fcntl(fd, F_SETFL, flags);
+}
+
 /* select_fds - wait for file descriptors to become ready for reading
  * Takes an array of integers (fds) and a timeout in milliseconds
  * Returns an array of fds that are ready for reading

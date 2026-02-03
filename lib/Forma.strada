@@ -1445,6 +1445,11 @@ func resolve_var(str $name, scalar $vars) str {
         return "";
     }
 
+    # Handle {{.}} as alias for {{this}} (current item in each loop)
+    if ($name eq ".") {
+        $name = "this";
+    }
+
     # Check for dot notation (e.g., user.name, user.address.city)
     my int $dot = index($name, ".");
     if ($dot > 0) {
@@ -1478,6 +1483,11 @@ func resolve_var(str $name, scalar $vars) str {
 func get_var(str $name, scalar $vars) scalar {
     if (!defined($vars)) {
         return undef;
+    }
+
+    # Handle {{.}} as alias for {{this}} (current item in each loop)
+    if ($name eq ".") {
+        $name = "this";
     }
 
     # Check for dot notation

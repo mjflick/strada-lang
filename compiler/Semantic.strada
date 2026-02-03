@@ -438,6 +438,7 @@ func get_builtins() scalar {
     $b{"sys::socket_select"} = 1;
     $b{"sys::socket_fd"} = 1;
     $b{"sys::select_fds"} = 1;
+    $b{"sys::socket_set_nonblocking"} = 1;
 
     # sys:: DNS/Network
     $b{"sys::gethostbyname"} = 1;
