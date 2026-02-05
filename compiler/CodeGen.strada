@@ -11107,6 +11107,18 @@ func gen_async_function(scalar $cg, scalar $fn) void {
         emit($cg, "\n");
     }
 
+    # Save scope state (async inner is a separate function with its own scope)
+    my scalar $saved_scope_vars = $cg->{"scope_vars"};
+    my scalar $saved_scope_counts = $cg->{"scope_counts"};
+    my int $saved_scope_depth = $cg->{"scope_depth"};
+
+    # Reset scope for async inner function (it's a new function)
+    my array @new_scope_vars = ();
+    my array @new_scope_counts = ();
+    $cg->{"scope_vars"} = \@new_scope_vars;
+    $cg->{"scope_counts"} = \@new_scope_counts;
+    $cg->{"scope_depth"} = 0;
+
     # Generate body
     scope_push($cg);
     my scalar $body = $fn->{"body"};
@@ -11117,6 +11129,11 @@ func gen_async_function(scalar $cg, scalar $fn) void {
         $stmt_i = $stmt_i + 1;
     }
     scope_pop($cg);
+
+    # Restore scope state
+    $cg->{"scope_vars"} = $saved_scope_vars;
+    $cg->{"scope_counts"} = $saved_scope_counts;
+    $cg->{"scope_depth"} = $saved_scope_depth;
 
     emit($cg, "    return strada_undef_static();\n");
     emit($cg, "}\n\n");
